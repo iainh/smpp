@@ -4,4 +4,11 @@ version = "0.1.0"
 authors = ["Iain H"]
 edition = "2018"
 
+[[bin]]
+name = "tester"
+path = "src/bin/tester.rs"
+
 [dependencies]
+bytes = "0.6"
+num_enum = "0.5"
+tokio = { version = "0.3", features = ["full"] }
