@@ -27,37 +27,47 @@ pub enum Error {
 impl Frame {
     /// Checks if an entire message can be decoded from `src`
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<(), Error> {
-        let command_length = peek_u32(src)? as usize;
-        if command_length <= src.remaining() {
-            // todo: should also verify that the command length is at least the length of the
-            //   minimum header size for either this PDU or all PDUs
+        let mut result;
+        let starting_position = src.position();
 
-            Ok(())
+        // The length of the PDU including the command_length.
+        let command_length = peek_u32(src)? as usize;
+
+        // PDUs have a the same header structure consisting of the following fields:
+        //  - command_length (4 octets)
+        //  - command_type (4 octets)
+        //  - command_status (4 octets)
+        //  - sequence_number (4 octets)
+        // for a total of 16 octets
+        if dbg!(command_length <= src.remaining() && command_length > 16) {
+            result = Ok(())
         } else {
-            Err(Error::Incomplete)
+            result = Err(Error::Incomplete)
         }
+
+        src.set_position(starting_position);
+
+        result
     }
 
     /// The message has already been validated with `check`.
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+        // parse the header
         let command_length = get_u32(src)?;
-        dbg!(command_length);
-
         let command_id = CommandId::try_from(get_u32(src)?).unwrap();
-        dbg!(&command_id);
+        let command_status = CommandStatus::try_from(get_u32(src)?).unwrap();
+        let sequence_number = get_u32(src)?;
 
+        // Based on the command_id, parse the body
         let command = match command_id {
             CommandId::BindTransmitter => {
-                let command_status = CommandStatus::try_from(get_u32(src)?).unwrap();
-                let sequence_number = get_u32(src)?;
-
                 let system_id = get_until_coctet_string(src)?;
                 let password = get_until_coctet_string(src)?;
                 let system_type = get_until_coctet_string(src)?;
+                let addr_ton = get_u8(src)?;
 
-                let addr_ton = get_u32(src)?;
-                let interface_version = get_u32(src)?;
-                let addr_npi = get_u32(src)?;
+                let interface_version = get_u8(src)?;
+                let addr_npi = get_u8(src)?;
 
                 let address_range = get_until_coctet_string(src)?;
 
@@ -76,8 +86,6 @@ impl Frame {
             }
             _ => todo!(),
         };
-
-        dbg!(&command);
 
         Ok(command)
     }
@@ -240,8 +248,9 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytes::{BufMut, BytesMut};
     use std::convert::TryInto;
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
 
     #[test]
     fn peek_u8_test() {
@@ -352,5 +361,76 @@ mod tests {
 
         let result = result.unwrap();
         assert_eq!("This is the second.\0".to_string(), result);
+    }
+
+    #[test]
+    fn check_test() {
+        use std::io::Cursor;
+
+        let mut data: Vec<u8> = vec![
+            0x00, 0x00, 0x00, 0x2F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, 0x73, 0x65,
+            0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, 0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31,
+            0x00, 0x00, 0x01, 0x01, 0x00,
+        ];
+
+        let mut data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::check(&mut buff);
+        assert!(result.is_ok());
+
+        // Invalid length: (3F when it should be 2F)
+        let mut data: Vec<u8> = vec![
+            0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, 0x73, 0x65,
+            0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, 0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31,
+            0x00, 0x00, 0x01, 0x01, 0x00,
+        ];
+
+        let mut data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::check(&mut buff);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_test() {
+        use std::io::Cursor;
+
+        let mut data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x2F, // command_length
+            0x00, 0x00, 0x00, 0x02, // command_id
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
+            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, // password
+            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
+            0x00, // interface_version
+            0x01, // addr_tom
+            0x01, // addr_npi
+            0x00, // address_range
+        ];
+
+        let mut data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_ok());
+
+        let frame = result.unwrap();
+        match frame {
+            Frame::BindTransmitter(bt) => {
+                assert_eq!(bt.command_status, CommandStatus::Ok);
+                assert_eq!(&bt.system_id, "SMPP3TEST\0");
+            }
+            Frame::BindTransmitterResponse(_) => {
+                unimplemented!();
+            }
+        }
     }
 }
