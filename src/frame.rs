@@ -37,7 +37,7 @@ impl Frame {
         //  - command_status (4 octets)
         //  - sequence_number (4 octets)
         // for a total of 16 octets
-        if dbg!(command_length <= src.remaining() && command_length > 16) {
+        if command_length <= src.remaining() && command_length > 16 {
            Ok(())
         } else {
             Err(Error::Incomplete)
@@ -189,24 +189,7 @@ impl fmt::Display for Frame {
             }
             Frame::BindTransmitterResponse(msg) => {
                 write!(fmt, "Bind Transmitter Response {:?}", msg.command_status)
-            } // Frame::Simple(response) => response.fmt(fmt),
-              // Frame::Error(msg) => write!(fmt, "error: {}", msg),
-              // Frame::Integer(num) => num.fmt(fmt),
-              // Frame::Bulk(msg) => match str::from_utf8(msg) {
-              //     Ok(string) => string.fmt(fmt),
-              //     Err(_) => write!(fmt, "{:?}", msg),
-              // },
-              // Frame::Null => "(nil)".fmt(fmt),
-              // Frame::Array(parts) => {
-              //     for (i, part) in parts.iter().enumerate() {
-              //         if i > 0 {
-              //             write!(fmt, " ")?;
-              //             part.fmt(fmt)?;
-              //         }
-              //     }
-              //
-              //     Ok(())
-              // }
+            }
         }
     }
 }
