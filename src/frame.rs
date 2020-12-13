@@ -55,15 +55,15 @@ impl Frame {
         // Based on the command_id, parse the body
         let command = match command_id {
             CommandId::BindTransmitter => {
-                let system_id = get_until_coctet_string(src)?;
-                let password = get_until_coctet_string(src)?;
-                let system_type = get_until_coctet_string(src)?;
+                let system_id = get_until_coctet_string(src, Some(16))?;
+                let password = get_until_coctet_string(src, Some(9))?;
+                let system_type = get_until_coctet_string(src, Some(13))?;
                 let addr_ton = get_u8(src)?;
 
                 let interface_version = get_u8(src)?;
                 let addr_npi = get_u8(src)?;
 
-                let address_range = get_until_coctet_string(src)?;
+                let address_range = get_until_coctet_string(src, Some(41))?;
 
                 let pdu = BindTransmitter {
                     command_status,
@@ -134,17 +134,24 @@ fn get_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     Ok(src.get_u32())
 }
 
-fn get_until_coctet_string(src: &mut Cursor<&[u8]>) -> Result<String, Error> {
+fn get_until_coctet_string(src: &mut Cursor<&[u8]>, max_length: Option<u64>) -> Result<String, Error> {
     if !&src.has_remaining() {
         return Err(Error::Incomplete);
     }
 
     let sp = src.position();
-    let terminator_index = src
+    let mut terminator_index = src
         .bytes()
         .into_iter()
         .position(|x| x.is_ok() && x.unwrap() == 0u8)
         .ok_or(Error::Incomplete)?;
+
+    if let Some(max_length) = max_length {
+        // Constrain to the max_length of the field if we haven't found a null terminator
+        if terminator_index >= (sp + max_length) as usize {
+            terminator_index = (sp + max_length) as usize - 1;
+        }
+    }
 
     let mut buffer = vec![0; terminator_index + 1];
 
@@ -339,7 +346,7 @@ mod tests {
         let mut data = "This is the first part\0This is the second.\0".as_bytes();
         let mut buff = Cursor::new(data);
 
-        let result = get_until_coctet_string(&mut buff);
+        let result = get_until_coctet_string(&mut buff, Some(23));
         assert_eq!(result.is_ok(), true);
 
         let result = result.unwrap();
@@ -350,11 +357,21 @@ mod tests {
         // Ensure that the cursor has advanced 4 bytes
         assert_eq!(buff.remaining(), data.len() - 23);
 
-        let result = get_until_coctet_string(&mut buff);
+        let result = get_until_coctet_string(&mut buff, None);
         assert_eq!(result.is_ok(), true);
 
         let result = result.unwrap();
         assert_eq!("This is the second.\0".to_string(), result);
+
+
+        let mut data = "This is the first part\0This is the second.\0".as_bytes();
+        let mut buff = Cursor::new(data);
+
+
+        let result = get_until_coctet_string(&mut buff, Some(4));
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result.unwrap().len(), 4);
+
     }
 
     #[test]
