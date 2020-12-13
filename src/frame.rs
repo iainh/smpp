@@ -27,8 +27,6 @@ pub enum Error {
 impl Frame {
     /// Checks if an entire message can be decoded from `src`
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<(), Error> {
-        let mut result;
-        let starting_position = src.position();
 
         // The length of the PDU including the command_length.
         let command_length = peek_u32(src)? as usize;
@@ -40,14 +38,10 @@ impl Frame {
         //  - sequence_number (4 octets)
         // for a total of 16 octets
         if dbg!(command_length <= src.remaining() && command_length > 16) {
-            result = Ok(())
+           Ok(())
         } else {
-            result = Err(Error::Incomplete)
+            Err(Error::Incomplete)
         }
-
-        src.set_position(starting_position);
-
-        result
     }
 
     /// The message has already been validated with `check`.
