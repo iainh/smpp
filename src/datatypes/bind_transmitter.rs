@@ -12,9 +12,9 @@ pub struct BindTransmitter {
     pub system_id: String,
     pub password: String,
     pub system_type: String,
-    pub interface_version: u32,
-    pub addr_ton: u32,
-    pub addr_npi: u32,
+    pub interface_version: u8,
+    pub addr_ton: u8,
+    pub addr_npi: u8,
     pub address_range: String,
 }
 
