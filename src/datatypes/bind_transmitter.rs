@@ -5,7 +5,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitter {
     // pub command_length: u32,
-    // command_id: CommandId::BindTransmitter,
+    // pub command_id: CommandId::BindTransmitter,
     pub command_status: CommandStatus,
     pub sequence_number: u32,
     // body
@@ -20,8 +20,8 @@ pub struct BindTransmitter {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitterResponse {
-    //pub command_length: u32,
-    pub command_id: CommandId,
+    // pub command_length: u32,
+    // pub command_id: CommandId,
     pub command_status: CommandStatus,
     pub sequence_number: u32,
     // body

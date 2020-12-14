@@ -1,5 +1,4 @@
 use smpp::datatypes::{BindTransmitter, BindTransmitterResponse, Tlv};
-use smpp::CommandId;
 use smpp::CommandStatus;
 use std::error::Error;
 
@@ -23,8 +22,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         address_range: "address_range".to_string(),
     };
 
+    dbg!(bind_transmitter);
+
     let bind_transmitter_response = BindTransmitterResponse {
-        command_id: CommandId::GenericNack,
         command_status: CommandStatus::Ok,
         sequence_number: 1,
         system_id: "system_id".to_string(),
@@ -34,6 +34,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             value: Default::default(),
         }),
     };
+
+    dbg!(bind_transmitter_response);
 
     Ok(())
 }
