@@ -8,7 +8,7 @@ use num_enum::TryFromPrimitive;
 
 #[derive(TryFromPrimitive)]
 #[repr(u32)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum CommandStatus {
     /// No Error
     Ok = 0x00000000,

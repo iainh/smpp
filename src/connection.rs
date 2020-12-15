@@ -1,9 +1,10 @@
 use crate::frame::{self, Frame};
 
 use bytes::{Buf, BytesMut};
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, Read};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
+use crate::datatypes::ToBytes;
 
 /// Send and receive `Frame` values from a remote peer.
 ///
@@ -99,13 +100,7 @@ impl Connection {
         // to hold the frame data unless we know the full frame has been
         // received.
         match Frame::check(&mut buf) {
-            Ok(_) => {
-                // The `check` function will have advanced the cursor until the
-                // end of the frame. Since the cursor had position set to zero
-                // before `Frame::check` was called, we obtain the length of the
-                // frame by checking the cursor position.
-                let len = buf.position() as usize;
-
+            Ok(len) => {
                 // Reset the position to zero before passing the cursor to
                 // `Frame::parse`.
                 buf.set_position(0);
@@ -154,46 +149,17 @@ impl Connection {
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
     pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
-        // Arrays are encoded by encoding each entry. All other frame types are
-        // considered literals. For now, mini-redis is not able to encode
-        // recursive frame structures. See below for more details.
+        // let pdu_bytes = frame.to_bytes();
+        // self.stream.write_all(pdu_bytes).await;
+
         match frame {
-            Frame::BindTransmitter(val) => {
-
+            Frame::BindTransmitter(pdu) => {
+                self.stream.write_all(&*pdu.to_bytes()).await?;
+            },
+            Frame::BindTransmitterResponse(pdu)=> {
+                self.stream.write_all(&*pdu.to_bytes()).await?;
             }
-            Frame::BindTransmitterResponse(val) => {
-
-            }
-            // Frame::Simple(val) => {
-            //     self.stream.write_u8(b'+').await?;
-            //     self.stream.write_all(val.as_bytes()).await?;
-            //     self.stream.write_all(b"\r\n").await?;
-            // }
-            // Frame::Error(val) => {
-            //     self.stream.write_u8(b'-').await?;
-            //     self.stream.write_all(val.as_bytes()).await?;
-            //     self.stream.write_all(b"\r\n").await?;
-            // }
-            // Frame::Integer(val) => {
-            //     self.stream.write_u8(b':').await?;
-            //     self.write_decimal(*val).await?;
-            // }
-            // Frame::Null => {
-            //     self.stream.write_all(b"$-1\r\n").await?;
-            // }
-            // Frame::Bulk(val) => {
-            //     let len = val.len();
-            //
-            //     self.stream.write_u8(b'$').await?;
-            //     self.write_decimal(len as u64).await?;
-            //     self.stream.write_all(val).await?;
-            //     self.stream.write_all(b"\r\n").await?;
-            // }
-            // // Encoding an `Array` from within a value cannot be done using a
-            // // recursive strategy. In general, async fns do not support
-            // // recursion. Mini-redis has not needed to encode nested arrays yet,
-            // // so for now it is skipped.
-            // Frame::Array(_val) => unreachable!(),
+            _ => unimplemented!()
         }
 
         // Ensure the encoded frame is written to the socket. The calls above
