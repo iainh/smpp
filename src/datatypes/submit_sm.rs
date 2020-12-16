@@ -1,6 +1,7 @@
-use crate::datatypes::Tlv;
+use crate::datatypes::tlv::Tlv;
+use crate::datatypes::ToBytes;
 use crate::{CommandId, CommandStatus};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
 /// This operation is used by an ESME to submit a short message to the SMSC for onward transmission
 /// to a specified short message entity (SME). The submit_sm PDU does not support the transaction
@@ -70,4 +71,245 @@ pub struct SubmitSmResponse {
 
     // Body
     pub message_id: String,
+}
+
+impl ToBytes for SubmitSm {
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut buffer = BytesMut::with_capacity(1024);
+
+        buffer.put_u32(CommandId::SubmitSm as u32);
+        buffer.put_u32(self.command_status as u32);
+        buffer.put_u32(self.sequence_number);
+
+        // Mandatory parameters
+        buffer.put(self.service_type.as_bytes());
+        buffer.put_u8(b'\0');
+
+        buffer.put_u8(self.source_addr_ton);
+        buffer.put_u8(self.source_addr_npi);
+
+        buffer.put(self.source_addr.as_bytes());
+        buffer.put_u8(b'\0');
+
+        buffer.put_u8(self.dest_addr_ton);
+        buffer.put_u8(self.dest_addr_npi);
+        buffer.put_u8(self.esm_class);
+        buffer.put_u8(self.protocol_id);
+        buffer.put_u8(self.priority_flag);
+
+        buffer.put(self.schedule_delivery_time.as_bytes());
+        buffer.put_u8(b'\0');
+
+        buffer.put(self.validity_period.as_bytes());
+        buffer.put_u8(b'\0');
+
+        buffer.put_u8(self.registered_delivery);
+        buffer.put_u8(self.replace_if_present_flag);
+        buffer.put_u8(self.data_coding);
+        buffer.put_u8(self.sm_default_msg_id);
+        buffer.put_u8(self.sm_length);
+
+        buffer.put(self.short_message.as_bytes());
+        buffer.put_u8(b'\0');
+
+        // Optional parameters
+
+        if let Some(user_message_reference) = &self.user_message_reference {
+            buffer.extend_from_slice(&user_message_reference.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(source_port) = &self.source_port {
+            buffer.extend_from_slice(&source_port.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(source_addr_submit) = &self.source_addr_submit {
+            buffer.extend_from_slice(&source_addr_submit.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(destination_port) = &self.destination_port {
+            buffer.extend_from_slice(&destination_port.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(dest_addr_submit) = &self.dest_addr_submit {
+            buffer.extend_from_slice(&dest_addr_submit.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(sar_msg_ref_num) = &self.sar_msg_ref_num {
+            buffer.extend_from_slice(&sar_msg_ref_num.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(sar_total_segments) = &self.sar_total_segments {
+            buffer.extend_from_slice(&sar_total_segments.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(sar_segment_seqnum) = &self.sar_segment_seqnum {
+            buffer.extend_from_slice(&sar_segment_seqnum.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(more_messages_to_send) = &self.more_messages_to_send {
+            buffer.extend_from_slice(&more_messages_to_send.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(payload_type) = &self.payload_type {
+            buffer.extend_from_slice(&payload_type.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(message_payload) = &self.message_payload {
+            buffer.extend_from_slice(&message_payload.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(privacy_indicator) = &self.privacy_indicator {
+            buffer.extend_from_slice(&privacy_indicator.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(callback_num) = &self.callback_num {
+            buffer.extend_from_slice(&callback_num.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(callback_num_pres_ind) = &self.callback_num_pres_ind {
+            buffer.extend_from_slice(&callback_num_pres_ind.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(callback_num_atag) = &self.callback_num_atag {
+            buffer.extend_from_slice(&callback_num_atag.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(source_subaddress) = &self.source_subaddress {
+            buffer.extend_from_slice(&source_subaddress.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(source_subaddress) = &self.source_subaddress {
+            buffer.extend_from_slice(&source_subaddress.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(dest_subaddress) = &self.dest_subaddress {
+            buffer.extend_from_slice(&dest_subaddress.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(display_time) = &self.display_time {
+            buffer.extend_from_slice(&display_time.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(sms_signal) = &self.sms_signal {
+            buffer.extend_from_slice(&sms_signal.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(ms_validity) = &self.ms_validity {
+            buffer.extend_from_slice(&ms_validity.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(ms_msg_wait_facilities) = &self.ms_msg_wait_facilities {
+            buffer.extend_from_slice(&ms_msg_wait_facilities.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(number_of_messages) = &self.number_of_messages {
+            buffer.extend_from_slice(&number_of_messages.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(alert_on_msg_delivery) = &self.alert_on_msg_delivery {
+            buffer.extend_from_slice(&alert_on_msg_delivery.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(language_indicator) = &self.language_indicator {
+            buffer.extend_from_slice(&language_indicator.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(its_reply_type) = &self.its_reply_type {
+            buffer.extend_from_slice(&its_reply_type.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(its_session_info) = &self.its_session_info {
+            buffer.extend_from_slice(&its_session_info.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        if let Some(ussd_service_op) = &self.ussd_service_op {
+            buffer.extend_from_slice(&ussd_service_op.to_bytes());
+        } else {
+            buffer.put_u8(b'\0');
+        }
+
+        let length = (buffer.len() + 4) as u32;
+
+        let mut buf = vec![];
+        buf.extend_from_slice(&length.to_be_bytes());
+        buf.extend_from_slice(buffer.bytes());
+
+        buf
+    }
+}
+
+impl ToBytes for SubmitSmResponse {
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut buffer = BytesMut::with_capacity(512);
+        // todo: what is actually the max length?
+
+        buffer.put_u32(CommandId::SubmitSmResp as u32);
+        buffer.put_u32(self.command_status as u32);
+        buffer.put_u32(self.sequence_number);
+
+        buffer.put(self.message_id.as_bytes());
+        buffer.put_u8(b'\0');
+
+        let length = (buffer.len() + 4) as u32;
+
+        let mut buf = vec![];
+        buf.extend_from_slice(&length.to_be_bytes());
+        buf.extend_from_slice(buffer.bytes());
+
+        buf
+    }
 }

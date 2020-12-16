@@ -1,7 +1,7 @@
-use crate::datatypes::{Tlv, ToBytes};
+use crate::datatypes::tlv::Tlv;
+use crate::datatypes::ToBytes;
 use crate::{CommandId, CommandStatus};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::ptr::null;
+use bytes::{Buf, BufMut, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitter {
@@ -37,13 +37,22 @@ impl ToBytes for BindTransmitter {
         buffer.put_u32(CommandId::BindTransmitter as u32);
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
+
         buffer.put(self.system_id.as_bytes());
+        buffer.put_u8(b'\0');
+
         buffer.put(self.password.as_bytes());
+        buffer.put_u8(b'\0');
+
         buffer.put(self.system_type.as_bytes());
+        buffer.put_u8(b'\0');
+
         buffer.put_u8(self.interface_version);
         buffer.put_u8(self.addr_ton);
         buffer.put_u8(self.addr_npi);
+
         buffer.put(self.address_range.as_bytes());
+        buffer.put_u8(b'\0');
 
         let length = (buffer.len() + 4) as u32;
 
@@ -87,25 +96,39 @@ mod tests {
     use std::convert::TryInto;
     use std::io::{Cursor, Write};
 
-    # [test]
+    #[test]
     fn bind_transmitter_to_bytes() {
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: "system_id".to_string(),
-            password: "password".to_string(),
-            system_type: "system_type".to_string(),
-            interface_version: 12,
-            addr_ton: 87,
-            addr_npi: 89,
-            address_range: "???".to_string()
+            system_id: "SMPP3TEST".to_string(),
+            password: "secret08".to_string(),
+            system_type: "SUBMIT1".to_string(),
+            interface_version: 0,
+            addr_ton: 1,
+            addr_npi: 1,
+            address_range: "".to_string(),
         };
 
         let bt_bytes = bind_transmitter.to_bytes();
 
-        assert_eq!(50, bt_bytes.len());
+        // Expected byte representation of a bind transmitter
+        let expected: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x2F, // command_length
+            0x00, 0x00, 0x00, 0x02, // command_id
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
+            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, // password
+            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
+            0x00, // interface_version
+            0x01, // addr_tom
+            0x01, // addr_npi
+            0x00, // address_range
+        ];
 
-        println!("{:x?}", bt_bytes);
-
+        assert_eq!(&bt_bytes, &expected);
     }
 }

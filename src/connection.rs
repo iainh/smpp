@@ -1,10 +1,10 @@
 use crate::frame::{self, Frame};
 
+use crate::datatypes::ToBytes;
 use bytes::{Buf, BytesMut};
-use std::io::{self, Cursor, Read};
+use std::io::{self, Cursor};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
-use crate::datatypes::ToBytes;
 
 /// Send and receive `Frame` values from a remote peer.
 ///
@@ -155,11 +155,11 @@ impl Connection {
         match frame {
             Frame::BindTransmitter(pdu) => {
                 self.stream.write_all(&*pdu.to_bytes()).await?;
-            },
-            Frame::BindTransmitterResponse(pdu)=> {
+            }
+            Frame::BindTransmitterResponse(pdu) => {
                 self.stream.write_all(&*pdu.to_bytes()).await?;
             }
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
 
         // Ensure the encoded frame is written to the socket. The calls above

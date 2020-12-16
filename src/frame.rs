@@ -54,7 +54,7 @@ impl Frame {
     /// The message has already been validated with `check`.
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
         // parse the header
-        let command_length = get_u32(src)?;
+        let _command_length = get_u32(src)?;
         let command_id = CommandId::try_from(get_u32(src)?).unwrap();
         let command_status = CommandStatus::try_from(get_u32(src)?).unwrap();
         let sequence_number = get_u32(src)?;
@@ -442,6 +442,5 @@ mod tests {
         } else {
             assert!(false, "Unexpected frame variant");
         }
-
     }
 }
