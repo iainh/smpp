@@ -6,7 +6,7 @@ mod tlv;
 mod unbind;
 
 pub use bind_transmitter::{BindTransmitter, BindTransmitterResponse};
-pub use command_id::CommandId;
+pub(crate) use command_id::CommandId;
 pub use command_status::CommandStatus;
 pub use submit_sm::{SubmitSm, SubmitSmResponse};
 pub use tlv::Tlv;

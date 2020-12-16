@@ -3,7 +3,7 @@ use num_enum::TryFromPrimitive;
 #[derive(TryFromPrimitive)]
 #[repr(u32)]
 #[derive(Clone, Debug, PartialEq)]
-pub enum CommandId {
+pub(crate) enum CommandId {
     GenericNack = 0x80000000,
     BindReceiver = 0x00000001,
     BindReceiverResp = 0x80000001,

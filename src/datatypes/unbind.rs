@@ -1,5 +1,4 @@
-use crate::datatypes::ToBytes;
-use crate::{CommandId, CommandStatus};
+use crate::datatypes::{CommandId, CommandStatus, ToBytes};
 use bytes::{Buf, BufMut, BytesMut};
 
 /// The purpose of the SMPP unbind operation is to deregister an instance of an ESME from the SMSC

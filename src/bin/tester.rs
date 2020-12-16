@@ -1,5 +1,4 @@
-use smpp::datatypes::{BindTransmitter, BindTransmitterResponse, Tlv};
-use smpp::CommandStatus;
+use smpp::datatypes::{BindTransmitter, BindTransmitterResponse, CommandStatus, Tlv};
 use std::error::Error;
 
 #[tokio::main]

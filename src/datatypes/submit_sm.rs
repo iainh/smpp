@@ -1,6 +1,5 @@
 use crate::datatypes::tlv::Tlv;
-use crate::datatypes::ToBytes;
-use crate::{CommandId, CommandStatus};
+use crate::datatypes::{CommandId, CommandStatus, ToBytes};
 use bytes::{Buf, BufMut, BytesMut};
 
 /// This operation is used by an ESME to submit a short message to the SMSC for onward transmission

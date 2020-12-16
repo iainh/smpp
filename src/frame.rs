@@ -85,7 +85,7 @@ impl Frame {
                 };
                 Frame::BindTransmitter(pdu)
             }
-            _ => todo!(),
+            _ => todo!("Implement the parse function for all the other PDUs"),
         };
 
         Ok(command)

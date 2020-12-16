@@ -4,8 +4,6 @@ pub mod frame;
 
 pub use frame::*;
 
-pub use datatypes::{CommandId, CommandStatus};
-
 /// Error returned by most functions.
 ///
 /// When writing a real application, one might want to consider a specialized

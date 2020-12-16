@@ -1,6 +1,5 @@
 use crate::datatypes::tlv::Tlv;
-use crate::datatypes::ToBytes;
-use crate::{CommandId, CommandStatus};
+use crate::datatypes::{CommandId, CommandStatus, ToBytes};
 use bytes::{Buf, BufMut, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
