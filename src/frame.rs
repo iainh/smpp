@@ -1,7 +1,10 @@
 //! Provides a type representing an SMPP protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
-use crate::datatypes::{BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus};
+use crate::datatypes::{
+    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, SubmitSm, SubmitSmResponse,
+    Unbind, UnbindResponse,
+};
 use bytes::Buf;
 use core::fmt;
 use std::convert::TryFrom;
@@ -13,6 +16,10 @@ use std::string::FromUtf8Error;
 pub enum Frame {
     BindTransmitter(BindTransmitter),
     BindTransmitterResponse(BindTransmitterResponse),
+    SubmitSm(SubmitSm),
+    SubmitSmResponse(SubmitSmResponse),
+    Unbind(Unbind),
+    UnbindResponse(UnbindResponse),
 }
 
 #[derive(Debug)]
@@ -25,9 +32,9 @@ pub enum Error {
 }
 
 impl Frame {
-    /// Checks if an entire message can be decoded from `src`
-    pub fn check(src: &mut Cursor<&[u8]>) -> Result<(), Error> {
-
+    /// Checks if an entire message can be decoded from `src`. If it can be, return the
+    /// command_length that can be used to allocate the buffer for parsing.
+    pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, Error> {
         // The length of the PDU including the command_length.
         let command_length = peek_u32(src)? as usize;
 
@@ -38,7 +45,7 @@ impl Frame {
         //  - sequence_number (4 octets)
         // for a total of 16 octets
         if command_length <= src.remaining() && command_length > 16 {
-           Ok(())
+            Ok(command_length)
         } else {
             Err(Error::Incomplete)
         }
@@ -134,7 +141,10 @@ fn get_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     Ok(src.get_u32())
 }
 
-fn get_until_coctet_string(src: &mut Cursor<&[u8]>, max_length: Option<u64>) -> Result<String, Error> {
+fn get_until_coctet_string(
+    src: &mut Cursor<&[u8]>,
+    max_length: Option<u64>,
+) -> Result<String, Error> {
     if !&src.has_remaining() {
         return Err(Error::Incomplete);
     }
@@ -189,6 +199,18 @@ impl fmt::Display for Frame {
             }
             Frame::BindTransmitterResponse(msg) => {
                 write!(fmt, "Bind Transmitter Response {:?}", msg.command_status)
+            }
+            Frame::SubmitSm(msg) => {
+                write!(fmt, "Submit SM {:?}", msg.command_status)
+            }
+            Frame::SubmitSmResponse(msg) => {
+                write!(fmt, "Submit SM Response {:?}", msg.command_status)
+            }
+            Frame::Unbind(msg) => {
+                write!(fmt, "Unbind {:?}", msg.command_status)
+            }
+            Frame::UnbindResponse(msg) => {
+                write!(fmt, "Unbind Response {:?}", msg.command_status)
             }
         }
     }
@@ -346,15 +368,12 @@ mod tests {
         let result = result.unwrap();
         assert_eq!("This is the second.\0".to_string(), result);
 
-
         let mut data = "This is the first part\0This is the second.\0".as_bytes();
         let mut buff = Cursor::new(data);
-
 
         let result = get_until_coctet_string(&mut buff, Some(4));
         assert_eq!(result.is_ok(), true);
         assert_eq!(result.unwrap().len(), 4);
-
     }
 
     #[test]
@@ -417,14 +436,12 @@ mod tests {
         assert!(result.is_ok());
 
         let frame = result.unwrap();
-        match frame {
-            Frame::BindTransmitter(bt) => {
-                assert_eq!(bt.command_status, CommandStatus::Ok);
-                assert_eq!(&bt.system_id, "SMPP3TEST\0");
-            }
-            Frame::BindTransmitterResponse(_) => {
-                unimplemented!();
-            }
+        if let Frame::BindTransmitter(bt) = frame {
+            assert_eq!(bt.command_status, CommandStatus::Ok);
+            assert_eq!(&bt.system_id, "SMPP3TEST\0");
+        } else {
+            assert!(false, "Unexpected frame variant");
         }
+
     }
 }
