@@ -11,7 +11,6 @@ use std::convert::TryFrom;
 use std::io::{Cursor, Read};
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
-use std::ops::Deref;
 
 #[derive(Clone, Debug)]
 pub enum Frame {
