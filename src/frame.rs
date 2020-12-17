@@ -1,14 +1,11 @@
 //! Provides a type representing an SMPP protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
-use crate::datatypes::{
-    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, SubmitSm, SubmitSmResponse,
-    Unbind, UnbindResponse,
-};
+use crate::datatypes::{BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, SubmitSm, SubmitSmResponse, Unbind, UnbindResponse, Tlv};
 use bytes::Buf;
 use core::fmt;
 use std::convert::TryFrom;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Bytes};
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
@@ -84,6 +81,34 @@ impl Frame {
                     address_range,
                 };
                 Frame::BindTransmitter(pdu)
+            }
+            CommandId::BindTransmitterResp => {
+                let system_id = get_until_coctet_string(src, Some(16))?;
+
+                let sc_interface_version = if src.has_remaining() {
+                    Some(get_tlv(src)?)
+                } else { None };
+
+                let pdu = BindTransmitterResponse {
+                    command_status,
+                    sequence_number,
+                    system_id,
+                    sc_interface_version,
+                };
+
+                Frame::BindTransmitterResponse(pdu)
+            }
+
+            CommandId::SubmitSmResp => {
+                let message_id = get_until_coctet_string(src, Some(65))?;
+
+                let pdu = SubmitSmResponse {
+                    command_status,
+                    sequence_number,
+                    message_id,
+                };
+
+                Frame::SubmitSmResponse(pdu)
             }
             _ => todo!("Implement the parse function for all the other PDUs"),
         };
@@ -171,6 +196,27 @@ fn get_until_coctet_string(
     let result = String::from_utf8_lossy(&buffer).to_string();
 
     Ok(result)
+}
+
+fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
+    if !&src.has_remaining() {
+        return Err(Error::Incomplete);
+    }
+
+    let tag = get_until_coctet_string(src, None)?;
+    let length = get_u32(src)?;
+    let mut value: Vec<u8> = vec![0; length as usize];
+    src.copy_to_slice(&mut value);
+
+    let value = bytes::BytesMut::from(value.as_slice());
+
+    let tlv = Tlv {
+        tag,
+        length,
+        value: value.freeze(),
+    };
+
+    Ok(tlv)
 }
 
 /// Advance the cursor by n characters
