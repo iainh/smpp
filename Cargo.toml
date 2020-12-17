@@ -5,8 +5,8 @@ authors = ["Iain H"]
 edition = "2018"
 
 [[bin]]
-name = "tester"
-path = "src/bin/tester.rs"
+name = "send_sms"
+path = "src/bin/send_sms.rs"
 
 [dependencies]
 bytes = "0.6"

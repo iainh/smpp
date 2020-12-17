@@ -1,5 +1,6 @@
+use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
-use crate::datatypes::{CommandId, CommandStatus, ToBytes};
+use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
 use bytes::{Buf, BufMut, BytesMut};
 
 /// This operation is used by an ESME to submit a short message to the SMSC for onward transmission
@@ -14,11 +15,11 @@ pub struct SubmitSm {
 
     // Mandatory parameters
     pub service_type: String,
-    pub source_addr_ton: u8,
-    pub source_addr_npi: u8,
+    pub source_addr_ton: TypeOfNumber,
+    pub source_addr_npi: NumericPlanIndicator,
     pub source_addr: String,
-    pub dest_addr_ton: u8,
-    pub dest_addr_npi: u8,
+    pub dest_addr_ton: TypeOfNumber,
+    pub dest_addr_npi: NumericPlanIndicator,
     pub destination_addr: String,
     pub esm_class: u8,
     pub protocol_id: u8,
@@ -85,14 +86,14 @@ impl ToBytes for SubmitSm {
         buffer.put(self.service_type.as_bytes());
         buffer.put_u8(b'\0');
 
-        buffer.put_u8(self.source_addr_ton);
-        buffer.put_u8(self.source_addr_npi);
+        buffer.put_u8(self.source_addr_ton as u8);
+        buffer.put_u8(self.source_addr_npi as u8);
 
         buffer.put(self.source_addr.as_bytes());
         buffer.put_u8(b'\0');
 
-        buffer.put_u8(self.dest_addr_ton);
-        buffer.put_u8(self.dest_addr_npi);
+        buffer.put_u8(self.dest_addr_ton as u8);
+        buffer.put_u8(self.dest_addr_npi as u8);
 
         buffer.put(self.destination_addr.as_bytes());
         buffer.put_u8(b'\0');
@@ -111,7 +112,6 @@ impl ToBytes for SubmitSm {
         buffer.put_u8(self.replace_if_present_flag);
         buffer.put_u8(self.data_coding);
         buffer.put_u8(self.sm_default_msg_id);
-
 
         // If we are using the short message and short message length (sm_length) fields, then we
         // don't null terminate the string. the value of sm_length is used when reading.
