@@ -1,5 +1,6 @@
+use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
-use crate::datatypes::{CommandId, CommandStatus, ToBytes};
+use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
 use bytes::{Buf, BufMut, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,8 +14,8 @@ pub struct BindTransmitter {
     pub password: String,
     pub system_type: String,
     pub interface_version: u8,
-    pub addr_ton: u8,
-    pub addr_npi: u8,
+    pub addr_ton: TypeOfNumber,
+    pub addr_npi: NumericPlanIndicator,
     pub address_range: String,
 }
 
@@ -47,8 +48,8 @@ impl ToBytes for BindTransmitter {
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.interface_version);
-        buffer.put_u8(self.addr_ton);
-        buffer.put_u8(self.addr_npi);
+        buffer.put_u8(self.addr_ton as u8);
+        buffer.put_u8(self.addr_npi as u8);
 
         buffer.put(self.address_range.as_bytes());
         buffer.put_u8(b'\0');
@@ -91,9 +92,6 @@ impl ToBytes for BindTransmitterResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::{BufMut, BytesMut};
-    use std::convert::TryInto;
-    use std::io::{Cursor, Write};
 
     #[test]
     fn bind_transmitter_to_bytes() {
@@ -104,8 +102,8 @@ mod tests {
             password: "secret08".to_string(),
             system_type: "SUBMIT1".to_string(),
             interface_version: 0,
-            addr_ton: 1,
-            addr_npi: 1,
+            addr_ton: TypeOfNumber::International,
+            addr_npi: NumericPlanIndicator::ISDN,
             address_range: "".to_string(),
         };
 

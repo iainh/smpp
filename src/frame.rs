@@ -1,19 +1,23 @@
 //! Provides a type representing an SMPP protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
-use crate::datatypes::{BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, SubmitSm, SubmitSmResponse, Unbind, UnbindResponse, Tlv};
+use crate::datatypes::{
+    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, NumericPlanIndicator,
+    SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
+};
 use bytes::Buf;
 use core::fmt;
 use std::convert::TryFrom;
-use std::io::{Cursor, Read, Bytes};
+use std::io::{Cursor, Read};
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
+use std::ops::Deref;
 
 #[derive(Clone, Debug)]
 pub enum Frame {
     BindTransmitter(BindTransmitter),
     BindTransmitterResponse(BindTransmitterResponse),
-    SubmitSm(SubmitSm),
+    SubmitSm(Box<SubmitSm>),
     SubmitSmResponse(SubmitSmResponse),
     Unbind(Unbind),
     UnbindResponse(UnbindResponse),
@@ -62,10 +66,10 @@ impl Frame {
                 let system_id = get_until_coctet_string(src, Some(16))?;
                 let password = get_until_coctet_string(src, Some(9))?;
                 let system_type = get_until_coctet_string(src, Some(13))?;
-                let addr_ton = get_u8(src)?;
+                let addr_ton = TypeOfNumber::try_from(get_u8(src)?).unwrap();
 
                 let interface_version = get_u8(src)?;
-                let addr_npi = get_u8(src)?;
+                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?).unwrap();
 
                 let address_range = get_until_coctet_string(src, Some(41))?;
 
@@ -87,7 +91,9 @@ impl Frame {
 
                 let sc_interface_version = if src.has_remaining() {
                     Some(get_tlv(src)?)
-                } else { None };
+                } else {
+                    None
+                };
 
                 let pdu = BindTransmitterResponse {
                     command_status,
@@ -300,13 +306,12 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::{BufMut, BytesMut};
     use std::convert::TryInto;
-    use std::io::{Cursor, Write};
+    use std::io::Cursor;
 
     #[test]
     fn peek_u8_test() {
-        let mut data: Vec<u8> = vec![10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+        let data: Vec<u8> = vec![10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
         let mut buff = Cursor::new(data.as_slice());
 
         // Before peeking, the remaining bytes should be the same as the total number of elements
@@ -322,7 +327,7 @@ mod tests {
 
     #[test]
     fn get_u8_test() {
-        let mut data: Vec<u8> = vec![10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+        let data: Vec<u8> = vec![10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
         let mut buff = Cursor::new(data.as_slice());
 
         let result = get_u8(&mut buff);
@@ -335,7 +340,7 @@ mod tests {
 
     #[test]
     fn peek_u32_test() {
-        let mut data: Vec<u8> = vec![0x1, 0xF, 0xF, 0xF, 6, 5, 4, 3, 2, 1];
+        let data: Vec<u8> = vec![0x1, 0xF, 0xF, 0xF, 6, 5, 4, 3, 2, 1];
         let mut buff = Cursor::new(data.as_slice());
 
         let result = peek_u32(&mut buff);
@@ -351,7 +356,7 @@ mod tests {
 
     #[test]
     fn get_u32_test() {
-        let mut data: Vec<u8> = vec![0x1, 0xF, 0xF, 0xF, 6, 5, 4, 3, 2, 1];
+        let data: Vec<u8> = vec![0x1, 0xF, 0xF, 0xF, 6, 5, 4, 3, 2, 1];
         let mut buff = Cursor::new(data.as_slice());
 
         let result = get_u32(&mut buff);
@@ -369,7 +374,7 @@ mod tests {
     fn skip_test() {
         use std::io::Cursor;
 
-        let mut data: Vec<u8> = vec![0x1, 0xF, 0xF, 0xF, 6, 5, 4, 3, 2, 1];
+        let data: Vec<u8> = vec![0x1, 0xF, 0xF, 0xF, 6, 5, 4, 3, 2, 1];
         let mut buff = Cursor::new(data.as_slice());
 
         let result = skip(&mut buff, 4);
@@ -394,7 +399,7 @@ mod tests {
     fn get_until_coctet_string_test() {
         use std::io::Cursor;
 
-        let mut data = "This is the first part\0This is the second.\0".as_bytes();
+        let data = "This is the first part\0This is the second.\0".as_bytes();
         let mut buff = Cursor::new(data);
 
         let result = get_until_coctet_string(&mut buff, Some(23));
@@ -414,7 +419,7 @@ mod tests {
         let result = result.unwrap();
         assert_eq!("This is the second.\0".to_string(), result);
 
-        let mut data = "This is the first part\0This is the second.\0".as_bytes();
+        let data = "This is the first part\0This is the second.\0".as_bytes();
         let mut buff = Cursor::new(data);
 
         let result = get_until_coctet_string(&mut buff, Some(4));
@@ -426,28 +431,28 @@ mod tests {
     fn check_test() {
         use std::io::Cursor;
 
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             0x00, 0x00, 0x00, 0x2F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x01, 0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, 0x73, 0x65,
             0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, 0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31,
             0x00, 0x00, 0x01, 0x01, 0x00,
         ];
 
-        let mut data = data.as_slice();
+        let data = data.as_slice();
         let mut buff = Cursor::new(data);
 
         let result = Frame::check(&mut buff);
         assert!(result.is_ok());
 
         // Invalid length: (3F when it should be 2F)
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x01, 0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, 0x73, 0x65,
             0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, 0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31,
             0x00, 0x00, 0x01, 0x01, 0x00,
         ];
 
-        let mut data = data.as_slice();
+        let data = data.as_slice();
         let mut buff = Cursor::new(data);
 
         let result = Frame::check(&mut buff);
@@ -458,7 +463,7 @@ mod tests {
     fn parse_test() {
         use std::io::Cursor;
 
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             // Header:
             0x00, 0x00, 0x00, 0x2F, // command_length
             0x00, 0x00, 0x00, 0x02, // command_id
@@ -474,7 +479,7 @@ mod tests {
             0x00, // address_range
         ];
 
-        let mut data = data.as_slice();
+        let data = data.as_slice();
         let mut buff = Cursor::new(data);
 
         let result = Frame::parse(&mut buff);
