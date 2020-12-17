@@ -19,6 +19,7 @@ pub struct SubmitSm {
     pub source_addr: String,
     pub dest_addr_ton: u8,
     pub dest_addr_npi: u8,
+    pub destination_addr: String,
     pub esm_class: u8,
     pub protocol_id: u8,
     pub priority_flag: u8,
@@ -92,6 +93,10 @@ impl ToBytes for SubmitSm {
 
         buffer.put_u8(self.dest_addr_ton);
         buffer.put_u8(self.dest_addr_npi);
+
+        buffer.put(self.destination_addr.as_bytes());
+        buffer.put_u8(b'\0');
+
         buffer.put_u8(self.esm_class);
         buffer.put_u8(self.protocol_id);
         buffer.put_u8(self.priority_flag);
@@ -106,10 +111,14 @@ impl ToBytes for SubmitSm {
         buffer.put_u8(self.replace_if_present_flag);
         buffer.put_u8(self.data_coding);
         buffer.put_u8(self.sm_default_msg_id);
-        buffer.put_u8(self.sm_length);
 
+
+        // If we are using the short message and short message length (sm_length) fields, then we
+        // don't null terminate the string. the value of sm_length is used when reading.
+        // todo: is the length of the short_message is greater than 254 octets, then message_payload
+        //   should be used and sm_length set to 0.
+        buffer.put_u8(self.sm_length);
         buffer.put(self.short_message.as_bytes());
-        buffer.put_u8(b'\0');
 
         // Optional parameters
 
