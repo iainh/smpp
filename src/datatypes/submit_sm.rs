@@ -1,4 +1,5 @@
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
+use crate::datatypes::priority_flag::PriorityFlag;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
 use bytes::{Buf, BufMut, BytesMut};
@@ -23,7 +24,7 @@ pub struct SubmitSm {
     pub destination_addr: String,
     pub esm_class: u8,
     pub protocol_id: u8,
-    pub priority_flag: u8,
+    pub priority_flag: PriorityFlag,
     pub schedule_delivery_time: String,
     pub validity_period: String,
     pub registered_delivery: u8,
@@ -100,7 +101,7 @@ impl ToBytes for SubmitSm {
 
         buffer.put_u8(self.esm_class);
         buffer.put_u8(self.protocol_id);
-        buffer.put_u8(self.priority_flag);
+        buffer.put_u8(self.priority_flag as u8);
 
         buffer.put(self.schedule_delivery_time.as_bytes());
         buffer.put_u8(b'\0');

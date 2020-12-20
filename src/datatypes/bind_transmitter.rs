@@ -1,7 +1,9 @@
+use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
 use bytes::{Buf, BufMut, BytesMut};
+use tokio::stream::StreamExt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitter {
@@ -13,7 +15,7 @@ pub struct BindTransmitter {
     pub system_id: String,
     pub password: String,
     pub system_type: String,
-    pub interface_version: u8,
+    pub interface_version: InterfaceVersion,
     pub addr_ton: TypeOfNumber,
     pub addr_npi: NumericPlanIndicator,
     pub address_range: String,
@@ -47,7 +49,7 @@ impl ToBytes for BindTransmitter {
         buffer.put(self.system_type.as_bytes());
         buffer.put_u8(b'\0');
 
-        buffer.put_u8(self.interface_version);
+        buffer.put_u8(self.interface_version as u8);
         buffer.put_u8(self.addr_ton as u8);
         buffer.put_u8(self.addr_npi as u8);
 

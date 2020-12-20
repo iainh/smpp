@@ -1,6 +1,6 @@
 use argh::FromArgs;
 use smpp::connection::Connection;
-use smpp::datatypes::CommandStatus;
+use smpp::datatypes::{CommandStatus, PriorityFlag, InterfaceVersion};
 use smpp::datatypes::SubmitSm;
 use smpp::datatypes::{BindTransmitter, NumericPlanIndicator, TypeOfNumber, Unbind};
 use smpp::Frame;
@@ -38,7 +38,7 @@ impl Client {
             system_id: system_id.to_string(),
             password: password.to_string(),
             system_type: "".to_string(),
-            interface_version: 0x34, // We support version 3.4 of the SMPP protocol
+            interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::Unknown,
             addr_npi: NumericPlanIndicator::Unknown,
             address_range: "".to_string(),
@@ -94,7 +94,7 @@ impl Client {
             destination_addr: to,
             esm_class: 0,
             protocol_id: 0,
-            priority_flag: 0,
+            priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: "".to_string(),
             validity_period: "".to_string(),
             registered_delivery: 0,

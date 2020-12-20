@@ -76,7 +76,7 @@ impl Connection {
                     Ok(None)
                 } else {
                     Err("connection reset by peer".into())
-                }
+                };
             }
         }
     }

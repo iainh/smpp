@@ -2,8 +2,9 @@
 //! parsing frames from a byte array.
 
 use crate::datatypes::{
-    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, NumericPlanIndicator,
-    SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
+    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, InterfaceVersion,
+    NumericPlanIndicator, PriorityFlag, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind,
+    UnbindResponse,
 };
 use bytes::Buf;
 use core::fmt;
@@ -67,7 +68,7 @@ impl Frame {
                 let system_type = get_until_coctet_string(src, Some(13))?;
                 let addr_ton = TypeOfNumber::try_from(get_u8(src)?).unwrap();
 
-                let interface_version = get_u8(src)?;
+                let interface_version = InterfaceVersion::try_from(get_u8(src)?).unwrap();
                 let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?).unwrap();
 
                 let address_range = get_until_coctet_string(src, Some(41))?;
