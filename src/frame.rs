@@ -3,7 +3,7 @@
 
 use crate::datatypes::{
     BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, InterfaceVersion,
-    NumericPlanIndicator, PriorityFlag, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind,
+    NumericPlanIndicator, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind,
     UnbindResponse,
 };
 use bytes::Buf;
@@ -66,11 +66,9 @@ impl Frame {
                 let system_id = get_until_coctet_string(src, Some(16))?;
                 let password = get_until_coctet_string(src, Some(9))?;
                 let system_type = get_until_coctet_string(src, Some(13))?;
-                let addr_ton = TypeOfNumber::try_from(get_u8(src)?).unwrap();
-
                 let interface_version = InterfaceVersion::try_from(get_u8(src)?).unwrap();
+                let addr_ton = TypeOfNumber::try_from(get_u8(src)?).unwrap();
                 let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?).unwrap();
-
                 let address_range = get_until_coctet_string(src, Some(41))?;
 
                 let pdu = BindTransmitter {
