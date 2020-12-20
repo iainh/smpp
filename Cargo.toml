@@ -4,11 +4,13 @@ version = "0.1.0"
 authors = ["Iain H"]
 edition = "2018"
 
-[[bin]]
-name = "send_sms"
-path = "src/bin/send_sms.rs"
-
 [dependencies]
 bytes = "0.6"
 num_enum = "0.5"
 tokio = { version = "0.3", features = ["full"] }
+
+[dev-dependencies]
+argh = "0.1"
+
+[[example]]
+name = "send_sms"

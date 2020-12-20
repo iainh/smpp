@@ -1,11 +1,11 @@
-use std::error::Error;
-use tokio::net::{TcpStream, ToSocketAddrs};
-
+use argh::FromArgs;
 use smpp::connection::Connection;
 use smpp::datatypes::CommandStatus;
 use smpp::datatypes::SubmitSm;
 use smpp::datatypes::{BindTransmitter, NumericPlanIndicator, TypeOfNumber, Unbind};
 use smpp::Frame;
+use std::error::Error;
+use tokio::net::{TcpStream, ToSocketAddrs};
 
 /// Established connection with an SMSC.
 ///
@@ -23,17 +23,22 @@ pub struct Client {
     /// `Connection` allows the handler to operate at the "frame" level and keep
     /// the byte level protocol parsing details encapsulated in `Connection`.
     connection: Connection,
+
+    /// The most recently used sequence number.
+    sequence_number: u32,
 }
 
 impl Client {
-    async fn bind(&mut self, system_id: String, password: String) -> Result<(), Box<dyn Error>> {
+    async fn bind(&mut self, system_id: &str, password: &str) -> Result<(), Box<dyn Error>> {
+        self.sequence_number += 1;
+
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok,
-            sequence_number: 0,
-            system_id,
-            password,
+            sequence_number: self.sequence_number,
+            system_id: system_id.to_string(),
+            password: password.to_string(),
             system_type: "".to_string(),
-            interface_version: 0,
+            interface_version: 0x34, // We support version 3.4 of the SMPP protocol
             addr_ton: TypeOfNumber::Unknown,
             addr_npi: NumericPlanIndicator::Unknown,
             address_range: "".to_string(),
@@ -42,28 +47,26 @@ impl Client {
         println!("-> {:?}", &bind_transmitter);
 
         let frame = Frame::BindTransmitter(bind_transmitter);
-        self.connection.write_frame(&frame).await.unwrap();
+        self.connection.write_frame(&frame).await?;
 
-        //
-
-        let response = match self.connection.read_frame().await {
-            Ok(r) => r,
+        match self.connection.read_frame().await {
+            Ok(r) => println!("<- {:?}", r),
             Err(e) => {
                 eprintln!("Error decoding bind response: {}", e);
-                None
             }
         };
-
-        println!("<-- {:?}", response);
 
         Ok(())
     }
 
     async fn unbind(&mut self) -> Result<(), Box<dyn Error>> {
+        self.sequence_number += 1;
+
         let unbind = Unbind {
             command_status: CommandStatus::Ok,
-            sequence_number: 3,
+            sequence_number: self.sequence_number,
         };
+
         let frame = Frame::Unbind(unbind);
 
         self.connection.write_frame(&frame).await?;
@@ -77,9 +80,11 @@ impl Client {
         from: String,
         message: String,
     ) -> Result<(), Box<dyn Error>> {
+        self.sequence_number += 1;
+
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
-            sequence_number: 1,
+            sequence_number: self.sequence_number,
             service_type: "".to_string(),
             source_addr_ton: TypeOfNumber::Unknown,
             source_addr_npi: NumericPlanIndicator::Unknown,
@@ -132,9 +137,16 @@ impl Client {
         let frame = Frame::SubmitSm(Box::new(submit_sm));
         self.connection.write_frame(&frame).await?;
 
-        let response = self.connection.read_frame().await.unwrap();
-
-        println!("<- {:?}", response.unwrap());
+        match self.connection.read_frame().await {
+            Ok(response) => {
+                if let Some(response) = response {
+                    println!("<- {:?}", response);
+                }
+            }
+            Err(e) => {
+                eprintln!("Error response from send_sm: {}", e)
+            }
+        }
 
         Ok(())
     }
@@ -151,22 +163,88 @@ pub async fn connect<T: ToSocketAddrs>(addr: T) -> Result<Client, Box<dyn Error>
     // perform redis protocol frame parsing.
     let connection = Connection::new(socket);
 
-    Ok(Client { connection })
+    Ok(Client {
+        connection,
+        sequence_number: 0,
+    })
+}
+
+/// Example application to show then simplest case of sending an SMS message
+#[derive(FromArgs)]
+struct CliArgs {
+    /// whether or not to enable debugging
+    #[argh(switch, short = 'd')]
+    debugging: bool,
+
+    /// the system id
+    #[argh(option)]
+    system_id: Option<String>,
+
+    /// the password
+    #[argh(option)]
+    password: Option<String>,
+
+    /// the hostname of IP address of the SMSC (default: localhost)
+    #[argh(option)]
+    host: Option<String>,
+
+    /// the port to use when connecting to the SMSC (default: 2775)
+    #[argh(option, short = 'p')]
+    port: Option<u32>,
+
+    /// the message to send
+    #[argh(option, short = 'm')]
+    message: String,
+
+    /// the recipient telephone number
+    #[argh(option, short = 't')]
+    to: String,
+
+    /// the telephone number that the message will be from
+    #[argh(option, short = 'f')]
+    from: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let cli_args: CliArgs = argh::from_env();
 
-    let mut client = connect("192.168.86.27:2775").await?;
+    let debugging = cli_args.debugging;
 
-    let to = "123456789".to_string();
-    let from = "123456789".to_string();
-    let message = "Hello SMPP world!".to_string();
+    let host = match cli_args.host {
+        Some(host) => host,
+        None => "localhost".to_string(),
+    };
 
-    client.bind("system_id".to_string(), "password".to_string()).await?;
+    let port = match cli_args.port {
+        Some(port) => port,
+        None => 2775,
+    };
+
+    let system_id = match cli_args.system_id {
+        Some(system_id) => system_id,
+        None => "".to_string(),
+    };
+
+    let password = match cli_args.password {
+        Some(password) => password,
+        None => "".to_string(),
+    };
+
+    let to = cli_args.to;
+    let from = cli_args.from;
+    let message = cli_args.message;
+
+    if debugging {
+        println!("Connecting to {}:{}", host, port);
+    }
+
+    let mut client = connect(format!("{}:{}", host, port)).await?;
+
+    client.bind(&system_id, &password).await?;
 
     match client.send(to, from, message).await {
-        Ok(_) => println!("Message sent"),
+        Ok(_) => println!("Message sent."),
         Err(e) => eprintln!("An error has occurred: {}", e),
     };
 
