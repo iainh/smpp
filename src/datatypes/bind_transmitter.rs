@@ -3,7 +3,6 @@ use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
 use bytes::{Buf, BufMut, BytesMut};
-use tokio::stream::StreamExt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitter {
@@ -103,7 +102,7 @@ mod tests {
             system_id: "SMPP3TEST".to_string(),
             password: "secret08".to_string(),
             system_type: "SUBMIT1".to_string(),
-            interface_version: 0,
+            interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
             addr_npi: NumericPlanIndicator::ISDN,
             address_range: "".to_string(),
@@ -122,8 +121,8 @@ mod tests {
             0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
             0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, // password
             0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
-            0x00, // interface_version
-            0x01, // addr_tom
+            0x34, // interface_version
+            0x01, // addr_ton
             0x01, // addr_npi
             0x00, // address_range
         ];
