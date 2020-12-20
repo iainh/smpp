@@ -72,10 +72,10 @@ impl Connection {
                 // shutdown, there should be no data in the read buffer. If
                 // there is, this means that the peer closed the socket while
                 // sending a frame.
-                if self.buffer.is_empty() {
-                    return Ok(None);
+                return if self.buffer.is_empty() {
+                    Ok(None)
                 } else {
-                    return Err("connection reset by peer".into());
+                    Err("connection reset by peer".into())
                 }
             }
         }
@@ -149,9 +149,6 @@ impl Connection {
     /// write stream. The data will be written to the buffer. Once the buffer is
     /// full, it is flushed to the underlying socket.
     pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
-        // let pdu_bytes = frame.to_bytes();
-        // self.stream.write_all(pdu_bytes).await;
-
         match frame {
             Frame::BindTransmitter(pdu) => {
                 self.stream.write_all(&*pdu.to_bytes()).await?;
