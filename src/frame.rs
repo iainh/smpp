@@ -3,11 +3,11 @@
 
 use crate::datatypes::{
     BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, InterfaceVersion,
-    NumericPlanIndicator, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind,
-    UnbindResponse,
+    NumericPlanIndicator, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
 };
 use bytes::Buf;
 use core::fmt;
+use num_enum::TryFromPrimitiveError;
 use std::convert::TryFrom;
 use std::io::{Cursor, Read};
 use std::num::TryFromIntError;
@@ -56,8 +56,8 @@ impl Frame {
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
         // parse the header
         let _command_length = get_u32(src)?;
-        let command_id = CommandId::try_from(get_u32(src)?).unwrap();
-        let command_status = CommandStatus::try_from(get_u32(src)?).unwrap();
+        let command_id = CommandId::try_from(get_u32(src)?)?;
+        let command_status = CommandStatus::try_from(get_u32(src)?)?;
         let sequence_number = get_u32(src)?;
 
         // Based on the command_id, parse the body
@@ -66,9 +66,9 @@ impl Frame {
                 let system_id = get_until_coctet_string(src, Some(16))?;
                 let password = get_until_coctet_string(src, Some(9))?;
                 let system_type = get_until_coctet_string(src, Some(13))?;
-                let interface_version = InterfaceVersion::try_from(get_u8(src)?).unwrap();
-                let addr_ton = TypeOfNumber::try_from(get_u8(src)?).unwrap();
-                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?).unwrap();
+                let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
+                let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
                 let address_range = get_until_coctet_string(src, Some(41))?;
 
                 let pdu = BindTransmitter {
@@ -233,13 +233,6 @@ fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<(), Error> {
     Ok(())
 }
 
-impl PartialEq<Frame> for Frame {
-    fn eq(&self, other: &Frame) -> bool {
-        // ???
-        false
-    }
-}
-
 impl fmt::Display for Frame {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         // todo: we can probably do a lot better here...
@@ -287,6 +280,36 @@ impl From<FromUtf8Error> for Error {
 impl From<TryFromIntError> for Error {
     fn from(_src: TryFromIntError) -> Error {
         "protocol error; invalid frame format".into()
+    }
+}
+
+impl From<TryFromPrimitiveError<CommandId>> for Error {
+    fn from(_src: TryFromPrimitiveError<CommandId>) -> Error {
+        "protocol error; invalid command identifier in frame".into()
+    }
+}
+
+impl From<TryFromPrimitiveError<CommandStatus>> for Error {
+    fn from(_src: TryFromPrimitiveError<CommandStatus>) -> Error {
+        "protocol error; invalid command status in frame".into()
+    }
+}
+
+impl From<TryFromPrimitiveError<InterfaceVersion>> for Error {
+    fn from(_src: TryFromPrimitiveError<InterfaceVersion>) -> Error {
+        "protocol error; invalid interface version in frame".into()
+    }
+}
+
+impl From<TryFromPrimitiveError<NumericPlanIndicator>> for Error {
+    fn from(_src: TryFromPrimitiveError<NumericPlanIndicator>) -> Error {
+        "protocol error; invalid numeric plan indicator in frame".into()
+    }
+}
+
+impl From<TryFromPrimitiveError<TypeOfNumber>> for Error {
+    fn from(_src: TryFromPrimitiveError<TypeOfNumber>) -> Error {
+        "protocol error; invalid type of number in frame".into()
     }
 }
 
@@ -442,7 +465,7 @@ mod tests {
         let result = Frame::check(&mut buff);
         assert!(result.is_ok());
 
-        // Invalid length: (3F when it should be 2F)
+        // Invalid length: (0x3F when it should be 0x2F)
         let data: Vec<u8> = vec![
             0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x01, 0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, 0x73, 0x65,
