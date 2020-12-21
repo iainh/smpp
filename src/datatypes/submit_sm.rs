@@ -247,8 +247,9 @@ impl ToBytes for SubmitSm {
 
 impl ToBytes for SubmitSmResponse {
     fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = BytesMut::with_capacity(512);
-        // todo: what is actually the max length?
+        // The maximum size of the buffer needed is 77 octets for the command_id, command_status,
+        // sequence_number, and message_id (65). The command length will be added on later.
+        let mut buffer = BytesMut::with_capacity(77);
 
         buffer.put_u32(CommandId::SubmitSmResp as u32);
         buffer.put_u32(self.command_status as u32);
