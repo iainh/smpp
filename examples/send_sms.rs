@@ -1,8 +1,8 @@
 use argh::FromArgs;
 use smpp::connection::Connection;
-use smpp::datatypes::{CommandStatus, PriorityFlag, InterfaceVersion};
 use smpp::datatypes::SubmitSm;
 use smpp::datatypes::{BindTransmitter, NumericPlanIndicator, TypeOfNumber, Unbind};
+use smpp::datatypes::{CommandStatus, InterfaceVersion, PriorityFlag};
 use smpp::Frame;
 use std::error::Error;
 use tokio::net::{TcpStream, ToSocketAddrs};
