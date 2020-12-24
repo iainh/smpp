@@ -59,7 +59,7 @@ impl ToBytes for BindTransmitter {
 
         let mut buf = vec![];
         buf.extend_from_slice(&length.to_be_bytes());
-        buf.extend_from_slice(buffer.bytes());
+        buf.extend_from_slice(buffer.chunk());
 
         buf
     }
@@ -84,7 +84,7 @@ impl ToBytes for BindTransmitterResponse {
 
         let mut buf = vec![];
         buf.extend_from_slice(&length.to_be_bytes());
-        buf.extend_from_slice(buffer.bytes());
+        buf.extend_from_slice(buffer.chunk());
 
         buf
     }

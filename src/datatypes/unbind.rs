@@ -37,7 +37,7 @@ impl ToBytes for Unbind {
         let length = (buffer.len() + 4) as u32;
         buf.extend_from_slice(&length.to_be_bytes());
 
-        buf.extend_from_slice(buffer.bytes());
+        buf.extend_from_slice(buffer.chunk());
 
         buf
     }
@@ -57,7 +57,7 @@ impl ToBytes for UnbindResponse {
         let length = (buffer.len() + 4) as u32;
         buf.extend_from_slice(&length.to_be_bytes());
 
-        buf.extend_from_slice(buffer.bytes());
+        buf.extend_from_slice(buffer.chunk());
 
         buf
     }

@@ -15,10 +15,10 @@ impl ToBytes for Tlv {
         buffer.put(self.tag.as_bytes());
         buffer.put_u8(b'\0');
         buffer.put_u32(self.length);
-        buffer.extend_from_slice(self.value.bytes());
+        buffer.extend_from_slice(self.value.chunk());
 
         let mut buf = vec![];
-        buf.extend_from_slice(buffer.bytes());
+        buf.extend_from_slice(buffer.chunk());
 
         buf
     }
