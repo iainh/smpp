@@ -161,6 +161,15 @@ fn get_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
     Ok(src.get_u8())
 }
 
+/// Get a u16 from the buffer
+fn get_u16(src: &mut Cursor<&[u8]>) -> Result<u16, Error> {
+    if src.remaining() < 2 {
+        return Err(Error::Incomplete);
+    }
+
+    Ok(src.get_u16())
+}
+
 /// Get a u32 from the buffer
 fn get_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     if src.remaining() < 4 {
@@ -207,8 +216,8 @@ fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
         return Err(Error::Incomplete);
     }
 
-    let tag = get_until_coctet_string(src, None)?;
-    let length = get_u32(src)?;
+    let tag = get_u16(src)?;
+    let length = get_u16(src)?;
     let mut value: Vec<u8> = vec![0; length as usize];
     src.copy_to_slice(&mut value);
 
@@ -389,6 +398,22 @@ mod tests {
 
         // Ensure that the cursor has advanced 4 bytes
         assert_eq!(buff.remaining(), data.len() - 4);
+    }
+
+    #[test]
+    fn get_u16_test() {
+        let data: Vec<u8> = vec![0x1, 0xF, 0xF, 0xF, 6, 5, 4, 3, 2, 1];
+        let mut buff = Cursor::new(data.as_slice());
+
+        let result = get_u16(&mut buff);
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(
+            result.unwrap(),
+            u16::from_be_bytes(data[0..2].try_into().unwrap())
+        );
+
+        // Ensure that the cursor has advanced 4 bytes
+        assert_eq!(buff.remaining(), data.len() - 2);
     }
 
     #[test]
