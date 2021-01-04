@@ -201,12 +201,11 @@ fn get_until_coctet_string(
         }
     }
 
-    let mut buffer = vec![0; terminator_index + 1];
-
     src.set_position(sp);
-    src.copy_to_slice(&mut *buffer);
 
-    let result = String::from_utf8_lossy(&buffer).to_string();
+    let buffer = src.copy_to_bytes(terminator_index + 1);
+
+    let result = String::from_utf8_lossy(&buffer).into();
 
     Ok(result)
 }
@@ -218,16 +217,9 @@ fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
 
     let tag = get_u16(src)?;
     let length = get_u16(src)?;
-    let mut value: Vec<u8> = vec![0; length as usize];
-    src.copy_to_slice(&mut value);
+    let value = src.copy_to_bytes(length as usize);
 
-    let value = bytes::BytesMut::from(value.as_slice());
-
-    let tlv = Tlv {
-        tag,
-        length,
-        value: value.freeze(),
-    };
+    let tlv = Tlv { tag, length, value };
 
     Ok(tlv)
 }

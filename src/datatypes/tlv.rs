@@ -16,15 +16,13 @@ pub struct Tlv {
 
 impl ToBytes for Tlv {
     fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = BytesMut::with_capacity(1024);
+        // the required size of the buffer if the length of the value plus 4 octets for the two u16s
+        let mut buffer = BytesMut::with_capacity(self.value.len() + 4);
 
         buffer.put_u16(self.tag);
         buffer.put_u16(self.length);
-        buffer.extend_from_slice(self.value.chunk());
+        buffer.put(self.value.chunk());
 
-        let mut buf = vec![];
-        buf.extend_from_slice(buffer.chunk());
-
-        buf
+        buffer.freeze().to_vec()
     }
 }

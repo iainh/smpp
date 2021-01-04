@@ -27,19 +27,21 @@ impl ToBytes for Unbind {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buffer = BytesMut::with_capacity(12);
 
+        // Write junk data that we'll replace later with the actual length
+        buffer.put_u32(0_u32);
+
         buffer.put_u32(CommandId::Unbind as u32);
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
 
-        let mut buf = vec![];
         // length should always be 12, but no harm in calculating it to avoid hard coding magic
         // values
-        let length = (buffer.len() + 4) as u32;
-        buf.extend_from_slice(&length.to_be_bytes());
+        let length = buffer.len() as u32;
 
-        buf.extend_from_slice(buffer.chunk());
+        let length_section = &mut buffer[0..][..4];
+        length_section.copy_from_slice(&length.to_be_bytes());
 
-        buf
+        buffer.freeze().to_vec()
     }
 }
 
@@ -47,18 +49,20 @@ impl ToBytes for UnbindResponse {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buffer = BytesMut::with_capacity(12);
 
+        // Write junk data that we'll replace later with the actual length
+        buffer.put_u32(0_u32);
+
         buffer.put_u32(CommandId::UnbindResp as u32);
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
 
-        let mut buf = vec![];
         // length should always be 12, but no harm in calculating it to avoid hard coding magic
         // values
-        let length = (buffer.len() + 4) as u32;
-        buf.extend_from_slice(&length.to_be_bytes());
+        let length = buffer.len()  as u32;
 
-        buf.extend_from_slice(buffer.chunk());
+        let length_section = &mut buffer[0..][..4];
+        length_section.copy_from_slice(&length.to_be_bytes());
 
-        buf
+        buffer.freeze().to_vec()
     }
 }

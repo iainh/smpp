@@ -35,6 +35,9 @@ impl ToBytes for BindTransmitter {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buffer = BytesMut::with_capacity(1024);
 
+        // Write junk data that we'll replace later with the actual length
+        buffer.put_u32(0_u32);
+
         buffer.put_u32(CommandId::BindTransmitter as u32);
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
@@ -55,19 +58,21 @@ impl ToBytes for BindTransmitter {
         buffer.put(self.address_range.as_bytes());
         buffer.put_u8(b'\0');
 
-        let length = (buffer.len() + 4) as u32;
+        let length = buffer.len() as u32;
 
-        let mut buf = vec![];
-        buf.extend_from_slice(&length.to_be_bytes());
-        buf.extend_from_slice(buffer.chunk());
+        let length_section = &mut buffer[0..][..4];
+        length_section.copy_from_slice(&length.to_be_bytes());
 
-        buf
+        buffer.freeze().to_vec()
     }
 }
 
 impl ToBytes for BindTransmitterResponse {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buffer = BytesMut::with_capacity(1024);
+
+        // Write junk data that we'll replace later with the actual length
+        buffer.put_u32(0_u32);
 
         buffer.put_u32(CommandId::BindTransmitter as u32);
         buffer.put_u32(self.command_status as u32);
@@ -80,13 +85,12 @@ impl ToBytes for BindTransmitterResponse {
             buffer.put_u8(b'\0');
         }
 
-        let length = (buffer.len() + 4) as u32;
+        let length = buffer.len() as u32;
 
-        let mut buf = vec![];
-        buf.extend_from_slice(&length.to_be_bytes());
-        buf.extend_from_slice(buffer.chunk());
+        let length_section = &mut buffer[0..][..4];
+        length_section.copy_from_slice(&length.to_be_bytes());
 
-        buf
+        buffer.freeze().to_vec()
     }
 }
 

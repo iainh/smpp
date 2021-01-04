@@ -79,6 +79,9 @@ impl ToBytes for SubmitSm {
     fn to_bytes(&self) -> Vec<u8> {
         let mut buffer = BytesMut::with_capacity(1024);
 
+        // Write junk data that we'll replace later with the actual length
+        buffer.put_u32(0_u32);
+
         buffer.put_u32(CommandId::SubmitSm as u32);
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
@@ -235,13 +238,12 @@ impl ToBytes for SubmitSm {
             buffer.extend_from_slice(&ussd_service_op.to_bytes());
         }
 
-        let length = (buffer.len() + 4) as u32;
+        let length = buffer.len() as u32;
 
-        let mut buf = vec![];
-        buf.extend_from_slice(&length.to_be_bytes());
-        buf.extend_from_slice(buffer.chunk());
+        let length_section = &mut buffer[0..][..4];
+        length_section.copy_from_slice(&length.to_be_bytes());
 
-        buf
+        buffer.freeze().to_vec()
     }
 }
 
@@ -251,6 +253,9 @@ impl ToBytes for SubmitSmResponse {
         // sequence_number, and message_id (65). The command length will be added on later.
         let mut buffer = BytesMut::with_capacity(77);
 
+        // Write junk data that we'll replace later with the actual length
+        buffer.put_u32(0_u32);
+
         buffer.put_u32(CommandId::SubmitSmResp as u32);
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
@@ -258,12 +263,11 @@ impl ToBytes for SubmitSmResponse {
         buffer.put(self.message_id.as_bytes());
         buffer.put_u8(b'\0');
 
-        let length = (buffer.len() + 4) as u32;
+        let length = buffer.len() as u32;
 
-        let mut buf = vec![];
-        buf.extend_from_slice(&length.to_be_bytes());
-        buf.extend_from_slice(buffer.chunk());
+        let length_section = &mut buffer[0..][..4];
+        length_section.copy_from_slice(&length.to_be_bytes());
 
-        buf
+        buffer.freeze().to_vec()
     }
 }
