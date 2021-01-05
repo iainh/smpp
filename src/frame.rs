@@ -2,8 +2,9 @@
 //! parsing frames from a byte array.
 
 use crate::datatypes::{
-    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, InterfaceVersion,
-    NumericPlanIndicator, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
+    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, EnquireLink,
+    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, SubmitSm, SubmitSmResponse, Tlv,
+    TypeOfNumber, Unbind, UnbindResponse,
 };
 use bytes::Buf;
 use core::fmt;
@@ -17,6 +18,8 @@ use std::string::FromUtf8Error;
 pub enum Frame {
     BindTransmitter(BindTransmitter),
     BindTransmitterResponse(BindTransmitterResponse),
+    EnquireLink(EnquireLink),
+    EnquireLinkResponse(EnquireLinkResponse),
     SubmitSm(Box<SubmitSm>),
     SubmitSmResponse(SubmitSmResponse),
     Unbind(Unbind),
@@ -102,7 +105,14 @@ impl Frame {
 
                 Frame::BindTransmitterResponse(pdu)
             }
-
+            CommandId::EnquireLink => {
+                let pdu = EnquireLink { sequence_number };
+                Frame::EnquireLink(pdu)
+            }
+            CommandId::EnquireLinkResp => {
+                let pdu = EnquireLinkResponse { sequence_number };
+                Frame::EnquireLinkResponse(pdu)
+            }
             CommandId::SubmitSmResp => {
                 let message_id = get_until_coctet_string(src, Some(65))?;
 
@@ -114,6 +124,7 @@ impl Frame {
 
                 Frame::SubmitSmResponse(pdu)
             }
+
             _ => todo!("Implement the parse function for all the other PDUs"),
         };
 
@@ -243,6 +254,12 @@ impl fmt::Display for Frame {
             }
             Frame::BindTransmitterResponse(msg) => {
                 write!(fmt, "Bind Transmitter Response {:?}", msg.command_status)
+            }
+            Frame::EnquireLink(msg) => {
+                write!(fmt, "Enquire Link {:?}", msg.sequence_number)
+            }
+            Frame::EnquireLinkResponse(msg) => {
+                write!(fmt, "Enquire Link Response {:?}", msg.sequence_number)
             }
             Frame::SubmitSm(msg) => {
                 write!(fmt, "Submit SM {:?}", msg.command_status)

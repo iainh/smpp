@@ -156,6 +156,12 @@ impl Connection {
             Frame::BindTransmitterResponse(pdu) => {
                 self.stream.write_all(&*pdu.to_bytes()).await?;
             }
+            Frame::EnquireLink(pdu) => {
+                self.stream.write_all(&*pdu.to_bytes()).await?;
+            }
+            Frame::EnquireLinkResponse(pdu) => {
+                self.stream.write_all(&*pdu.to_bytes()).await?;
+            }
             Frame::SubmitSm(pdu) => {
                 self.stream.write_all(&*pdu.to_bytes()).await?;
             }

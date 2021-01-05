@@ -1,6 +1,7 @@
 mod bind_transmitter;
 mod command_id;
 mod command_status;
+mod enquire_link;
 mod interface_version;
 mod numeric_plan_indicator;
 mod priority_flag;
@@ -18,6 +19,7 @@ pub use tlv::Tlv;
 pub use type_of_number::TypeOfNumber;
 
 pub use bind_transmitter::{BindTransmitter, BindTransmitterResponse};
+pub use enquire_link::{EnquireLink, EnquireLinkResponse};
 pub use submit_sm::{SubmitSm, SubmitSmResponse};
 pub use unbind::{Unbind, UnbindResponse};
 
