@@ -1,5 +1,5 @@
 use crate::datatypes::{CommandId, CommandStatus, ToBytes};
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnquireLink {
