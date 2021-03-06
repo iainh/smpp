@@ -108,7 +108,7 @@ mod tests {
             system_type: "SUBMIT1".to_string(),
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
-            addr_npi: NumericPlanIndicator::ISDN,
+            addr_npi: NumericPlanIndicator::Isdn,
             address_range: "".to_string(),
         };
 
