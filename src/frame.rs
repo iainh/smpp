@@ -13,6 +13,7 @@ use std::convert::TryFrom;
 use std::io::{Cursor, Read};
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
+use tracing::{debug, error, info};
 
 #[derive(Clone, Debug)]
 pub enum Frame {
@@ -38,6 +39,7 @@ pub enum Error {
 impl Frame {
     /// Checks if an entire message can be decoded from `src`. If it can be, return the
     /// command_length that can be used to allocate the buffer for parsing.
+    #[tracing::instrument]
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, Error> {
         // The length of the PDU including the command_length.
         let command_length = peek_u32(src)? as usize;
@@ -56,6 +58,7 @@ impl Frame {
     }
 
     /// The message has already been validated with `check`.
+    #[tracing::instrument]
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
         // parse the header
         let _command_length = get_u32(src)?;
@@ -138,6 +141,7 @@ impl Frame {
 }
 
 /// Peek a u8 from the buffer
+#[tracing::instrument]
 fn peek_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
     if !src.has_remaining() {
         return Err(Error::Incomplete);
@@ -151,6 +155,7 @@ fn peek_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
 }
 
 /// Peek a u32 from the buffer
+#[tracing::instrument]
 fn peek_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     if src.remaining() < 4 {
         return Err(Error::Incomplete);
@@ -164,6 +169,7 @@ fn peek_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
 }
 
 /// Get a u8 from the buffer
+#[tracing::instrument]
 fn get_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
     if !src.has_remaining() {
         return Err(Error::Incomplete);
@@ -173,6 +179,7 @@ fn get_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
 }
 
 /// Get a u16 from the buffer
+#[tracing::instrument]
 fn get_u16(src: &mut Cursor<&[u8]>) -> Result<u16, Error> {
     if src.remaining() < 2 {
         return Err(Error::Incomplete);
@@ -182,6 +189,7 @@ fn get_u16(src: &mut Cursor<&[u8]>) -> Result<u16, Error> {
 }
 
 /// Get a u32 from the buffer
+#[tracing::instrument]
 fn get_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     if src.remaining() < 4 {
         return Err(Error::Incomplete);
@@ -190,6 +198,7 @@ fn get_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
     Ok(src.get_u32())
 }
 
+#[tracing::instrument]
 fn get_until_coctet_string(
     src: &mut Cursor<&[u8]>,
     max_length: Option<u64>,
@@ -221,6 +230,7 @@ fn get_until_coctet_string(
     Ok(result)
 }
 
+#[tracing::instrument]
 fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
     if !&src.has_remaining() {
         return Err(Error::Incomplete);
@@ -236,6 +246,7 @@ fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
 }
 
 /// Advance the cursor by n characters
+#[tracing::instrument]
 fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<(), Error> {
     if src.remaining() < n {
         return Err(Error::Incomplete);

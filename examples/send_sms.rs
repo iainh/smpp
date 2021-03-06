@@ -205,9 +205,21 @@ struct CliArgs {
     from: String,
 }
 
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli_args: CliArgs = argh::from_env();
+
+    let subscriber = FmtSubscriber::default()
+        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
+        // will be written to stdout.
+        .with_max_level(Level::TRACE)
+        // completes the builder.
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     let debugging = cli_args.debugging;
 
