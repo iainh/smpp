@@ -2,7 +2,7 @@ use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitter {
@@ -32,7 +32,7 @@ pub struct BindTransmitterResponse {
 }
 
 impl ToBytes for BindTransmitter {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(1024);
 
         // Write junk data that we'll replace later with the actual length
@@ -63,12 +63,12 @@ impl ToBytes for BindTransmitter {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }
 
 impl ToBytes for BindTransmitterResponse {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(1024);
 
         // Write junk data that we'll replace later with the actual length
@@ -90,7 +90,8 @@ impl ToBytes for BindTransmitterResponse {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        // buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }
 

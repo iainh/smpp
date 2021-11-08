@@ -1,6 +1,5 @@
-use crate::frame::{self, Frame};
-
 use crate::datatypes::ToBytes;
+use crate::frame::{self, Frame};
 use bytes::{Buf, BytesMut};
 use std::io::{self, Cursor};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
@@ -72,11 +71,11 @@ impl Connection {
                 // shutdown, there should be no data in the read buffer. If
                 // there is, this means that the peer closed the socket while
                 // sending a frame.
-                return if self.buffer.is_empty() {
-                    Ok(None)
-                } else {
-                    Err("connection reset by peer".into())
-                };
+                return self
+                    .buffer
+                    .is_empty()
+                    .then(|| None)
+                    .ok_or_else(|| "connection reset by peer".into());
             }
         }
     }

@@ -11,9 +11,9 @@ use core::fmt;
 use num_enum::TryFromPrimitiveError;
 use std::convert::TryFrom;
 use std::io::{Cursor, Read};
+use std::mem::size_of;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
-use tracing::{debug, error, info};
 
 #[derive(Clone, Debug)]
 pub enum Frame {
@@ -50,11 +50,9 @@ impl Frame {
         //  - command_status (4 octets)
         //  - sequence_number (4 octets)
         // for a total of 16 octets
-        if command_length <= src.remaining() && command_length > 16 {
-            Ok(command_length)
-        } else {
-            Err(Error::Incomplete)
-        }
+        (command_length <= src.remaining() && command_length > 16)
+            .then(|| command_length)
+            .ok_or(Error::Incomplete)
     }
 
     /// The message has already been validated with `check`.
@@ -93,10 +91,9 @@ impl Frame {
             CommandId::BindTransmitterResp => {
                 let system_id = get_until_coctet_string(src, Some(16))?;
 
-                let sc_interface_version = if src.has_remaining() {
-                    Some(get_tlv(src)?)
-                } else {
-                    None
+                let sc_interface_version = match src.has_remaining() {
+                    true => Some(get_tlv(src)?),
+                    false => None,
                 };
 
                 let pdu = BindTransmitterResponse {
@@ -134,68 +131,60 @@ impl Frame {
         Ok(command)
     }
 
-    /// Converts the frame to an "unexpected frame" error
-    pub(crate) fn to_error(&self) -> crate::Error {
-        format!("unexpected frame: {}", self).into()
-    }
+    // /// Converts the frame to an "unexpected frame" error
+    // pub(crate) fn to_error(&self) -> crate::Error {
+    //     format!("unexpected frame: {}", self).into()
+    // }
 }
 
 /// Peek a u8 from the buffer
 #[tracing::instrument]
 fn peek_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
-    if !src.has_remaining() {
-        return Err(Error::Incomplete);
-    }
-
-    let starting_position = src.position();
-    let val = src.get_u8();
-    src.set_position(starting_position);
-
-    Ok(val)
+    src.has_remaining()
+        .then(|| {
+            let starting_position = src.position();
+            let val = src.get_u8();
+            src.set_position(starting_position);
+            val
+        })
+        .ok_or(Error::Incomplete)
 }
 
 /// Peek a u32 from the buffer
 #[tracing::instrument]
 fn peek_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
-    if src.remaining() < 4 {
-        return Err(Error::Incomplete);
-    }
-
-    let starting_position = src.position();
-    let val = src.get_u32();
-    src.set_position(starting_position);
-
-    Ok(val)
+    (src.remaining() >= size_of::<u32>())
+        .then(|| {
+            let starting_position = src.position();
+            let val = src.get_u32();
+            src.set_position(starting_position);
+            val
+        })
+        .ok_or(Error::Incomplete)
 }
 
 /// Get a u8 from the buffer
 #[tracing::instrument]
 fn get_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
-    if !src.has_remaining() {
-        return Err(Error::Incomplete);
-    }
-
-    Ok(src.get_u8())
+    src.has_remaining()
+        .then(|| src.get_u8())
+        .ok_or(Error::Incomplete)
 }
 
 /// Get a u16 from the buffer
 #[tracing::instrument]
 fn get_u16(src: &mut Cursor<&[u8]>) -> Result<u16, Error> {
-    if src.remaining() < 2 {
-        return Err(Error::Incomplete);
-    }
-
-    Ok(src.get_u16())
+    (src.remaining() >= size_of::<u16>())
+        .then(|| src.get_u16())
+        .ok_or(Error::Incomplete)
 }
 
 /// Get a u32 from the buffer
 #[tracing::instrument]
 fn get_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
-    if src.remaining() < 4 {
-        return Err(Error::Incomplete);
-    }
-
-    Ok(src.get_u32())
+    (src.remaining() >= size_of::<u32>())
+        .then(|| src.get_u32())
+        .ok_or(Error::Incomplete)
 }
 
 #[tracing::instrument]
@@ -215,9 +204,10 @@ fn get_until_coctet_string(
         .ok_or(Error::Incomplete)?;
 
     if let Some(max_length) = max_length {
+        let last_position = (sp + max_length) as usize;
         // Constrain to the max_length of the field if we haven't found a null terminator
-        if terminator_index >= (sp + max_length) as usize {
-            terminator_index = (sp + max_length) as usize - 1;
+        if terminator_index >= last_position {
+            terminator_index = last_position - 1;
         }
     }
 
@@ -248,17 +238,14 @@ fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
 /// Advance the cursor by n characters
 #[tracing::instrument]
 fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<(), Error> {
-    if src.remaining() < n {
-        return Err(Error::Incomplete);
-    }
-
-    src.advance(n);
-    Ok(())
+    (src.remaining() >= n)
+        .then(|| src.advance(n))
+        .ok_or(Error::Incomplete)
 }
 
 impl fmt::Display for Frame {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        // todo: we can probably do a lot better here...
+        // TODO: we can probably do a lot better here...
         match self {
             Frame::BindTransmitter(msg) => {
                 write!(fmt, "Bind Transmitter {:?}", msg.command_status)

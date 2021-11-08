@@ -1,5 +1,5 @@
 use crate::datatypes::{CommandId, CommandStatus, ToBytes};
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 /// The purpose of the SMPP unbind operation is to deregister an instance of an ESME from the SMSC
 /// and inform the SMSC that the ESME no longer wishes to use this network connection for the
@@ -24,7 +24,7 @@ pub struct UnbindResponse {
 }
 
 impl ToBytes for Unbind {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(12);
 
         // Write junk data that we'll replace later with the actual length
@@ -41,12 +41,12 @@ impl ToBytes for Unbind {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }
 
 impl ToBytes for UnbindResponse {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(12);
 
         // Write junk data that we'll replace later with the actual length
@@ -63,6 +63,6 @@ impl ToBytes for UnbindResponse {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }

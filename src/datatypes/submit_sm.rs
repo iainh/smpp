@@ -2,7 +2,7 @@ use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::priority_flag::PriorityFlag;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 /// This operation is used by an ESME to submit a short message to the SMSC for onward transmission
 /// to a specified short message entity (SME). The submit_sm PDU does not support the transaction
@@ -76,7 +76,7 @@ pub struct SubmitSmResponse {
 }
 
 impl ToBytes for SubmitSm {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(1024);
 
         // Write junk data that we'll replace later with the actual length
@@ -243,12 +243,12 @@ impl ToBytes for SubmitSm {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }
 
 impl ToBytes for SubmitSmResponse {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         // The maximum size of the buffer needed is 77 octets for the command_id, command_status,
         // sequence_number, and message_id (65). The command length will be added on later.
         let mut buffer = BytesMut::with_capacity(77);
@@ -268,6 +268,6 @@ impl ToBytes for SubmitSmResponse {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }

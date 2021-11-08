@@ -23,7 +23,9 @@ pub use enquire_link::{EnquireLink, EnquireLinkResponse};
 pub use submit_sm::{SubmitSm, SubmitSmResponse};
 pub use unbind::{Unbind, UnbindResponse};
 
+use bytes::Bytes;
+
 pub trait ToBytes {
     /// Converts the provided data to bytes.
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(&self) -> Bytes;
 }

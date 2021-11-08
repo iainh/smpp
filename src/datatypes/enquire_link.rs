@@ -1,5 +1,5 @@
 use crate::datatypes::{CommandId, CommandStatus, ToBytes};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnquireLink {
@@ -21,7 +21,7 @@ pub struct EnquireLinkResponse {
 }
 
 impl ToBytes for EnquireLink {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(12);
 
         // Write temporary data that we'll replace later with the actual length
@@ -40,12 +40,12 @@ impl ToBytes for EnquireLink {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }
 
 impl ToBytes for EnquireLinkResponse {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Bytes {
         let mut buffer = BytesMut::with_capacity(12);
 
         // Write temporary data that we'll replace later with the actual length
@@ -63,6 +63,6 @@ impl ToBytes for EnquireLinkResponse {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        buffer.freeze().to_vec()
+        buffer.freeze()
     }
 }
