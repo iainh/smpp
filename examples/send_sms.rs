@@ -1,4 +1,4 @@
-use argh::FromArgs;
+pub(crate) use argh::FromArgs;
 use smpp::connection::Connection;
 use smpp::datatypes::SubmitSm;
 use smpp::datatypes::{BindTransmitter, NumericPlanIndicator, TypeOfNumber, Unbind};
@@ -205,14 +205,14 @@ struct CliArgs {
     from: String,
 }
 
-use tracing::{info, Level};
+use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli_args: CliArgs = argh::from_env();
 
-    let subscriber = FmtSubscriber::default()
+    let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
         .with_max_level(Level::TRACE)
@@ -222,26 +222,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     let debugging = cli_args.debugging;
-
-    let host = match cli_args.host {
-        Some(host) => host,
-        None => "localhost".to_string(),
-    };
-
-    let port = match cli_args.port {
-        Some(port) => port,
-        None => 2775,
-    };
-
-    let system_id = match cli_args.system_id {
-        Some(system_id) => system_id,
-        None => "".to_string(),
-    };
-
-    let password = match cli_args.password {
-        Some(password) => password,
-        None => "".to_string(),
-    };
+    let host = cli_args.host.unwrap_or_else(|| "localhost".to_string());
+    let port = cli_args.port.unwrap_or(2775);
+    let system_id = cli_args.system_id.unwrap_or_default();
+    let password = cli_args.password.unwrap_or_default();
 
     let to = cli_args.to;
     let from = cli_args.from;
