@@ -2,7 +2,7 @@ use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitter {

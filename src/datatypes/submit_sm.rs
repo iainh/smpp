@@ -2,7 +2,7 @@ use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::priority_flag::PriorityFlag;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 /// This operation is used by an ESME to submit a short message to the SMSC for onward transmission
 /// to a specified short message entity (SME). The submit_sm PDU does not support the transaction
