@@ -90,7 +90,6 @@ impl ToBytes for BindTransmitterResponse {
         let length_section = &mut buffer[0..][..4];
         length_section.copy_from_slice(&length.to_be_bytes());
 
-        // buffer.freeze().to_vec()
         buffer.freeze()
     }
 }
