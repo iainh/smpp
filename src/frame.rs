@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(buff.remaining(), data.len());
 
         let result = peek_u8(&mut buff);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10u8);
 
         // Ensure that we are peeking ant not getting. (cursor position should not have moved)
@@ -368,7 +368,7 @@ mod tests {
         let mut buff = Cursor::new(data.as_slice());
 
         let result = get_u8(&mut buff);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10u8);
 
         // Ensure that the cursor has advanced
@@ -381,7 +381,7 @@ mod tests {
         let mut buff = Cursor::new(data.as_slice());
 
         let result = peek_u32(&mut buff);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
             u32::from_be_bytes(data[0..4].try_into().unwrap())
@@ -397,7 +397,7 @@ mod tests {
         let mut buff = Cursor::new(data.as_slice());
 
         let result = get_u32(&mut buff);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
             u32::from_be_bytes(data[0..4].try_into().unwrap())
@@ -413,7 +413,7 @@ mod tests {
         let mut buff = Cursor::new(data.as_slice());
 
         let result = get_u16(&mut buff);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
             u16::from_be_bytes(data[0..2].try_into().unwrap())
@@ -431,17 +431,17 @@ mod tests {
         let mut buff = Cursor::new(data.as_slice());
 
         let result = skip(&mut buff, 4);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
 
         let result = get_u8(&mut buff);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(result.unwrap(), 6u8);
 
         let result = skip(&mut buff, 2);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
 
         let result = get_u8(&mut buff);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(result.unwrap(), 3u8);
 
         // Ensure that the cursor has advanced 4 + 1 + 2 + 1 = 8 positions
@@ -456,7 +456,7 @@ mod tests {
         let mut buff = Cursor::new(data);
 
         let result = get_until_coctet_string(&mut buff, Some(23));
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
 
         let result = result.unwrap();
 
@@ -467,7 +467,7 @@ mod tests {
         assert_eq!(buff.remaining(), data.len() - 23);
 
         let result = get_until_coctet_string(&mut buff, None);
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
 
         let result = result.unwrap();
         assert_eq!("This is the second.\0".to_string(), result);
@@ -476,7 +476,7 @@ mod tests {
         let mut buff = Cursor::new(data);
 
         let result = get_until_coctet_string(&mut buff, Some(4));
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 4);
     }
 
