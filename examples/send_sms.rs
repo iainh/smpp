@@ -59,21 +59,6 @@ impl Client {
         Ok(())
     }
 
-    async fn unbind(&mut self) -> Result<(), Box<dyn Error>> {
-        self.sequence_number += 1;
-
-        let unbind = Unbind {
-            command_status: CommandStatus::Ok,
-            sequence_number: self.sequence_number,
-        };
-
-        let frame = Frame::Unbind(unbind);
-
-        self.connection.write_frame(&frame).await?;
-
-        Ok(())
-    }
-
     async fn send(
         &mut self,
         to: String,
@@ -147,6 +132,21 @@ impl Client {
                 eprintln!("Error response from send_sm: {}", e)
             }
         }
+
+        Ok(())
+    }
+
+    async fn unbind(&mut self) -> Result<(), Box<dyn Error>> {
+        self.sequence_number += 1;
+
+        let unbind = Unbind {
+            command_status: CommandStatus::Ok,
+            sequence_number: self.sequence_number,
+        };
+
+        let frame = Frame::Unbind(unbind);
+
+        self.connection.write_frame(&frame).await?;
 
         Ok(())
     }
