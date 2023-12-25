@@ -33,35 +33,36 @@ pub struct BindTransmitterResponse {
 
 impl ToBytes for BindTransmitter {
     fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(1024);
+        let system_id = self.system_id.as_bytes();
+        let password = self.password.as_bytes();
+        let system_type = self.system_type.as_bytes();
+        let address_range = self.address_range.as_bytes();
 
-        // Write junk data that we'll replace later with the actual length
-        buffer.put_u32(0_u32);
+        let length =
+            23 + system_id.len() + password.len() + system_type.len() + address_range.len();
+
+        let mut buffer = BytesMut::with_capacity(length);
+        buffer.put_u32(length as u32);
 
         buffer.put_u32(CommandId::BindTransmitter as u32);
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
 
-        buffer.put(self.system_id.as_bytes());
+        buffer.put(system_id);
         buffer.put_u8(b'\0');
 
-        buffer.put(self.password.as_bytes());
+        buffer.put(password);
         buffer.put_u8(b'\0');
 
-        buffer.put(self.system_type.as_bytes());
+        buffer.put(system_type);
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.interface_version as u8);
         buffer.put_u8(self.addr_ton as u8);
         buffer.put_u8(self.addr_npi as u8);
 
-        buffer.put(self.address_range.as_bytes());
+        buffer.put(address_range);
         buffer.put_u8(b'\0');
-
-        let length = buffer.len() as u32;
-
-        let length_section = &mut buffer[0..][..4];
-        length_section.copy_from_slice(&length.to_be_bytes());
 
         buffer.freeze()
     }
