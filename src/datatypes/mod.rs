@@ -4,6 +4,7 @@ mod command_status;
 mod enquire_link;
 mod interface_version;
 mod numeric_plan_indicator;
+mod outbind;
 mod priority_flag;
 mod submit_sm;
 mod tlv;
