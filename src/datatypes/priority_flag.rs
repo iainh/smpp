@@ -1,7 +1,8 @@
 use num_enum::TryFromPrimitive;
 
-/// The priority_flag parameter allows the originating SME to assign a priority level to the short
-/// message. Level 0 is the lowest priority, level 3 the highest
+/// The priority_flag parameter allows the originating SME to assign a priority
+/// level to the short message. Level 0 is the lowest priority, level 3 the
+/// highest.
 
 #[derive(TryFromPrimitive)]
 #[repr(u8)]

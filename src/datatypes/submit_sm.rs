@@ -117,10 +117,12 @@ impl ToBytes for SubmitSm {
         buffer.put_u8(self.data_coding);
         buffer.put_u8(self.sm_default_msg_id);
 
-        // If we are using the short message and short message length (sm_length) fields, then we
-        // don't null terminate the string. the value of sm_length is used when reading.
-        // TODO: is the length of the short_message is greater than 254 octets, then message_payload
-        //   should be used and sm_length set to 0.
+        // If we are using the short message and short message length
+        // (sm_length) fields, then we
+        // don't null terminate the string. the value of sm_length is used when
+        // reading.
+        // TODO: is the length of the short_message is greater than 254 octets,
+        //       then message_payload should be used and sm_length set to 0.
         buffer.put_u8(self.sm_length);
         buffer.put(self.short_message.as_bytes());
 
