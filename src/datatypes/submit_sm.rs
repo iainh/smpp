@@ -251,12 +251,12 @@ impl ToBytes for SubmitSm {
 
 impl ToBytes for SubmitSmResponse {
     fn to_bytes(&self) -> Bytes {
-        // The maximum size of the buffer needed is 77 octets for the command_id, command_status,
-        // sequence_number, and message_id (65). The command length will be added on later.
-        let mut buffer = BytesMut::with_capacity(77);
+        let length = 17 + self.message_id.len();
+
+        let mut buffer = BytesMut::with_capacity(length);
 
         // Write junk data that we'll replace later with the actual length
-        buffer.put_u32(0_u32);
+        buffer.put_u32(length as u32);
 
         buffer.put_u32(CommandId::SubmitSmResp as u32);
         buffer.put_u32(self.command_status as u32);
@@ -264,11 +264,6 @@ impl ToBytes for SubmitSmResponse {
 
         buffer.put(self.message_id.as_bytes());
         buffer.put_u8(b'\0');
-
-        let length = buffer.len() as u32;
-
-        let length_section = &mut buffer[0..][..4];
-        length_section.copy_from_slice(&length.to_be_bytes());
 
         buffer.freeze()
     }
