@@ -44,14 +44,15 @@ impl Frame {
         // The length of the PDU including the command_length.
         let command_length = peek_u32(src)? as usize;
 
-        // PDUs have a the same header structure consisting of the following fields:
+        // PDUs have a the same header structure consisting of the following
+        // fields:
         //  - command_length (4 octets)
         //  - command_type (4 octets)
         //  - command_status (4 octets)
         //  - sequence_number (4 octets)
         // for a total of 16 octets
         (command_length <= src.remaining() && command_length > 16)
-            .then(|| command_length)
+            .then_some(command_length)
             .ok_or(Error::Incomplete)
     }
 
@@ -235,7 +236,8 @@ fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
     Ok(tlv)
 }
 
-/// Advance the cursor by n characters
+/// Advance the buffer by n bytes. If there are not enough bytes remaining,
+/// return an error indicating that the data is incomplete.
 #[tracing::instrument]
 fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<(), Error> {
     (src.remaining() >= n)
