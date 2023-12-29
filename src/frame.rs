@@ -80,7 +80,7 @@ impl Frame {
                     command_status,
                     sequence_number,
                     system_id,
-                    password,
+                    password: Some(password),
                     system_type,
                     interface_version,
                     addr_ton,

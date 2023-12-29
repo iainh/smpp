@@ -36,7 +36,7 @@ impl Client {
             command_status: CommandStatus::Ok,
             sequence_number: self.sequence_number,
             system_id: system_id.to_string(),
-            password: password.to_string(),
+            password: Some(password.to_string()),
             system_type: "".to_string(),
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::Unknown,

@@ -4,19 +4,51 @@ use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
 use bytes::{BufMut, Bytes, BytesMut};
 
+/// BindTransmitter is used to bind a transmitter ESME to the SMSC.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BindTransmitter {
     // pub command_length: u32,
     // pub command_id: CommandId::BindTransmitter,
     pub command_status: CommandStatus,
     pub sequence_number: u32,
-    // body
+
+    // Body
+    /// 5.2.1 system_id: This is the identification of the ESME requesting to
+    ///       bind as a transmitter with the SMSC. It is a fixed length
+    ///       alphanumeric field of up to 16 characters. The value may be left
+    ///       justified, with trailing blanks (i.e. "abc " is valid). The
+    ///       system_id may be used as a destination address for Mobile
+    ///       Terminated messages originated by this ESME. The system_id may
+    ///       also be used as an originating address for Mobile Originated
+    ///        messages sent to this ESME.
     pub system_id: String,
-    pub password: String,
+
+    /// 5.2.2 password: This is the password for authentication. It is a fixed
+    ///       length string of 9 characters. If fewer than 9 characters are
+    ///       supplied, it must be null padded. If no password is required by
+    ///       the SMSC, a NULL (i.e. zero) password should be supplied.
+    pub password: Option<String>,
+
+    /// 5.2.3 system_type: This is used to categorize the type of ESME that is
+    ///       binding to the SMSC. Examples include "VMS" (voice mail system)
+    ///       and "OTA" (over-the-air activation system). (See section 5.2.7
+    ///       for a list of suggested values.) The system_type is specified as
+    ///       a fixed length alphanumeric field of up to 13 characters.
     pub system_type: String,
+
+    /// 5.2.4 interface_version: Interface version level supported by the SMSC.
     pub interface_version: InterfaceVersion,
+
+    /// 5.2.5 addr_ton: Type of Number format of the ESME address(es) served
+    ///       via this SMPP.
     pub addr_ton: TypeOfNumber,
+
+    /// 5.2.6 addr_npi: Numbering Plan Indicator of the ESME address(es) served
+    ///       via this SMPP.
     pub addr_npi: NumericPlanIndicator,
+
+    /// 5.2.7 address_range: This is used to specify a range of SME addresses
+    ///       serviced by the ESME. A single address may also be specified.
     pub address_range: String,
 }
 
@@ -34,12 +66,15 @@ pub struct BindTransmitterResponse {
 impl ToBytes for BindTransmitter {
     fn to_bytes(&self) -> Bytes {
         let system_id = self.system_id.as_bytes();
-        let password = self.password.as_bytes();
+        let password = self.password.as_ref().map(|p| p.as_bytes());
         let system_type = self.system_type.as_bytes();
         let address_range = self.address_range.as_bytes();
 
-        let length =
-            23 + system_id.len() + password.len() + system_type.len() + address_range.len();
+        let length = 23
+            + system_id.len()
+            + password.map_or(0, |p| p.len())
+            + system_type.len()
+            + address_range.len();
 
         let mut buffer = BytesMut::with_capacity(length);
         buffer.put_u32(length as u32);
@@ -51,7 +86,10 @@ impl ToBytes for BindTransmitter {
         buffer.put(system_id);
         buffer.put_u8(b'\0');
 
-        buffer.put(password);
+        if let Some(password) = password {
+            buffer.put(password);
+        }
+
         buffer.put_u8(b'\0');
 
         buffer.put(system_type);
@@ -105,7 +143,7 @@ mod tests {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
             system_id: "SMPP3TEST".to_string(),
-            password: "secret08".to_string(),
+            password: Some("secret08".to_string()),
             system_type: "SUBMIT1".to_string(),
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
