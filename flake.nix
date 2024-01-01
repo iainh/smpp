@@ -19,8 +19,6 @@
       {
         devShells.default = mkShell {
           buildInputs = [
-            # openssl
-            # pkg-config
             rust-bin.stable.latest.default
             cargo-outdated
           ];
