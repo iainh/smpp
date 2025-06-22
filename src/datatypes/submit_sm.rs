@@ -66,27 +66,34 @@ pub struct SubmitSm {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubmitSmValidationError {
-    #[error("service_type exceeds maximum length of 5 characters (6 with null terminator): {actual}")]
+    #[error(
+        "service_type exceeds maximum length of 5 characters (6 with null terminator): {actual}"
+    )]
     ServiceTypeTooLong { actual: usize },
-    
-    #[error("source_addr exceeds maximum length of 20 characters (21 with null terminator): {actual}")]
+
+    #[error(
+        "source_addr exceeds maximum length of 20 characters (21 with null terminator): {actual}"
+    )]
     SourceAddrTooLong { actual: usize },
-    
+
     #[error("destination_addr exceeds maximum length of 20 characters (21 with null terminator): {actual}")]
     DestinationAddrTooLong { actual: usize },
-    
+
     #[error("schedule_delivery_time exceeds maximum length of 16 characters (17 with null terminator): {actual}")]
     ScheduleDeliveryTimeTooLong { actual: usize },
-    
+
     #[error("validity_period exceeds maximum length of 16 characters (17 with null terminator): {actual}")]
     ValidityPeriodTooLong { actual: usize },
-    
+
     #[error("sm_length ({sm_length}) does not match short_message length ({message_length})")]
-    SmLengthMismatch { sm_length: u8, message_length: usize },
-    
+    SmLengthMismatch {
+        sm_length: u8,
+        message_length: usize,
+    },
+
     #[error("short_message exceeds maximum length of 254 bytes (use message_payload TLV for longer messages): {actual}")]
     ShortMessageTooLong { actual: usize },
-    
+
     #[error("Cannot use both short_message and message_payload - they are mutually exclusive")]
     MutualExclusivityViolation,
 }
@@ -96,58 +103,58 @@ impl SubmitSm {
     pub fn validate(&self) -> Result<(), SubmitSmValidationError> {
         // Validate field length constraints
         if self.service_type.len() > 5 {
-            return Err(SubmitSmValidationError::ServiceTypeTooLong { 
-                actual: self.service_type.len() 
+            return Err(SubmitSmValidationError::ServiceTypeTooLong {
+                actual: self.service_type.len(),
             });
         }
-        
+
         if self.source_addr.len() > 20 {
-            return Err(SubmitSmValidationError::SourceAddrTooLong { 
-                actual: self.source_addr.len() 
+            return Err(SubmitSmValidationError::SourceAddrTooLong {
+                actual: self.source_addr.len(),
             });
         }
-        
+
         if self.destination_addr.len() > 20 {
-            return Err(SubmitSmValidationError::DestinationAddrTooLong { 
-                actual: self.destination_addr.len() 
+            return Err(SubmitSmValidationError::DestinationAddrTooLong {
+                actual: self.destination_addr.len(),
             });
         }
-        
+
         if self.schedule_delivery_time.len() > 16 {
-            return Err(SubmitSmValidationError::ScheduleDeliveryTimeTooLong { 
-                actual: self.schedule_delivery_time.len() 
+            return Err(SubmitSmValidationError::ScheduleDeliveryTimeTooLong {
+                actual: self.schedule_delivery_time.len(),
             });
         }
-        
+
         if self.validity_period.len() > 16 {
-            return Err(SubmitSmValidationError::ValidityPeriodTooLong { 
-                actual: self.validity_period.len() 
+            return Err(SubmitSmValidationError::ValidityPeriodTooLong {
+                actual: self.validity_period.len(),
             });
         }
-        
+
         // Validate sm_length matches actual short_message length
         if self.sm_length as usize != self.short_message.len() {
-            return Err(SubmitSmValidationError::SmLengthMismatch { 
-                sm_length: self.sm_length, 
-                message_length: self.short_message.len() 
+            return Err(SubmitSmValidationError::SmLengthMismatch {
+                sm_length: self.sm_length,
+                message_length: self.short_message.len(),
             });
         }
-        
+
         // Validate short message length constraints
         if self.short_message.len() > 254 {
-            return Err(SubmitSmValidationError::ShortMessageTooLong { 
-                actual: self.short_message.len() 
+            return Err(SubmitSmValidationError::ShortMessageTooLong {
+                actual: self.short_message.len(),
             });
         }
-        
+
         // Validate mutual exclusivity
         if !self.short_message.is_empty() && self.message_payload.is_some() {
             return Err(SubmitSmValidationError::MutualExclusivityViolation);
         }
-        
+
         Ok(())
     }
-    
+
     /// Creates a builder for constructing SubmitSm PDUs with validation
     pub fn builder() -> SubmitSmBuilder {
         SubmitSmBuilder::new()
@@ -206,6 +213,12 @@ pub struct SubmitSmBuilder {
     sm_length: u8,
 }
 
+impl Default for SubmitSmBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SubmitSmBuilder {
     pub fn new() -> Self {
         Self {
@@ -258,82 +271,82 @@ impl SubmitSmBuilder {
             ussd_service_op: None,
         }
     }
-    
+
     pub fn sequence_number(mut self, seq: u32) -> Self {
         self.sequence_number = seq;
         self
     }
-    
+
     pub fn service_type(mut self, service_type: impl Into<String>) -> Self {
         self.service_type = service_type.into();
         self
     }
-    
+
     pub fn source_addr(mut self, addr: impl Into<String>) -> Self {
         self.source_addr = addr.into();
         self
     }
-    
+
     pub fn destination_addr(mut self, addr: impl Into<String>) -> Self {
         self.destination_addr = addr.into();
         self
     }
-    
+
     pub fn source_addr_ton(mut self, ton: TypeOfNumber) -> Self {
         self.source_addr_ton = ton;
         self
     }
-    
+
     pub fn source_addr_npi(mut self, npi: NumericPlanIndicator) -> Self {
         self.source_addr_npi = npi;
         self
     }
-    
+
     pub fn dest_addr_ton(mut self, ton: TypeOfNumber) -> Self {
         self.dest_addr_ton = ton;
         self
     }
-    
+
     pub fn dest_addr_npi(mut self, npi: NumericPlanIndicator) -> Self {
         self.dest_addr_npi = npi;
         self
     }
-    
+
     pub fn short_message(mut self, message: impl Into<String>) -> Self {
         self.short_message = message.into();
         self
     }
-    
+
     pub fn priority_flag(mut self, priority: PriorityFlag) -> Self {
         self.priority_flag = priority;
         self
     }
-    
+
     pub fn registered_delivery(mut self, delivery: u8) -> Self {
         self.registered_delivery = delivery;
         self
     }
-    
+
     pub fn user_message_reference(mut self, tlv: Tlv) -> Self {
         self.user_message_reference = Some(tlv);
         self
     }
-    
+
     pub fn source_port(mut self, tlv: Tlv) -> Self {
         self.source_port = Some(tlv);
         self
     }
-    
+
     pub fn message_payload(mut self, tlv: Tlv) -> Self {
         self.message_payload = Some(tlv);
         self
     }
-    
+
     /// Build the SubmitSm, performing validation and calculating sm_length automatically
     pub fn build(mut self) -> Result<SubmitSm, SubmitSmValidationError> {
         // Auto-calculate sm_length from short_message
         self.sm_length = self.short_message.len() as u8;
-        
+
         let submit_sm = SubmitSm {
             command_status: self.command_status,
             sequence_number: self.sequence_number,
@@ -383,7 +396,7 @@ impl SubmitSmBuilder {
             its_session_info: self.its_session_info,
             ussd_service_op: self.ussd_service_op,
         };
-        
+
         // Validate before returning
         submit_sm.validate()?;
         Ok(submit_sm)
@@ -665,10 +678,12 @@ mod tests {
         assert_eq!(bytes[body_start], 0); // service_type null terminator
         assert_eq!(bytes[body_start + 1], TypeOfNumber::International as u8);
         assert_eq!(bytes[body_start + 2], NumericPlanIndicator::Isdn as u8);
-        
+
         // Check that short message is included
         let message_bytes = "Hello World".as_bytes();
-        assert!(bytes.windows(message_bytes.len()).any(|window| window == message_bytes));
+        assert!(bytes
+            .windows(message_bytes.len())
+            .any(|window| window == message_bytes));
     }
 
     #[test]
@@ -740,9 +755,13 @@ mod tests {
         // Should include TLV data at the end
         let tlv1_bytes = [0x02, 0x04, 0x00, 0x02, 0x00, 0x01]; // user_message_reference TLV
         let tlv2_bytes = [0x02, 0x0A, 0x00, 0x02, 0x1F, 0x90]; // source_port TLV
-        
-        assert!(bytes.windows(tlv1_bytes.len()).any(|window| window == tlv1_bytes));
-        assert!(bytes.windows(tlv2_bytes.len()).any(|window| window == tlv2_bytes));
+
+        assert!(bytes
+            .windows(tlv1_bytes.len())
+            .any(|window| window == tlv1_bytes));
+        assert!(bytes
+            .windows(tlv2_bytes.len())
+            .any(|window| window == tlv2_bytes));
     }
 
     #[test]
@@ -757,7 +776,10 @@ mod tests {
 
         // Verify header
         assert_eq!(&bytes[0..4], &(bytes.len() as u32).to_be_bytes()); // command_length
-        assert_eq!(&bytes[4..8], &(CommandId::SubmitSmResp as u32).to_be_bytes()); // command_id
+        assert_eq!(
+            &bytes[4..8],
+            &(CommandId::SubmitSmResp as u32).to_be_bytes()
+        ); // command_id
         assert_eq!(&bytes[8..12], &(CommandStatus::Ok as u32).to_be_bytes()); // command_status
         assert_eq!(&bytes[12..16], &1u32.to_be_bytes()); // sequence_number
 
@@ -792,7 +814,10 @@ mod tests {
         let bytes = submit_sm_response.to_bytes();
 
         // Verify error status is encoded correctly
-        assert_eq!(&bytes[8..12], &(CommandStatus::InvalidSourceAddress as u32).to_be_bytes());
+        assert_eq!(
+            &bytes[8..12],
+            &(CommandStatus::InvalidSourceAddress as u32).to_be_bytes()
+        );
     }
 
     #[test]
@@ -1056,7 +1081,8 @@ mod tests {
             sar_segment_seqnum: None,
             more_messages_to_send: None,
             payload_type: None,
-            message_payload: Some(Tlv { // Also has message payload - should fail
+            message_payload: Some(Tlv {
+                // Also has message payload - should fail
                 tag: 0x0424,
                 length: 10,
                 value: Bytes::from_static(b"Some data!"),

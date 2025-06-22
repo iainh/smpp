@@ -16,12 +16,12 @@ pub use command_status::CommandStatus;
 pub use interface_version::InterfaceVersion;
 pub use numeric_plan_indicator::NumericPlanIndicator;
 pub use priority_flag::PriorityFlag;
-pub use tlv::{Tlv, tags};
+pub use tlv::{tags, Tlv};
 pub use type_of_number::TypeOfNumber;
 
 pub use bind_transmitter::{BindTransmitter, BindTransmitterResponse};
 pub use enquire_link::{EnquireLink, EnquireLinkResponse};
-pub use submit_sm::{SubmitSm, SubmitSmResponse};
+pub use submit_sm::{SubmitSm, SubmitSmResponse, SubmitSmValidationError};
 pub use unbind::{Unbind, UnbindResponse};
 
 use bytes::Bytes;

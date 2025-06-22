@@ -1,7 +1,7 @@
 //! Integration tests for SMPP PDU encoding and decoding
 
 use crate::datatypes::*;
-use crate::frame::{Frame, Error as FrameError};
+use crate::frame::{Error as FrameError, Frame};
 use std::io::Cursor;
 
 #[cfg(test)]
@@ -12,7 +12,7 @@ mod integration_tests {
     fn test_frame_check_insufficient_data() {
         let data = vec![0x00, 0x00]; // Only 2 bytes
         let mut cursor = Cursor::new(data.as_slice());
-        
+
         let result = Frame::check(&mut cursor);
         assert!(matches!(result, Err(FrameError::Incomplete)));
     }
@@ -26,7 +26,7 @@ mod integration_tests {
             0x00, 0x00, 0x00, 0x01, // sequence_number
         ];
         let mut cursor = Cursor::new(data.as_slice());
-        
+
         let result = Frame::check(&mut cursor);
         assert!(matches!(result, Err(FrameError::Incomplete)));
     }
@@ -40,7 +40,7 @@ mod integration_tests {
             0x00, 0x00, 0x00, 0x01, // sequence_number
         ];
         let mut cursor = Cursor::new(data.as_slice());
-        
+
         let result = Frame::check(&mut cursor);
         assert!(matches!(result, Err(FrameError::Incomplete)));
     }
@@ -61,10 +61,10 @@ mod integration_tests {
         };
 
         let bytes = bind_transmitter.to_bytes();
-        
+
         // Should not panic and should produce valid output
         assert!(bytes.len() > 16); // At least header size
-        
+
         // Test round-trip
         let mut cursor = Cursor::new(bytes.as_ref());
         let result = Frame::parse(&mut cursor);
@@ -125,10 +125,10 @@ mod integration_tests {
         };
 
         let bytes = submit_sm.to_bytes();
-        
+
         // Should handle empty message gracefully
         assert!(bytes.len() > 16);
-        
+
         // Find sm_length byte and verify it's 0
         // This is a bit brittle but validates the encoding
         let header_and_mandatory = bytes.len() >= 50; // Rough estimate
@@ -136,10 +136,9 @@ mod integration_tests {
     }
 
     #[test]
-    #[should_panic(expected = "SmLengthMismatch")]
     fn test_submit_sm_length_mismatch() {
         // Test case where sm_length doesn't match actual message length
-        // This should now panic due to our new validation
+        // This should return an error due to our new validation
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
@@ -159,7 +158,7 @@ mod integration_tests {
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
-            sm_length: 5, // Says 5 bytes
+            sm_length: 5,                             // Says 5 bytes
             short_message: "Hello World".to_string(), // But has 11 bytes
             // All optional parameters set to None
             user_message_reference: None,
@@ -191,13 +190,19 @@ mod integration_tests {
             ussd_service_op: None,
         };
 
-        let _ = submit_sm.to_bytes(); // Should panic
+        // Validate should return an error for length mismatch
+        let validation_result = submit_sm.validate();
+        assert!(validation_result.is_err());
+        assert!(matches!(
+            validation_result.unwrap_err(),
+            crate::datatypes::SubmitSmValidationError::SmLengthMismatch { .. }
+        ));
     }
 
     #[test]
     fn test_all_enum_values_encoding() {
         // Test that all enum values can be encoded without panicking
-        
+
         // Test all CommandStatus values
         for status in [
             CommandStatus::Ok,
@@ -281,7 +286,7 @@ mod integration_tests {
             let submit_sm = create_minimal_submit_sm();
             let mut test_submit = submit_sm.clone();
             test_submit.priority_flag = priority;
-            
+
             let bytes = test_submit.to_bytes();
             assert!(bytes.len() > 16);
         }
@@ -374,12 +379,14 @@ mod integration_tests {
         };
 
         let bytes = bind_transmitter.to_bytes();
-        
+
         // Should encode without panicking
         assert!(bytes.len() > 16);
-        
+
         // The UTF-8 bytes should be present in the output
-        assert!(bytes.windows("SMPP测试".as_bytes().len()).any(|window| window == "SMPP测试".as_bytes()));
+        assert!(bytes
+            .windows("SMPP测试".as_bytes().len())
+            .any(|window| window == "SMPP测试".as_bytes()));
     }
 
     #[test]
@@ -391,9 +398,9 @@ mod integration_tests {
                 sequence_number: seq_num,
                 message_id: "test".to_string(),
             };
-            
+
             let bytes = response.to_bytes();
-            
+
             // Verify sequence number is encoded correctly
             assert_eq!(&bytes[12..16], &seq_num.to_be_bytes());
         }
