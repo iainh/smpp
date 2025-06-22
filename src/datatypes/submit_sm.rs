@@ -15,52 +15,198 @@ pub struct SubmitSm {
     pub sequence_number: u32,
 
     // Mandatory parameters
+    /// 4.1.1 service_type: The service_type parameter can be used to indicate the SMS 
+    ///       Application service associated with the message. Specifying the service_type 
+    ///       allows the ESME to avail of enhanced messaging services such as "replace by 
+    ///       service_type" or to control the teleservice used on the air interface. Set to 
+    ///       NULL if not applicable. Max length: 5 octets (6 with null terminator).
     pub service_type: String,
+
+    /// 4.1.2 source_addr_ton: Type of Number for source address. If not known, set to NULL.
     pub source_addr_ton: TypeOfNumber,
+
+    /// 4.1.3 source_addr_npi: Numbering Plan Indicator for source address. If not known, set to NULL.
     pub source_addr_npi: NumericPlanIndicator,
+
+    /// 4.1.4 source_addr: Address of SME which originated this message. If not known, set to NULL.
+    ///       Max length: 20 octets (21 with null terminator).
     pub source_addr: String,
+
+    /// 4.1.5 dest_addr_ton: Type of Number for destination address.
     pub dest_addr_ton: TypeOfNumber,
+
+    /// 4.1.6 dest_addr_npi: Numbering Plan Indicator for destination address.
     pub dest_addr_npi: NumericPlanIndicator,
+
+    /// 4.1.7 destination_addr: Destination address of this short message. For mobile terminated 
+    ///       messages, this is the directory number of the recipient MS.
+    ///       Max length: 20 octets (21 with null terminator).
     pub destination_addr: String,
+
+    /// 4.1.8 esm_class: Indicates Message Mode and Message Type. The esm_class field is used to 
+    ///       indicate special message attributes associated with the short message.
+    ///       Bits 7..2: Message Mode (00=Default, 01=Datagram, 10=Forward, 11=Store and Forward)
+    ///       Bits 1..0: Message Type (00=Default, others vary by mode)
     pub esm_class: u8,
+
+    /// 4.1.9 protocol_id: Protocol Identifier. Network specific field. Set to NULL if not applicable.
     pub protocol_id: u8,
+
+    /// 4.1.10 priority_flag: Designates the priority level of the message.
+    ///        Level 0 (lowest) to Level 3 (highest).
     pub priority_flag: PriorityFlag,
+
+    /// 4.1.11 schedule_delivery_time: The short message is to be scheduled by the SMSC for 
+    ///        delivery. Set to NULL for immediate delivery. Format: YYMMDDhhmmsstnnp
+    ///        Max length: 16 octets (17 with null terminator).
     pub schedule_delivery_time: String,
+
+    /// 4.1.12 validity_period: The validity period of this message. Set to NULL to request the 
+    ///        SMSC default validity period. Format same as schedule_delivery_time.
+    ///        Max length: 16 octets (17 with null terminator).
     pub validity_period: String,
+
+    /// 4.1.13 registered_delivery: Indicator to signify if an SMSC delivery receipt, user/manual 
+    ///        acknowledgment and/or an intermediate notification is required.
+    ///        Bit 0-1: MC Delivery Receipt (00=No receipt, 01=Delivery receipt requested)
+    ///        Bit 2: SME Manual/User Acknowledgment 
+    ///        Bit 3: Intermediate Notification
     pub registered_delivery: u8,
+
+    /// 4.1.14 replace_if_present_flag: Flag indicating if the submitted message should replace 
+    ///        an existing message that has the same source address, destination address and 
+    ///        message reference. Set to 0 for false, 1 for true.
     pub replace_if_present_flag: u8,
+
+    /// 4.1.15 data_coding: Defines the encoding scheme of the short message user data.
+    ///        0x00 = SMSC Default Alphabet (GSM 7-bit default)
+    ///        0x01 = IA5 (CCITT T.50)/ASCII
+    ///        0x02 = Octet unspecified (8-bit binary)
+    ///        0x03 = Latin-1 (ISO-8859-1)
+    ///        0x04 = Octet unspecified (8-bit binary)
+    ///        0x05 = JIS (X 0208-1990)
+    ///        0x06 = Cyrillic (ISO-8859-5)
+    ///        0x07 = Latin/Hebrew (ISO-8859-8)
+    ///        0x08 = UCS2 (ISO/IEC-10646)
     pub data_coding: u8,
+
+    /// 4.1.16 sm_default_msg_id: Indicates the short message to send from a list of pre-defined
+    ///        ('canned') short messages stored on the SMSC. If not using a pre-defined message,
+    ///        set to 0.
     pub sm_default_msg_id: u8,
+
+    /// 4.1.17 sm_length: Length in octets of the short_message user data parameter that follows.
+    ///        Range: 0 to 254 octets. If sm_length is 0, then the short_message field is not 
+    ///        present. When sm_length is greater than 0, the short_message field contains
+    ///        sm_length octets and should be padded with trailing NULLs if necessary.
+    ///        Note: For messages longer than 254 octets, the message_payload optional parameter
+    ///        should be used and sm_length should be set to 0.
     pub sm_length: u8,
+
+    /// 4.1.18 short_message: Up to 254 octets of short message user data. The exact physical 
+    ///        limit for short_message size may vary according to the underlying network.
+    ///        Applications which need to send messages longer than 254 octets should use the 
+    ///        message_payload TLV. When the message_payload TLV is specified, the sm_length 
+    ///        field should be set to zero.
     pub short_message: String,
 
-    // Optional parameters
+    // Optional parameters (TLV format)
+    /// User Message Reference TLV (0x0204): ESME assigned message reference number.
     pub user_message_reference: Option<Tlv>,
+
+    /// Source Port TLV (0x020A): Indicates the application port number associated with the 
+    /// source address of the message.
     pub source_port: Option<Tlv>,
+
+    /// Source Address Subunit TLV (0x020B): The subcomponent in the destination device for 
+    /// which the user data is intended.
     pub source_addr_submit: Option<Tlv>,
+
+    /// Destination Port TLV (0x020C): Indicates the application port number associated with 
+    /// the destination address of the message.
     pub destination_port: Option<Tlv>,
+
+    /// Destination Address Subunit TLV (0x020D): The subcomponent in the destination device 
+    /// for which the user data is intended.
     pub dest_addr_submit: Option<Tlv>,
+
+    /// SAR Message Reference Number TLV (0x020E): The reference number for a particular 
+    /// concatenated short message.
     pub sar_msg_ref_num: Option<Tlv>,
+
+    /// SAR Total Segments TLV (0x020F): Indicates the total number of short messages within 
+    /// the concatenated short message.
     pub sar_total_segments: Option<Tlv>,
+
+    /// SAR Segment Sequence Number TLV (0x0210): Indicates the sequence number of a particular 
+    /// short message within the concatenated short message.
     pub sar_segment_seqnum: Option<Tlv>,
+
+    /// More Messages to Send TLV (0x0426): Indicates that there are further messages to follow 
+    /// for the destination SME.
     pub more_messages_to_send: Option<Tlv>,
+
+    /// Payload Type TLV (0x0019): Defines the type of payload that is being sent in the message.
     pub payload_type: Option<Tlv>,
+
+    /// Message Payload TLV (0x0424): Contains the extended short message user data. Up to 64K 
+    /// octets can be sent. This TLV must not be specified when the sm_length and short_message 
+    /// fields contain message data.
     pub message_payload: Option<Tlv>,
+
+    /// Privacy Indicator TLV (0x0201): Indicates the level of privacy associated with the message.
     pub privacy_indicator: Option<Tlv>,
+
+    /// Callback Number TLV (0x0381): A callback number associated with the short message.
     pub callback_num: Option<Tlv>,
+
+    /// Callback Number Presentation Indicator TLV (0x0302): Controls the presentation indication 
+    /// and screening of the callback number at the mobile station.
     pub callback_num_pres_ind: Option<Tlv>,
+
+    /// Callback Number ATAG TLV (0x0303): Associates an alphanumeric display with the callback number.
     pub callback_num_atag: Option<Tlv>,
+
+    /// Source Subaddress TLV (0x0202): The subaddress of the message originator.
     pub source_subaddress: Option<Tlv>,
+
+    /// Destination Subaddress TLV (0x0203): The subaddress of the message destination.
     pub dest_subaddress: Option<Tlv>,
+
+    /// Display Time TLV (0x1201): Provides the receiving MS with a display time associated with 
+    /// the message.
     pub display_time: Option<Tlv>,
+
+    /// SMS Signal TLV (0x1203): Indicates the alerting mechanism when the message is received 
+    /// by the MS.
     pub sms_signal: Option<Tlv>,
+
+    /// MS Validity TLV (0x1204): Indicates the validity period for the message at the MS.
     pub ms_validity: Option<Tlv>,
+
+    /// MS Message Wait Facilities TLV (0x1205): Allows the indication of a message waiting 
+    /// condition to be set or cleared.
     pub ms_msg_wait_facilities: Option<Tlv>,
+
+    /// Number of Messages TLV (0x0205): Indicates the number of messages stored in a mailbox.
     pub number_of_messages: Option<Tlv>,
+
+    /// Alert on Message Delivery TLV (0x130C): Instructs the MS to alert the user when the 
+    /// short message is received.
     pub alert_on_msg_delivery: Option<Tlv>,
+
+    /// Language Indicator TLV (0x000D): Indicates the language of the short message.
     pub language_indicator: Option<Tlv>,
+
+    /// ITS Reply Type TLV (0x1380): Indicates the MS user's reply method to an ITS session 
+    /// setup request.
     pub its_reply_type: Option<Tlv>,
+
+    /// ITS Session Info TLV (0x1383): Session control information for Interactive Teleservice.
     pub its_session_info: Option<Tlv>,
+
+    /// USSD Service Operation TLV (0x0501): Indicates the USSD service operation when 
+    /// applicable.
     pub ussd_service_op: Option<Tlv>,
 }
 
@@ -403,6 +549,11 @@ impl SubmitSmBuilder {
     }
 }
 
+/// The submit_sm_resp PDU is used to provide a response to the submit_sm request.
+/// The submit_sm_resp PDU body is only returned in the case of a successful submit_sm,
+/// i.e., command_status is 0. For unsuccessful submit_sm requests, no submit_sm_resp
+/// body is returned, just the PDU header with an appropriate command_status indicating
+/// the reason for failure.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SubmitSmResponse {
     // pub command_length: u32,
@@ -411,6 +562,11 @@ pub struct SubmitSmResponse {
     pub sequence_number: u32,
 
     // Body
+    /// 4.2.1 message_id: A unique message identifier assigned by the SMSC to each submitted 
+    ///       short message. This identifier is returned in the submit_sm_resp and should be 
+    ///       used in subsequent operations to refer to the message. The message identifier is 
+    ///       a C-Octet String variable length field up to 65 octets. The format of the 
+    ///       message_id is vendor specific but must be unique within the SMSC.
     pub message_id: String,
 }
 
