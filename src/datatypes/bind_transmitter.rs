@@ -124,26 +124,35 @@ impl ToBytes for BindTransmitter {
 
 impl ToBytes for BindTransmitterResponse {
     fn to_bytes(&self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(1024);
+        // Validate field length according to SMPP v3.4 specification
+        if self.system_id.len() > 15 {
+            panic!("system_id exceeds maximum length of 15 characters (16 with null terminator)");
+        }
 
-        // Write junk data that we'll replace later with the actual length
-        buffer.put_u32(0_u32);
+        let system_id = self.system_id.as_bytes();
+        
+        // Calculate length: header (16) + system_id + null terminator + optional TLV
+        let mut length = 16 + system_id.len() + 1;
+        if let Some(ref tlv) = self.sc_interface_version {
+            length += tlv.to_bytes().len();
+        }
 
-        buffer.put_u32(CommandId::BindTransmitter as u32);
+        let mut buffer = BytesMut::with_capacity(length);
+
+        // Header
+        buffer.put_u32(length as u32);
+        buffer.put_u32(CommandId::BindTransmitterResp as u32); // FIX: Use correct response command ID
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
 
+        // Body: system_id (mandatory field)
+        buffer.put(system_id);
+        buffer.put_u8(b'\0'); // null terminator
+
+        // Optional TLV parameters
         if let Some(sc_interface_version) = &self.sc_interface_version {
             buffer.extend_from_slice(&sc_interface_version.to_bytes());
-        } else {
-            // todo: is this right?
-            buffer.put_u8(b'\0');
         }
-
-        let length = buffer.len() as u32;
-
-        let length_section = &mut buffer[0..][..4];
-        length_section.copy_from_slice(&length.to_be_bytes());
 
         buffer.freeze()
     }
@@ -308,20 +317,18 @@ mod tests {
 
         let btr_bytes = bind_transmitter_response.to_bytes();
 
-        // The current implementation has bugs - this test documents the actual behavior
-        // Header should be 16 bytes + 1 byte for null terminator = 17 bytes total
-        let expected_length = 17u32;
-        assert_eq!(&btr_bytes[0..4], &expected_length.to_be_bytes());
-        
-        // Command ID is wrong - should be 0x80000002 but implementation uses 0x00000002
-        assert_eq!(&btr_bytes[4..8], &(CommandId::BindTransmitter as u32).to_be_bytes());
-        
-        // Command status and sequence number should be correct
-        assert_eq!(&btr_bytes[8..12], &(CommandStatus::Ok as u32).to_be_bytes());
-        assert_eq!(&btr_bytes[12..16], &1u32.to_be_bytes());
-        
-        // Body is just a null byte (bug - should include system_id)
-        assert_eq!(btr_bytes[16], 0);
+        // Expected byte representation of a bind transmitter response without TLV
+        let expected: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x1A, // command_length (26 bytes total)
+            0x80, 0x00, 0x00, 0x02, // command_id (BindTransmitterResp = 0x80000002)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id "SMPP3TEST\0"
+        ];
+
+        assert_eq!(&btr_bytes, &expected);
     }
 
     #[test]
@@ -478,5 +485,35 @@ mod tests {
 
         let bytes = bind_transmitter.to_bytes();
         assert!(bytes.len() > 16); // Should serialize successfully
+    }
+
+    #[test]
+    fn bind_transmitter_response_roundtrip_test() {
+        use crate::frame::Frame;
+        use std::io::Cursor;
+
+        let original = BindTransmitterResponse {
+            command_status: CommandStatus::Ok,
+            sequence_number: 42,
+            system_id: "SMSC_SYS".to_string(),
+            sc_interface_version: None,
+        };
+
+        // Serialize to bytes
+        let serialized = original.to_bytes();
+        
+        // Parse back from bytes
+        let mut cursor = Cursor::new(serialized.as_ref());
+        let parsed_frame = Frame::parse(&mut cursor).unwrap();
+
+        // Verify it matches
+        if let Frame::BindTransmitterResponse(parsed) = parsed_frame {
+            assert_eq!(parsed.command_status, original.command_status);
+            assert_eq!(parsed.sequence_number, original.sequence_number);
+            assert_eq!(parsed.system_id, original.system_id);
+            assert_eq!(parsed.sc_interface_version, original.sc_interface_version);
+        } else {
+            panic!("Expected BindTransmitterResponse frame");
+        }
     }
 }

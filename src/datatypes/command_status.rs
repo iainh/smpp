@@ -114,7 +114,7 @@ pub enum CommandStatus {
     /// Invalid replace_if_present flag
     InvalidReplaceIfPresentFlag = 0x00000054,
     /// Invalid number of messages
-    InvalidNumeberOfMessages = 0x00000055,
+    InvalidNumberOfMessages = 0x00000055,
 
     // Reserved 0x00000056 - 0x00000057
     /// Throttling error (ESME has exceeded allowed message limits)
