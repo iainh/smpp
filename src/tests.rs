@@ -136,8 +136,10 @@ mod integration_tests {
     }
 
     #[test]
+    #[should_panic(expected = "SmLengthMismatch")]
     fn test_submit_sm_length_mismatch() {
         // Test case where sm_length doesn't match actual message length
+        // This should now panic due to our new validation
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
@@ -189,11 +191,7 @@ mod integration_tests {
             ussd_service_op: None,
         };
 
-        let bytes = submit_sm.to_bytes();
-        
-        // Should encode what we tell it to encode, even if inconsistent
-        let message_bytes = "Hello World".as_bytes();
-        assert!(bytes.windows(message_bytes.len()).any(|window| window == message_bytes));
+        let _ = submit_sm.to_bytes(); // Should panic
     }
 
     #[test]

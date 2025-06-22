@@ -16,7 +16,7 @@ pub use command_status::CommandStatus;
 pub use interface_version::InterfaceVersion;
 pub use numeric_plan_indicator::NumericPlanIndicator;
 pub use priority_flag::PriorityFlag;
-pub use tlv::Tlv;
+pub use tlv::{Tlv, tags};
 pub use type_of_number::TypeOfNumber;
 
 pub use bind_transmitter::{BindTransmitter, BindTransmitterResponse};

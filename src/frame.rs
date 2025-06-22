@@ -3,9 +3,10 @@
 
 use crate::datatypes::{
     BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, EnquireLink,
-    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, SubmitSm, SubmitSmResponse, Tlv,
+    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, PriorityFlag, SubmitSm, SubmitSmResponse, Tlv,
     TypeOfNumber, Unbind, UnbindResponse,
 };
+use crate::datatypes::tags;
 use bytes::Buf;
 use core::fmt;
 use num_enum::TryFromPrimitiveError;
@@ -125,6 +126,170 @@ impl Frame {
 
                 Frame::SubmitSmResponse(pdu)
             }
+            CommandId::SubmitSm => {
+                // Parse mandatory fields
+                let service_type = get_cstring_field(src, 6, "service_type")?;
+                let source_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+                let source_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+                let source_addr = get_cstring_field(src, 21, "source_addr")?;
+                let dest_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+                let dest_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+                let destination_addr = get_cstring_field(src, 21, "destination_addr")?;
+                let esm_class = get_u8(src)?;
+                let protocol_id = get_u8(src)?;
+                let priority_flag = PriorityFlag::try_from(get_u8(src)?)?;
+                let schedule_delivery_time = get_cstring_field(src, 17, "schedule_delivery_time")?;
+                let validity_period = get_cstring_field(src, 17, "validity_period")?;
+                let registered_delivery = get_u8(src)?;
+                let replace_if_present_flag = get_u8(src)?;
+                let data_coding = get_u8(src)?;
+                let sm_default_msg_id = get_u8(src)?;
+                let sm_length = get_u8(src)?;
+                
+                // Validate sm_length is within bounds
+                if sm_length > 254 {
+                    return Err(Error::Other(format!("sm_length ({}) exceeds maximum of 254 bytes", sm_length).into()));
+                }
+                
+                // Ensure we have enough remaining bytes for the short message
+                if src.remaining() < sm_length as usize {
+                    return Err(Error::Incomplete);
+                }
+                
+                // Read short message based on sm_length
+                let short_message = if sm_length > 0 {
+                    let message_bytes = src.copy_to_bytes(sm_length as usize);
+                    String::from_utf8(message_bytes.into())
+                        .map_err(|e| Error::Other(format!("Invalid UTF-8 in short_message: {}", e).into()))?
+                } else {
+                    String::new()
+                };
+
+                // Parse optional TLV parameters
+                let mut user_message_reference = None;
+                let mut source_port = None;
+                let mut source_addr_submit = None;
+                let mut destination_port = None;
+                let mut dest_addr_submit = None;
+                let mut sar_msg_ref_num = None;
+                let mut sar_total_segments = None;
+                let mut sar_segment_seqnum = None;
+                let mut more_messages_to_send = None;
+                let mut payload_type = None;
+                let mut message_payload = None;
+                let mut privacy_indicator = None;
+                let mut callback_num = None;
+                let mut callback_num_pres_ind = None;
+                let mut callback_num_atag = None;
+                let mut source_subaddress = None;
+                let mut dest_subaddress = None;
+                let mut display_time = None;
+                let mut sms_signal = None;
+                let mut ms_validity = None;
+                let mut ms_msg_wait_facilities = None;
+                let mut number_of_messages = None;
+                let mut alert_on_msg_delivery = None;
+                let mut language_indicator = None;
+                let mut its_reply_type = None;
+                let mut its_session_info = None;
+                let mut ussd_service_op = None;
+
+                // Parse any remaining TLV parameters
+                while src.has_remaining() {
+                    let tlv = get_tlv(src)?;
+                    match tlv.tag {
+                        tags::USER_MESSAGE_REFERENCE => user_message_reference = Some(tlv),
+                        tags::SOURCE_PORT => source_port = Some(tlv),
+                        tags::SOURCE_ADDR_SUBMIT => source_addr_submit = Some(tlv),
+                        tags::DESTINATION_PORT => destination_port = Some(tlv),
+                        tags::DEST_ADDR_SUBMIT => dest_addr_submit = Some(tlv),
+                        tags::SAR_MSG_REF_NUM => sar_msg_ref_num = Some(tlv),
+                        tags::SAR_TOTAL_SEGMENTS => sar_total_segments = Some(tlv),
+                        tags::SAR_SEGMENT_SEQNUM => sar_segment_seqnum = Some(tlv),
+                        tags::MORE_MESSAGES_TO_SEND => more_messages_to_send = Some(tlv),
+                        tags::PAYLOAD_TYPE => payload_type = Some(tlv),
+                        tags::MESSAGE_PAYLOAD => {
+                            // Validate mutual exclusivity with short_message
+                            if !short_message.is_empty() {
+                                return Err(Error::Other("Cannot use both short_message and message_payload - they are mutually exclusive".into()));
+                            }
+                            message_payload = Some(tlv);
+                        },
+                        tags::PRIVACY_INDICATOR => privacy_indicator = Some(tlv),
+                        tags::CALLBACK_NUM => callback_num = Some(tlv),
+                        tags::CALLBACK_NUM_PRES_IND => callback_num_pres_ind = Some(tlv),
+                        tags::CALLBACK_NUM_ATAG => callback_num_atag = Some(tlv),
+                        tags::SOURCE_SUBADDRESS => source_subaddress = Some(tlv),
+                        tags::DEST_SUBADDRESS => dest_subaddress = Some(tlv),
+                        tags::DISPLAY_TIME => display_time = Some(tlv),
+                        tags::SMS_SIGNAL => sms_signal = Some(tlv),
+                        tags::MS_VALIDITY => ms_validity = Some(tlv),
+                        tags::MS_MSG_WAIT_FACILITIES => ms_msg_wait_facilities = Some(tlv),
+                        tags::NUMBER_OF_MESSAGES => number_of_messages = Some(tlv),
+                        tags::ALERT_ON_MSG_DELIVERY => alert_on_msg_delivery = Some(tlv),
+                        tags::LANGUAGE_INDICATOR => language_indicator = Some(tlv),
+                        tags::ITS_REPLY_TYPE => its_reply_type = Some(tlv),
+                        tags::ITS_SESSION_INFO => its_session_info = Some(tlv),
+                        tags::USSD_SERVICE_OP => ussd_service_op = Some(tlv),
+                        _ => {
+                            // Unknown TLV - log warning but continue
+                            tracing::warn!("Unknown TLV tag: 0x{:04X}", tlv.tag);
+                        }
+                    }
+                }
+
+                let pdu = SubmitSm {
+                    command_status,
+                    sequence_number,
+                    service_type,
+                    source_addr_ton,
+                    source_addr_npi,
+                    source_addr,
+                    dest_addr_ton,
+                    dest_addr_npi,
+                    destination_addr,
+                    esm_class,
+                    protocol_id,
+                    priority_flag,
+                    schedule_delivery_time,
+                    validity_period,
+                    registered_delivery,
+                    replace_if_present_flag,
+                    data_coding,
+                    sm_default_msg_id,
+                    sm_length,
+                    short_message,
+                    user_message_reference,
+                    source_port,
+                    source_addr_submit,
+                    destination_port,
+                    dest_addr_submit,
+                    sar_msg_ref_num,
+                    sar_total_segments,
+                    sar_segment_seqnum,
+                    more_messages_to_send,
+                    payload_type,
+                    message_payload,
+                    privacy_indicator,
+                    callback_num,
+                    callback_num_pres_ind,
+                    callback_num_atag,
+                    source_subaddress,
+                    dest_subaddress,
+                    display_time,
+                    sms_signal,
+                    ms_validity,
+                    ms_msg_wait_facilities,
+                    number_of_messages,
+                    alert_on_msg_delivery,
+                    language_indicator,
+                    its_reply_type,
+                    its_session_info,
+                    ussd_service_op,
+                };
+
+                Frame::SubmitSm(Box::new(pdu))
+            }
 
             _ => todo!("Implement the parse function for all the other PDUs"),
         };
@@ -234,7 +399,7 @@ fn get_cstring_field(
     }
 
     // Validate UTF-8 and convert
-    match String::from_utf8(string_bytes.to_vec()) {
+    match String::from_utf8(string_bytes.into()) {
         Ok(s) => Ok(s),
         Err(e) => Err(Error::Other(format!("Invalid UTF-8 in field {}: {}", field_name, e).into())),
     }
@@ -358,6 +523,12 @@ impl From<TryFromPrimitiveError<NumericPlanIndicator>> for Error {
 impl From<TryFromPrimitiveError<TypeOfNumber>> for Error {
     fn from(_src: TryFromPrimitiveError<TypeOfNumber>) -> Error {
         "protocol error; invalid type of number in frame".into()
+    }
+}
+
+impl From<TryFromPrimitiveError<PriorityFlag>> for Error {
+    fn from(_src: TryFromPrimitiveError<PriorityFlag>) -> Error {
+        "protocol error; invalid priority flag in frame".into()
     }
 }
 
@@ -946,6 +1117,302 @@ mod tests {
             assert_eq!(bt.password, Some(password_max));
             assert_eq!(bt.system_type, system_type_max);
             assert_eq!(bt.address_range, address_range_max);
+        }
+    }
+
+    #[test]
+    fn parse_submit_sm_basic_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x3B, // command_length (59 bytes)
+            0x00, 0x00, 0x00, 0x04, // command_id (submit_sm)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x00, // service_type (empty)
+            0x01, // source_addr_ton (International)
+            0x01, // source_addr_npi (ISDN)
+            b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', 0x00, // source_addr
+            0x01, // dest_addr_ton (International)
+            0x01, // dest_addr_npi (ISDN)
+            b'0', b'9', b'8', b'7', b'6', b'5', b'4', b'3', b'2', b'1', 0x00, // destination_addr
+            0x00, // esm_class
+            0x00, // protocol_id
+            0x00, // priority_flag
+            0x00, // schedule_delivery_time (empty)
+            0x00, // validity_period (empty)
+            0x00, // registered_delivery
+            0x00, // replace_if_present_flag
+            0x00, // data_coding
+            0x00, // sm_default_msg_id
+            0x0B, // sm_length (11 bytes)
+            b'H', b'e', b'l', b'l', b'o', b' ', b'W', b'o', b'r', b'l', b'd', // short_message
+        ];
+
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = Frame::parse(&mut cursor);
+
+        assert!(result.is_ok());
+
+        if let Frame::SubmitSm(submit_sm) = result.unwrap() {
+            assert_eq!(submit_sm.command_status, CommandStatus::Ok);
+            assert_eq!(submit_sm.sequence_number, 1);
+            assert_eq!(submit_sm.service_type, "");
+            assert_eq!(submit_sm.source_addr_ton, TypeOfNumber::International);
+            assert_eq!(submit_sm.source_addr_npi, NumericPlanIndicator::Isdn);
+            assert_eq!(submit_sm.source_addr, "1234567890");
+            assert_eq!(submit_sm.dest_addr_ton, TypeOfNumber::International);
+            assert_eq!(submit_sm.dest_addr_npi, NumericPlanIndicator::Isdn);
+            assert_eq!(submit_sm.destination_addr, "0987654321");
+            assert_eq!(submit_sm.esm_class, 0);
+            assert_eq!(submit_sm.protocol_id, 0);
+            assert_eq!(submit_sm.priority_flag, PriorityFlag::Level0);
+            assert_eq!(submit_sm.schedule_delivery_time, "");
+            assert_eq!(submit_sm.validity_period, "");
+            assert_eq!(submit_sm.registered_delivery, 0);
+            assert_eq!(submit_sm.replace_if_present_flag, 0);
+            assert_eq!(submit_sm.data_coding, 0);
+            assert_eq!(submit_sm.sm_default_msg_id, 0);
+            assert_eq!(submit_sm.sm_length, 11);
+            assert_eq!(submit_sm.short_message, "Hello World");
+            assert!(submit_sm.user_message_reference.is_none());
+            assert!(submit_sm.message_payload.is_none());
+        } else {
+            panic!("Expected SubmitSm frame");
+        }
+    }
+
+    #[test]
+    fn parse_submit_sm_with_tlv_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x45, // command_length (69 bytes)
+            0x00, 0x00, 0x00, 0x04, // command_id (submit_sm)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x00, // service_type (empty)
+            0x01, // source_addr_ton (International)
+            0x01, // source_addr_npi (ISDN)
+            b'1', b'2', b'3', b'4', 0x00, // source_addr
+            0x01, // dest_addr_ton (International)
+            0x01, // dest_addr_npi (ISDN)
+            b'5', b'6', b'7', b'8', 0x00, // destination_addr
+            0x00, // esm_class
+            0x00, // protocol_id
+            0x00, // priority_flag
+            0x00, // schedule_delivery_time (empty)
+            0x00, // validity_period (empty)
+            0x00, // registered_delivery
+            0x00, // replace_if_present_flag
+            0x00, // data_coding
+            0x00, // sm_default_msg_id
+            0x04, // sm_length (4 bytes)
+            b'T', b'e', b's', b't', // short_message
+            // TLV: user_message_reference
+            0x02, 0x04, // tag (0x0204)
+            0x00, 0x02, // length (2 bytes)
+            0x00, 0x01, // value
+            // TLV: source_port
+            0x02, 0x0A, // tag (0x020A)
+            0x00, 0x02, // length (2 bytes)
+            0x1F, 0x90, // value (port 8080)
+        ];
+
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = Frame::parse(&mut cursor);
+
+        assert!(result.is_ok());
+
+        if let Frame::SubmitSm(submit_sm) = result.unwrap() {
+            assert_eq!(submit_sm.short_message, "Test");
+            assert_eq!(submit_sm.sm_length, 4);
+            assert!(submit_sm.user_message_reference.is_some());
+            assert!(submit_sm.source_port.is_some());
+            
+            let user_msg_ref = submit_sm.user_message_reference.unwrap();
+            assert_eq!(user_msg_ref.tag, 0x0204);
+            assert_eq!(user_msg_ref.length, 2);
+            assert_eq!(user_msg_ref.value.as_ref(), &[0x00, 0x01]);
+
+            let source_port = submit_sm.source_port.unwrap();
+            assert_eq!(source_port.tag, 0x020A);
+            assert_eq!(source_port.length, 2);
+            assert_eq!(source_port.value.as_ref(), &[0x1F, 0x90]);
+        } else {
+            panic!("Expected SubmitSm frame");
+        }
+    }
+
+    #[test]
+    fn parse_submit_sm_empty_message_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x2F, // command_length (47 bytes)
+            0x00, 0x00, 0x00, 0x04, // command_id (submit_sm)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x00, // service_type (empty)
+            0x01, // source_addr_ton
+            0x01, // source_addr_npi
+            b'1', b'2', b'3', b'4', 0x00, // source_addr
+            0x01, // dest_addr_ton
+            0x01, // dest_addr_npi
+            b'5', b'6', b'7', b'8', 0x00, // destination_addr
+            0x00, // esm_class
+            0x00, // protocol_id
+            0x00, // priority_flag
+            0x00, // schedule_delivery_time (empty)
+            0x00, // validity_period (empty)
+            0x00, // registered_delivery
+            0x00, // replace_if_present_flag
+            0x00, // data_coding
+            0x00, // sm_default_msg_id
+            0x00, // sm_length (0 bytes)
+            // No short_message data
+        ];
+
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = Frame::parse(&mut cursor);
+
+        assert!(result.is_ok());
+
+        if let Frame::SubmitSm(submit_sm) = result.unwrap() {
+            assert_eq!(submit_sm.sm_length, 0);
+            assert_eq!(submit_sm.short_message, "");
+        } else {
+            panic!("Expected SubmitSm frame");
+        }
+    }
+
+    #[test]
+    fn parse_submit_sm_error_invalid_sm_length() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x2F, // command_length 
+            0x00, 0x00, 0x00, 0x04, // command_id (submit_sm)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x00, // service_type (empty)
+            0x01, // source_addr_ton
+            0x01, // source_addr_npi
+            b'1', b'2', b'3', b'4', 0x00, // source_addr
+            0x01, // dest_addr_ton
+            0x01, // dest_addr_npi
+            b'5', b'6', b'7', b'8', 0x00, // destination_addr
+            0x00, // esm_class
+            0x00, // protocol_id
+            0x00, // priority_flag
+            0x00, // schedule_delivery_time (empty)
+            0x00, // validity_period (empty)
+            0x00, // registered_delivery
+            0x00, // replace_if_present_flag
+            0x00, // data_coding
+            0x00, // sm_default_msg_id
+            0xFF, // sm_length (255 - invalid, exceeds max of 254)
+        ];
+
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = Frame::parse(&mut cursor);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn submit_sm_roundtrip_test() {
+        use crate::datatypes::{SubmitSm, PriorityFlag, ToBytes};
+
+        let original = SubmitSm {
+            command_status: CommandStatus::Ok,
+            sequence_number: 42,
+            service_type: "SMS".to_string(),
+            source_addr_ton: TypeOfNumber::International,
+            source_addr_npi: NumericPlanIndicator::Isdn,
+            source_addr: "1234567890".to_string(),
+            dest_addr_ton: TypeOfNumber::International,
+            dest_addr_npi: NumericPlanIndicator::Isdn,
+            destination_addr: "0987654321".to_string(),
+            esm_class: 0,
+            protocol_id: 0,
+            priority_flag: PriorityFlag::Level0,
+            schedule_delivery_time: "".to_string(),
+            validity_period: "".to_string(),
+            registered_delivery: 1,
+            replace_if_present_flag: 0,
+            data_coding: 0,
+            sm_default_msg_id: 0,
+            sm_length: 13,
+            short_message: "Hello, world!".to_string(),
+            user_message_reference: None,
+            source_port: None,
+            source_addr_submit: None,
+            destination_port: None,
+            dest_addr_submit: None,
+            sar_msg_ref_num: None,
+            sar_total_segments: None,
+            sar_segment_seqnum: None,
+            more_messages_to_send: None,
+            payload_type: None,
+            message_payload: None,
+            privacy_indicator: None,
+            callback_num: None,
+            callback_num_pres_ind: None,
+            callback_num_atag: None,
+            source_subaddress: None,
+            dest_subaddress: None,
+            display_time: None,
+            sms_signal: None,
+            ms_validity: None,
+            ms_msg_wait_facilities: None,
+            number_of_messages: None,
+            alert_on_msg_delivery: None,
+            language_indicator: None,
+            its_reply_type: None,
+            its_session_info: None,
+            ussd_service_op: None,
+        };
+
+        // Serialize to bytes
+        let serialized = original.to_bytes();
+        
+        // Parse back from bytes
+        let mut cursor = std::io::Cursor::new(serialized.as_ref());
+        let parsed_frame = Frame::parse(&mut cursor).unwrap();
+
+        // Verify it matches
+        if let Frame::SubmitSm(parsed) = parsed_frame {
+            assert_eq!(parsed.command_status, original.command_status);
+            assert_eq!(parsed.sequence_number, original.sequence_number);
+            assert_eq!(parsed.service_type, original.service_type);
+            assert_eq!(parsed.source_addr_ton, original.source_addr_ton);
+            assert_eq!(parsed.source_addr_npi, original.source_addr_npi);
+            assert_eq!(parsed.source_addr, original.source_addr);
+            assert_eq!(parsed.dest_addr_ton, original.dest_addr_ton);
+            assert_eq!(parsed.dest_addr_npi, original.dest_addr_npi);
+            assert_eq!(parsed.destination_addr, original.destination_addr);
+            assert_eq!(parsed.esm_class, original.esm_class);
+            assert_eq!(parsed.protocol_id, original.protocol_id);
+            assert_eq!(parsed.priority_flag, original.priority_flag);
+            assert_eq!(parsed.schedule_delivery_time, original.schedule_delivery_time);
+            assert_eq!(parsed.validity_period, original.validity_period);
+            assert_eq!(parsed.registered_delivery, original.registered_delivery);
+            assert_eq!(parsed.replace_if_present_flag, original.replace_if_present_flag);
+            assert_eq!(parsed.data_coding, original.data_coding);
+            assert_eq!(parsed.sm_default_msg_id, original.sm_default_msg_id);
+            assert_eq!(parsed.sm_length, original.sm_length);
+            assert_eq!(parsed.short_message, original.short_message);
+        } else {
+            panic!("Expected SubmitSm frame");
         }
     }
 }

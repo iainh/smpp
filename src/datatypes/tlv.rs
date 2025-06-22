@@ -1,6 +1,37 @@
 use crate::datatypes::ToBytes;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+// Standard TLV tag constants per SMPP v3.4 specification
+pub mod tags {
+    pub const USER_MESSAGE_REFERENCE: u16 = 0x0204;
+    pub const SOURCE_PORT: u16 = 0x020A;
+    pub const SOURCE_ADDR_SUBMIT: u16 = 0x020B;
+    pub const DESTINATION_PORT: u16 = 0x020C;
+    pub const DEST_ADDR_SUBMIT: u16 = 0x020D;
+    pub const SAR_MSG_REF_NUM: u16 = 0x020E;
+    pub const SAR_TOTAL_SEGMENTS: u16 = 0x020F;
+    pub const SAR_SEGMENT_SEQNUM: u16 = 0x0210;
+    pub const MORE_MESSAGES_TO_SEND: u16 = 0x0426;
+    pub const PAYLOAD_TYPE: u16 = 0x0019;
+    pub const MESSAGE_PAYLOAD: u16 = 0x0424;
+    pub const PRIVACY_INDICATOR: u16 = 0x0201;
+    pub const CALLBACK_NUM: u16 = 0x0381;
+    pub const CALLBACK_NUM_PRES_IND: u16 = 0x0302;
+    pub const CALLBACK_NUM_ATAG: u16 = 0x0303;
+    pub const SOURCE_SUBADDRESS: u16 = 0x0202;
+    pub const DEST_SUBADDRESS: u16 = 0x0203;
+    pub const DISPLAY_TIME: u16 = 0x1201;
+    pub const SMS_SIGNAL: u16 = 0x1203;
+    pub const MS_VALIDITY: u16 = 0x1204;
+    pub const MS_MSG_WAIT_FACILITIES: u16 = 0x1205;
+    pub const NUMBER_OF_MESSAGES: u16 = 0x0205;
+    pub const ALERT_ON_MSG_DELIVERY: u16 = 0x130C;
+    pub const LANGUAGE_INDICATOR: u16 = 0x000D;
+    pub const ITS_REPLY_TYPE: u16 = 0x1380;
+    pub const ITS_SESSION_INFO: u16 = 0x1383;
+    pub const USSD_SERVICE_OP: u16 = 0x0501;
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tlv {
     /// The Tag field is used to uniquely identify the particular optional parameter in question.
@@ -136,7 +167,7 @@ mod tests {
         let tlv = Tlv {
             tag: 0x001D,
             length: string_value.len() as u16,
-            value: Bytes::from(string_value.as_bytes().to_vec()),
+            value: Bytes::copy_from_slice(string_value.as_bytes()),
         };
 
         let bytes = tlv.to_bytes();
