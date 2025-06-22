@@ -268,3 +268,205 @@ impl ToBytes for SubmitSmResponse {
         buffer.freeze()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+
+    #[test]
+    fn submit_sm_to_bytes_basic() {
+        let submit_sm = SubmitSm {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            service_type: "".to_string(),
+            source_addr_ton: TypeOfNumber::International,
+            source_addr_npi: NumericPlanIndicator::Isdn,
+            source_addr: "1234567890".to_string(),
+            dest_addr_ton: TypeOfNumber::International,
+            dest_addr_npi: NumericPlanIndicator::Isdn,
+            destination_addr: "0987654321".to_string(),
+            esm_class: 0,
+            protocol_id: 0,
+            priority_flag: PriorityFlag::Level0,
+            schedule_delivery_time: "".to_string(),
+            validity_period: "".to_string(),
+            registered_delivery: 0,
+            replace_if_present_flag: 0,
+            data_coding: 0,
+            sm_default_msg_id: 0,
+            sm_length: 11,
+            short_message: "Hello World".to_string(),
+            // All optional parameters set to None
+            user_message_reference: None,
+            source_port: None,
+            source_addr_submit: None,
+            destination_port: None,
+            dest_addr_submit: None,
+            sar_msg_ref_num: None,
+            sar_total_segments: None,
+            sar_segment_seqnum: None,
+            more_messages_to_send: None,
+            payload_type: None,
+            message_payload: None,
+            privacy_indicator: None,
+            callback_num: None,
+            callback_num_pres_ind: None,
+            callback_num_atag: None,
+            source_subaddress: None,
+            dest_subaddress: None,
+            display_time: None,
+            sms_signal: None,
+            ms_validity: None,
+            ms_msg_wait_facilities: None,
+            number_of_messages: None,
+            alert_on_msg_delivery: None,
+            language_indicator: None,
+            its_reply_type: None,
+            its_session_info: None,
+            ussd_service_op: None,
+        };
+
+        let bytes = submit_sm.to_bytes();
+
+        // Verify header
+        assert_eq!(&bytes[0..4], &(bytes.len() as u32).to_be_bytes()); // command_length
+        assert_eq!(&bytes[4..8], &(CommandId::SubmitSm as u32).to_be_bytes()); // command_id
+        assert_eq!(&bytes[8..12], &(CommandStatus::Ok as u32).to_be_bytes()); // command_status
+        assert_eq!(&bytes[12..16], &1u32.to_be_bytes()); // sequence_number
+
+        // Verify some key fields
+        let body_start = 16;
+        assert_eq!(bytes[body_start], 0); // service_type null terminator
+        assert_eq!(bytes[body_start + 1], TypeOfNumber::International as u8);
+        assert_eq!(bytes[body_start + 2], NumericPlanIndicator::Isdn as u8);
+        
+        // Check that short message is included
+        let message_bytes = "Hello World".as_bytes();
+        assert!(bytes.windows(message_bytes.len()).any(|window| window == message_bytes));
+    }
+
+    #[test]
+    fn submit_sm_to_bytes_with_optional_parameters() {
+        let user_msg_ref_tlv = Tlv {
+            tag: 0x0204,
+            length: 2,
+            value: Bytes::from_static(&[0x00, 0x01]),
+        };
+
+        let source_port_tlv = Tlv {
+            tag: 0x020A,
+            length: 2,
+            value: Bytes::from_static(&[0x1F, 0x90]),
+        };
+
+        let submit_sm = SubmitSm {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            service_type: "".to_string(),
+            source_addr_ton: TypeOfNumber::International,
+            source_addr_npi: NumericPlanIndicator::Isdn,
+            source_addr: "1234567890".to_string(),
+            dest_addr_ton: TypeOfNumber::International,
+            dest_addr_npi: NumericPlanIndicator::Isdn,
+            destination_addr: "0987654321".to_string(),
+            esm_class: 0,
+            protocol_id: 0,
+            priority_flag: PriorityFlag::Level0,
+            schedule_delivery_time: "".to_string(),
+            validity_period: "".to_string(),
+            registered_delivery: 0,
+            replace_if_present_flag: 0,
+            data_coding: 0,
+            sm_default_msg_id: 0,
+            sm_length: 11,
+            short_message: "Hello World".to_string(),
+            user_message_reference: Some(user_msg_ref_tlv),
+            source_port: Some(source_port_tlv),
+            source_addr_submit: None,
+            destination_port: None,
+            dest_addr_submit: None,
+            sar_msg_ref_num: None,
+            sar_total_segments: None,
+            sar_segment_seqnum: None,
+            more_messages_to_send: None,
+            payload_type: None,
+            message_payload: None,
+            privacy_indicator: None,
+            callback_num: None,
+            callback_num_pres_ind: None,
+            callback_num_atag: None,
+            source_subaddress: None,
+            dest_subaddress: None,
+            display_time: None,
+            sms_signal: None,
+            ms_validity: None,
+            ms_msg_wait_facilities: None,
+            number_of_messages: None,
+            alert_on_msg_delivery: None,
+            language_indicator: None,
+            its_reply_type: None,
+            its_session_info: None,
+            ussd_service_op: None,
+        };
+
+        let bytes = submit_sm.to_bytes();
+
+        // Should include TLV data at the end
+        let tlv1_bytes = [0x02, 0x04, 0x00, 0x02, 0x00, 0x01]; // user_message_reference TLV
+        let tlv2_bytes = [0x02, 0x0A, 0x00, 0x02, 0x1F, 0x90]; // source_port TLV
+        
+        assert!(bytes.windows(tlv1_bytes.len()).any(|window| window == tlv1_bytes));
+        assert!(bytes.windows(tlv2_bytes.len()).any(|window| window == tlv2_bytes));
+    }
+
+    #[test]
+    fn submit_sm_response_to_bytes() {
+        let submit_sm_response = SubmitSmResponse {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            message_id: "msg123456789".to_string(),
+        };
+
+        let bytes = submit_sm_response.to_bytes();
+
+        // Verify header
+        assert_eq!(&bytes[0..4], &(bytes.len() as u32).to_be_bytes()); // command_length
+        assert_eq!(&bytes[4..8], &(CommandId::SubmitSmResp as u32).to_be_bytes()); // command_id
+        assert_eq!(&bytes[8..12], &(CommandStatus::Ok as u32).to_be_bytes()); // command_status
+        assert_eq!(&bytes[12..16], &1u32.to_be_bytes()); // sequence_number
+
+        // Check message_id is included with null terminator
+        let expected_msg_id = "msg123456789\0".as_bytes();
+        assert_eq!(&bytes[16..16 + expected_msg_id.len()], expected_msg_id);
+    }
+
+    #[test]
+    fn submit_sm_response_to_bytes_empty_message_id() {
+        let submit_sm_response = SubmitSmResponse {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            message_id: "".to_string(),
+        };
+
+        let bytes = submit_sm_response.to_bytes();
+
+        // Should be minimum size: 16 bytes header + 1 byte null terminator
+        assert_eq!(bytes.len(), 17);
+        assert_eq!(bytes[16], 0); // null terminator
+    }
+
+    #[test]
+    fn submit_sm_response_with_error_status() {
+        let submit_sm_response = SubmitSmResponse {
+            command_status: CommandStatus::InvalidSourceAddress,
+            sequence_number: 1,
+            message_id: "".to_string(),
+        };
+
+        let bytes = submit_sm_response.to_bytes();
+
+        // Verify error status is encoded correctly
+        assert_eq!(&bytes[8..12], &(CommandStatus::InvalidSourceAddress as u32).to_be_bytes());
+    }
+}

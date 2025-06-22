@@ -2,6 +2,9 @@ pub mod connection;
 pub mod datatypes;
 pub mod frame;
 
+#[cfg(test)]
+mod tests;
+
 pub use frame::*;
 
 /// Error returned by most functions.

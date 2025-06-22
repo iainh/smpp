@@ -515,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_test() {
+    fn parse_bind_transmitter_test() {
         use std::io::Cursor;
 
         let data: Vec<u8> = vec![
@@ -545,8 +545,236 @@ mod tests {
         if let Frame::BindTransmitter(bt) = frame {
             assert_eq!(bt.command_status, CommandStatus::Ok);
             assert_eq!(&bt.system_id, "SMPP3TEST\0");
+            assert_eq!(bt.password, Some("secret08\0".to_string()));
+            assert_eq!(&bt.system_type, "SUBMIT1\0");
+            assert_eq!(bt.interface_version, InterfaceVersion::SmppV34);
+            assert_eq!(bt.addr_ton, TypeOfNumber::International);
+            assert_eq!(bt.addr_npi, NumericPlanIndicator::Isdn);
+            assert_eq!(&bt.address_range, "\0");
         } else {
-            assert!(false, "Unexpected frame variant");
+            panic!("Unexpected frame variant");
+        }
+    }
+
+    #[test]
+    fn parse_bind_transmitter_response_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x1a, // command_length (26 bytes total)
+            0x80, 0x00, 0x00, 0x02, // command_id (bind_transmitter_resp)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id "SMPP3TEST\0"
+            // No TLV data - that's it
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_ok());
+
+        let frame = result.unwrap();
+        if let Frame::BindTransmitterResponse(btr) = frame {
+            assert_eq!(btr.command_status, CommandStatus::Ok);
+            assert_eq!(btr.sequence_number, 1);
+            assert_eq!(&btr.system_id, "SMPP3TEST\0");
+            assert!(btr.sc_interface_version.is_none());
+        } else {
+            panic!("Unexpected frame variant");
+        }
+    }
+
+    #[test]
+    fn parse_bind_transmitter_response_with_tlv_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x21, // command_length
+            0x80, 0x00, 0x00, 0x02, // command_id (bind_transmitter_resp)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
+            // TLV:
+            0x00, 0x10, // tag (sc_interface_version)
+            0x00, 0x01, // length
+            0x34, // value (interface version 3.4)
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_ok());
+
+        let frame = result.unwrap();
+        if let Frame::BindTransmitterResponse(btr) = frame {
+            assert_eq!(btr.command_status, CommandStatus::Ok);
+            assert_eq!(btr.sequence_number, 1);
+            assert_eq!(&btr.system_id, "SMPP3TEST\0");
+            assert!(btr.sc_interface_version.is_some());
+            let tlv = btr.sc_interface_version.unwrap();
+            assert_eq!(tlv.tag, 0x0010);
+            assert_eq!(tlv.length, 1);
+            assert_eq!(tlv.value.as_ref(), &[0x34]);
+        } else {
+            panic!("Unexpected frame variant");
+        }
+    }
+
+    #[test]
+    fn parse_enquire_link_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x10, // command_length
+            0x00, 0x00, 0x00, 0x15, // command_id (enquire_link)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // No body for enquire_link
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_ok());
+
+        let frame = result.unwrap();
+        if let Frame::EnquireLink(el) = frame {
+            assert_eq!(el.sequence_number, 1);
+        } else {
+            panic!("Unexpected frame variant");
+        }
+    }
+
+    #[test]
+    fn parse_enquire_link_response_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x10, // command_length
+            0x80, 0x00, 0x00, 0x15, // command_id (enquire_link_resp)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // No body for enquire_link_resp
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_ok());
+
+        let frame = result.unwrap();
+        if let Frame::EnquireLinkResponse(elr) = frame {
+            assert_eq!(elr.sequence_number, 1);
+        } else {
+            panic!("Unexpected frame variant");
+        }
+    }
+
+    #[test]
+    fn parse_submit_sm_response_test() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x17, // command_length
+            0x80, 0x00, 0x00, 0x04, // command_id (submit_sm_resp)
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body:
+            0x6D, 0x73, 0x67, 0x5F, 0x69, 0x64, 0x00, // message_id "msg_id\0"
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_ok());
+
+        let frame = result.unwrap();
+        if let Frame::SubmitSmResponse(ssr) = frame {
+            assert_eq!(ssr.command_status, CommandStatus::Ok);
+            assert_eq!(ssr.sequence_number, 1);
+            assert_eq!(&ssr.message_id, "msg_id\0");
+        } else {
+            panic!("Unexpected frame variant");
+        }
+    }
+
+    #[test]
+    fn parse_error_invalid_command_id() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x10, // command_length
+            0x00, 0x00, 0xFF, 0xFF, // invalid command_id
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_error_invalid_command_status() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            // Header:
+            0x00, 0x00, 0x00, 0x10, // command_length
+            0x00, 0x00, 0x00, 0x15, // command_id (enquire_link)
+            0xFF, 0xFF, 0xFF, 0xFF, // invalid command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_error_incomplete_header() {
+        use std::io::Cursor;
+
+        let data: Vec<u8> = vec![
+            0x00, 0x00, 0x00, 0x10, // command_length
+            0x00, 0x00, 0x00, 0x15, // command_id
+            0x00, 0x00, // incomplete header
+        ];
+
+        let data = data.as_slice();
+        let mut buff = Cursor::new(data);
+
+        let result = Frame::parse(&mut buff);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            Error::Incomplete => (),
+            _ => panic!("Expected Incomplete error"),
         }
     }
 }
