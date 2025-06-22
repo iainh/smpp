@@ -585,7 +585,7 @@ impl ToBytes for SubmitSm {
         buffer.put_u32(0_u32);
 
         buffer.put_u32(CommandId::SubmitSm as u32);
-        buffer.put_u32(self.command_status as u32);
+        buffer.put_u32(0u32); // Request PDUs must have command_status = 0 per SMPP spec
         buffer.put_u32(self.sequence_number);
 
         // Mandatory parameters

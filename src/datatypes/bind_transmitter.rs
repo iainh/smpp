@@ -238,7 +238,7 @@ impl ToBytes for BindTransmitter {
         buffer.put_u32(length as u32);
 
         buffer.put_u32(CommandId::BindTransmitter as u32);
-        buffer.put_u32(self.command_status as u32);
+        buffer.put_u32(0u32); // Request PDUs must have command_status = 0 per SMPP spec
         buffer.put_u32(self.sequence_number);
 
         buffer.put(system_id);
