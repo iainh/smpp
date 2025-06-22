@@ -4,6 +4,14 @@ use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
 use bytes::{BufMut, Bytes, BytesMut};
 
+// SMPP v3.4 specification field length limits (excluding null terminator)
+const MAX_SERVICE_TYPE_LENGTH: usize = 5;
+const MAX_SOURCE_ADDR_LENGTH: usize = 20;
+const MAX_DESTINATION_ADDR_LENGTH: usize = 20;
+const MAX_SCHEDULE_DELIVERY_TIME_LENGTH: usize = 16;
+const MAX_VALIDITY_PERIOD_LENGTH: usize = 16;
+const MAX_SHORT_MESSAGE_LENGTH: usize = 254;
+
 /// This operation is used by an ESME to submit a short message to the SMSC for onward transmission
 /// to a specified short message entity (SME). The submit_sm PDU does not support the transaction
 /// message mode.
@@ -15,10 +23,10 @@ pub struct SubmitSm {
     pub sequence_number: u32,
 
     // Mandatory parameters
-    /// 4.1.1 service_type: The service_type parameter can be used to indicate the SMS 
-    ///       Application service associated with the message. Specifying the service_type 
-    ///       allows the ESME to avail of enhanced messaging services such as "replace by 
-    ///       service_type" or to control the teleservice used on the air interface. Set to 
+    /// 4.1.1 service_type: The service_type parameter can be used to indicate the SMS
+    ///       Application service associated with the message. Specifying the service_type
+    ///       allows the ESME to avail of enhanced messaging services such as "replace by
+    ///       service_type" or to control the teleservice used on the air interface. Set to
     ///       NULL if not applicable. Max length: 5 octets (6 with null terminator).
     pub service_type: String,
 
@@ -38,12 +46,12 @@ pub struct SubmitSm {
     /// 4.1.6 dest_addr_npi: Numbering Plan Indicator for destination address.
     pub dest_addr_npi: NumericPlanIndicator,
 
-    /// 4.1.7 destination_addr: Destination address of this short message. For mobile terminated 
+    /// 4.1.7 destination_addr: Destination address of this short message. For mobile terminated
     ///       messages, this is the directory number of the recipient MS.
     ///       Max length: 20 octets (21 with null terminator).
     pub destination_addr: String,
 
-    /// 4.1.8 esm_class: Indicates Message Mode and Message Type. The esm_class field is used to 
+    /// 4.1.8 esm_class: Indicates Message Mode and Message Type. The esm_class field is used to
     ///       indicate special message attributes associated with the short message.
     ///       Bits 7..2: Message Mode (00=Default, 01=Datagram, 10=Forward, 11=Store and Forward)
     ///       Bits 1..0: Message Type (00=Default, others vary by mode)
@@ -56,25 +64,25 @@ pub struct SubmitSm {
     ///        Level 0 (lowest) to Level 3 (highest).
     pub priority_flag: PriorityFlag,
 
-    /// 4.1.11 schedule_delivery_time: The short message is to be scheduled by the SMSC for 
+    /// 4.1.11 schedule_delivery_time: The short message is to be scheduled by the SMSC for
     ///        delivery. Set to NULL for immediate delivery. Format: YYMMDDhhmmsstnnp
     ///        Max length: 16 octets (17 with null terminator).
     pub schedule_delivery_time: String,
 
-    /// 4.1.12 validity_period: The validity period of this message. Set to NULL to request the 
+    /// 4.1.12 validity_period: The validity period of this message. Set to NULL to request the
     ///        SMSC default validity period. Format same as schedule_delivery_time.
     ///        Max length: 16 octets (17 with null terminator).
     pub validity_period: String,
 
-    /// 4.1.13 registered_delivery: Indicator to signify if an SMSC delivery receipt, user/manual 
+    /// 4.1.13 registered_delivery: Indicator to signify if an SMSC delivery receipt, user/manual
     ///        acknowledgment and/or an intermediate notification is required.
     ///        Bit 0-1: MC Delivery Receipt (00=No receipt, 01=Delivery receipt requested)
-    ///        Bit 2: SME Manual/User Acknowledgment 
+    ///        Bit 2: SME Manual/User Acknowledgment
     ///        Bit 3: Intermediate Notification
     pub registered_delivery: u8,
 
-    /// 4.1.14 replace_if_present_flag: Flag indicating if the submitted message should replace 
-    ///        an existing message that has the same source address, destination address and 
+    /// 4.1.14 replace_if_present_flag: Flag indicating if the submitted message should replace
+    ///        an existing message that has the same source address, destination address and
     ///        message reference. Set to 0 for false, 1 for true.
     pub replace_if_present_flag: u8,
 
@@ -96,17 +104,17 @@ pub struct SubmitSm {
     pub sm_default_msg_id: u8,
 
     /// 4.1.17 sm_length: Length in octets of the short_message user data parameter that follows.
-    ///        Range: 0 to 254 octets. If sm_length is 0, then the short_message field is not 
+    ///        Range: 0 to 254 octets. If sm_length is 0, then the short_message field is not
     ///        present. When sm_length is greater than 0, the short_message field contains
     ///        sm_length octets and should be padded with trailing NULLs if necessary.
     ///        Note: For messages longer than 254 octets, the message_payload optional parameter
     ///        should be used and sm_length should be set to 0.
     pub sm_length: u8,
 
-    /// 4.1.18 short_message: Up to 254 octets of short message user data. The exact physical 
+    /// 4.1.18 short_message: Up to 254 octets of short message user data. The exact physical
     ///        limit for short_message size may vary according to the underlying network.
-    ///        Applications which need to send messages longer than 254 octets should use the 
-    ///        message_payload TLV. When the message_payload TLV is specified, the sm_length 
+    ///        Applications which need to send messages longer than 254 octets should use the
+    ///        message_payload TLV. When the message_payload TLV is specified, the sm_length
     ///        field should be set to zero.
     pub short_message: String,
 
@@ -114,43 +122,43 @@ pub struct SubmitSm {
     /// User Message Reference TLV (0x0204): ESME assigned message reference number.
     pub user_message_reference: Option<Tlv>,
 
-    /// Source Port TLV (0x020A): Indicates the application port number associated with the 
+    /// Source Port TLV (0x020A): Indicates the application port number associated with the
     /// source address of the message.
     pub source_port: Option<Tlv>,
 
-    /// Source Address Subunit TLV (0x020B): The subcomponent in the destination device for 
+    /// Source Address Subunit TLV (0x020B): The subcomponent in the destination device for
     /// which the user data is intended.
     pub source_addr_submit: Option<Tlv>,
 
-    /// Destination Port TLV (0x020C): Indicates the application port number associated with 
+    /// Destination Port TLV (0x020C): Indicates the application port number associated with
     /// the destination address of the message.
     pub destination_port: Option<Tlv>,
 
-    /// Destination Address Subunit TLV (0x020D): The subcomponent in the destination device 
+    /// Destination Address Subunit TLV (0x020D): The subcomponent in the destination device
     /// for which the user data is intended.
     pub dest_addr_submit: Option<Tlv>,
 
-    /// SAR Message Reference Number TLV (0x020E): The reference number for a particular 
+    /// SAR Message Reference Number TLV (0x020E): The reference number for a particular
     /// concatenated short message.
     pub sar_msg_ref_num: Option<Tlv>,
 
-    /// SAR Total Segments TLV (0x020F): Indicates the total number of short messages within 
+    /// SAR Total Segments TLV (0x020F): Indicates the total number of short messages within
     /// the concatenated short message.
     pub sar_total_segments: Option<Tlv>,
 
-    /// SAR Segment Sequence Number TLV (0x0210): Indicates the sequence number of a particular 
+    /// SAR Segment Sequence Number TLV (0x0210): Indicates the sequence number of a particular
     /// short message within the concatenated short message.
     pub sar_segment_seqnum: Option<Tlv>,
 
-    /// More Messages to Send TLV (0x0426): Indicates that there are further messages to follow 
+    /// More Messages to Send TLV (0x0426): Indicates that there are further messages to follow
     /// for the destination SME.
     pub more_messages_to_send: Option<Tlv>,
 
     /// Payload Type TLV (0x0019): Defines the type of payload that is being sent in the message.
     pub payload_type: Option<Tlv>,
 
-    /// Message Payload TLV (0x0424): Contains the extended short message user data. Up to 64K 
-    /// octets can be sent. This TLV must not be specified when the sm_length and short_message 
+    /// Message Payload TLV (0x0424): Contains the extended short message user data. Up to 64K
+    /// octets can be sent. This TLV must not be specified when the sm_length and short_message
     /// fields contain message data.
     pub message_payload: Option<Tlv>,
 
@@ -160,7 +168,7 @@ pub struct SubmitSm {
     /// Callback Number TLV (0x0381): A callback number associated with the short message.
     pub callback_num: Option<Tlv>,
 
-    /// Callback Number Presentation Indicator TLV (0x0302): Controls the presentation indication 
+    /// Callback Number Presentation Indicator TLV (0x0302): Controls the presentation indication
     /// and screening of the callback number at the mobile station.
     pub callback_num_pres_ind: Option<Tlv>,
 
@@ -173,62 +181,58 @@ pub struct SubmitSm {
     /// Destination Subaddress TLV (0x0203): The subaddress of the message destination.
     pub dest_subaddress: Option<Tlv>,
 
-    /// Display Time TLV (0x1201): Provides the receiving MS with a display time associated with 
+    /// Display Time TLV (0x1201): Provides the receiving MS with a display time associated with
     /// the message.
     pub display_time: Option<Tlv>,
 
-    /// SMS Signal TLV (0x1203): Indicates the alerting mechanism when the message is received 
+    /// SMS Signal TLV (0x1203): Indicates the alerting mechanism when the message is received
     /// by the MS.
     pub sms_signal: Option<Tlv>,
 
     /// MS Validity TLV (0x1204): Indicates the validity period for the message at the MS.
     pub ms_validity: Option<Tlv>,
 
-    /// MS Message Wait Facilities TLV (0x1205): Allows the indication of a message waiting 
+    /// MS Message Wait Facilities TLV (0x1205): Allows the indication of a message waiting
     /// condition to be set or cleared.
     pub ms_msg_wait_facilities: Option<Tlv>,
 
     /// Number of Messages TLV (0x0205): Indicates the number of messages stored in a mailbox.
     pub number_of_messages: Option<Tlv>,
 
-    /// Alert on Message Delivery TLV (0x130C): Instructs the MS to alert the user when the 
+    /// Alert on Message Delivery TLV (0x130C): Instructs the MS to alert the user when the
     /// short message is received.
     pub alert_on_msg_delivery: Option<Tlv>,
 
     /// Language Indicator TLV (0x000D): Indicates the language of the short message.
     pub language_indicator: Option<Tlv>,
 
-    /// ITS Reply Type TLV (0x1380): Indicates the MS user's reply method to an ITS session 
+    /// ITS Reply Type TLV (0x1380): Indicates the MS user's reply method to an ITS session
     /// setup request.
     pub its_reply_type: Option<Tlv>,
 
     /// ITS Session Info TLV (0x1383): Session control information for Interactive Teleservice.
     pub its_session_info: Option<Tlv>,
 
-    /// USSD Service Operation TLV (0x0501): Indicates the USSD service operation when 
+    /// USSD Service Operation TLV (0x0501): Indicates the USSD service operation when
     /// applicable.
     pub ussd_service_op: Option<Tlv>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubmitSmValidationError {
-    #[error(
-        "service_type exceeds maximum length of 5 characters (6 with null terminator): {actual}"
-    )]
+    #[error("service_type exceeds maximum length of {MAX_SERVICE_TYPE_LENGTH} characters ({} with null terminator): {actual}", MAX_SERVICE_TYPE_LENGTH + 1)]
     ServiceTypeTooLong { actual: usize },
 
-    #[error(
-        "source_addr exceeds maximum length of 20 characters (21 with null terminator): {actual}"
-    )]
+    #[error("source_addr exceeds maximum length of {MAX_SOURCE_ADDR_LENGTH} characters ({} with null terminator): {actual}", MAX_SOURCE_ADDR_LENGTH + 1)]
     SourceAddrTooLong { actual: usize },
 
-    #[error("destination_addr exceeds maximum length of 20 characters (21 with null terminator): {actual}")]
+    #[error("destination_addr exceeds maximum length of {MAX_DESTINATION_ADDR_LENGTH} characters ({} with null terminator): {actual}", MAX_DESTINATION_ADDR_LENGTH + 1)]
     DestinationAddrTooLong { actual: usize },
 
-    #[error("schedule_delivery_time exceeds maximum length of 16 characters (17 with null terminator): {actual}")]
+    #[error("schedule_delivery_time exceeds maximum length of {MAX_SCHEDULE_DELIVERY_TIME_LENGTH} characters ({} with null terminator): {actual}", MAX_SCHEDULE_DELIVERY_TIME_LENGTH + 1)]
     ScheduleDeliveryTimeTooLong { actual: usize },
 
-    #[error("validity_period exceeds maximum length of 16 characters (17 with null terminator): {actual}")]
+    #[error("validity_period exceeds maximum length of {MAX_VALIDITY_PERIOD_LENGTH} characters ({} with null terminator): {actual}", MAX_VALIDITY_PERIOD_LENGTH + 1)]
     ValidityPeriodTooLong { actual: usize },
 
     #[error("sm_length ({sm_length}) does not match short_message length ({message_length})")]
@@ -237,7 +241,7 @@ pub enum SubmitSmValidationError {
         message_length: usize,
     },
 
-    #[error("short_message exceeds maximum length of 254 bytes (use message_payload TLV for longer messages): {actual}")]
+    #[error("short_message exceeds maximum length of {MAX_SHORT_MESSAGE_LENGTH} bytes (use message_payload TLV for longer messages): {actual}")]
     ShortMessageTooLong { actual: usize },
 
     #[error("Cannot use both short_message and message_payload - they are mutually exclusive")]
@@ -248,31 +252,31 @@ impl SubmitSm {
     /// Validates the SubmitSm PDU according to SMPP v3.4 specification
     pub fn validate(&self) -> Result<(), SubmitSmValidationError> {
         // Validate field length constraints
-        if self.service_type.len() > 5 {
+        if self.service_type.len() > MAX_SERVICE_TYPE_LENGTH {
             return Err(SubmitSmValidationError::ServiceTypeTooLong {
                 actual: self.service_type.len(),
             });
         }
 
-        if self.source_addr.len() > 20 {
+        if self.source_addr.len() > MAX_SOURCE_ADDR_LENGTH {
             return Err(SubmitSmValidationError::SourceAddrTooLong {
                 actual: self.source_addr.len(),
             });
         }
 
-        if self.destination_addr.len() > 20 {
+        if self.destination_addr.len() > MAX_DESTINATION_ADDR_LENGTH {
             return Err(SubmitSmValidationError::DestinationAddrTooLong {
                 actual: self.destination_addr.len(),
             });
         }
 
-        if self.schedule_delivery_time.len() > 16 {
+        if self.schedule_delivery_time.len() > MAX_SCHEDULE_DELIVERY_TIME_LENGTH {
             return Err(SubmitSmValidationError::ScheduleDeliveryTimeTooLong {
                 actual: self.schedule_delivery_time.len(),
             });
         }
 
-        if self.validity_period.len() > 16 {
+        if self.validity_period.len() > MAX_VALIDITY_PERIOD_LENGTH {
             return Err(SubmitSmValidationError::ValidityPeriodTooLong {
                 actual: self.validity_period.len(),
             });
@@ -287,7 +291,7 @@ impl SubmitSm {
         }
 
         // Validate short message length constraints
-        if self.short_message.len() > 254 {
+        if self.short_message.len() > MAX_SHORT_MESSAGE_LENGTH {
             return Err(SubmitSmValidationError::ShortMessageTooLong {
                 actual: self.short_message.len(),
             });
@@ -562,10 +566,10 @@ pub struct SubmitSmResponse {
     pub sequence_number: u32,
 
     // Body
-    /// 4.2.1 message_id: A unique message identifier assigned by the SMSC to each submitted 
-    ///       short message. This identifier is returned in the submit_sm_resp and should be 
-    ///       used in subsequent operations to refer to the message. The message identifier is 
-    ///       a C-Octet String variable length field up to 65 octets. The format of the 
+    /// 4.2.1 message_id: A unique message identifier assigned by the SMSC to each submitted
+    ///       short message. This identifier is returned in the submit_sm_resp and should be
+    ///       used in subsequent operations to refer to the message. The message identifier is
+    ///       a C-Octet String variable length field up to 65 octets. The format of the
     ///       message_id is vendor specific but must be unique within the SMSC.
     pub message_id: String,
 }

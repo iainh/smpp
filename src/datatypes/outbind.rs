@@ -18,7 +18,7 @@
 //! Once the SMPP session is established the characteristics of the session are
 //! that of a normal SMPP receiver session.
 
-use crate::datatypes::{CommandId, ToBytes};
+use crate::datatypes::{CommandId, ToBytes, MAX_PASSWORD_LENGTH, MAX_SYSTEM_ID_LENGTH};
 use bytes::{BufMut, Bytes, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,8 +38,41 @@ pub struct Outbind {
     pub password: Option<String>,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum OutbindValidationError {
+    #[error("system_id exceeds maximum length of {MAX_SYSTEM_ID_LENGTH} characters ({} with null terminator): {actual}", MAX_SYSTEM_ID_LENGTH + 1)]
+    SystemIdTooLong { actual: usize },
+
+    #[error("password exceeds maximum length of {MAX_PASSWORD_LENGTH} characters ({} with null terminator): {actual}", MAX_PASSWORD_LENGTH + 1)]
+    PasswordTooLong { actual: usize },
+}
+
+impl Outbind {
+    /// Validates the Outbind PDU according to SMPP v3.4 specification
+    pub fn validate(&self) -> Result<(), OutbindValidationError> {
+        // Validate field length constraints
+        if self.system_id.len() > MAX_SYSTEM_ID_LENGTH {
+            return Err(OutbindValidationError::SystemIdTooLong {
+                actual: self.system_id.len(),
+            });
+        }
+
+        if let Some(ref password) = self.password {
+            if password.len() > MAX_PASSWORD_LENGTH {
+                return Err(OutbindValidationError::PasswordTooLong {
+                    actual: password.len(),
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl ToBytes for Outbind {
     fn to_bytes(&self) -> Bytes {
+        // Validate field constraints per SMPP v3.4 specification
+        self.validate().expect("Outbind validation failed");
         let mut buffer = BytesMut::with_capacity(1024);
         // Write junk data that we'll replace later with the actual length
         buffer.put_u32(0);
@@ -114,5 +147,52 @@ mod tests {
             0x00, // password
         ];
         assert_eq!(&outbind.to_bytes(), &expected);
+    }
+
+    #[test]
+    fn outbind_field_length_validation_system_id() {
+        let outbind = Outbind {
+            sequence_number: 1,
+            system_id: "A".repeat(16), // Too long - max is 15
+            password: Some("pass".to_string()),
+        };
+
+        // Validate should return an error for system_id too long
+        let validation_result = outbind.validate();
+        assert!(validation_result.is_err());
+        assert!(matches!(
+            validation_result.unwrap_err(),
+            OutbindValidationError::SystemIdTooLong { .. }
+        ));
+    }
+
+    #[test]
+    fn outbind_field_length_validation_password() {
+        let outbind = Outbind {
+            sequence_number: 1,
+            system_id: "TEST".to_string(),
+            password: Some("A".repeat(9)), // Too long - max is 8
+        };
+
+        // Validate should return an error for password too long
+        let validation_result = outbind.validate();
+        assert!(validation_result.is_err());
+        assert!(matches!(
+            validation_result.unwrap_err(),
+            OutbindValidationError::PasswordTooLong { .. }
+        ));
+    }
+
+    #[test]
+    fn outbind_max_valid_lengths() {
+        // Test that maximum valid lengths work correctly
+        let outbind = Outbind {
+            sequence_number: 1,
+            system_id: "A".repeat(15),     // Max allowed
+            password: Some("B".repeat(8)), // Max allowed
+        };
+
+        let bytes = outbind.to_bytes();
+        assert!(bytes.len() > 16); // Should serialize successfully
     }
 }
