@@ -1,12 +1,12 @@
 //! Provides a type representing an SMPP protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
+use crate::datatypes::tags;
 use crate::datatypes::{
     BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, EnquireLink,
-    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, PriorityFlag, SubmitSm, SubmitSmResponse, Tlv,
-    TypeOfNumber, Unbind, UnbindResponse,
+    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, PriorityFlag, SubmitSm,
+    SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
 };
-use crate::datatypes::tags;
 use bytes::Buf;
 use core::fmt;
 use num_enum::TryFromPrimitiveError;
@@ -81,7 +81,11 @@ impl Frame {
                     command_status,
                     sequence_number,
                     system_id,
-                    password: if password.is_empty() { None } else { Some(password) },
+                    password: if password.is_empty() {
+                        None
+                    } else {
+                        Some(password)
+                    },
                     system_type,
                     interface_version,
                     addr_ton,
@@ -145,22 +149,25 @@ impl Frame {
                 let data_coding = get_u8(src)?;
                 let sm_default_msg_id = get_u8(src)?;
                 let sm_length = get_u8(src)?;
-                
+
                 // Validate sm_length is within bounds
                 if sm_length > 254 {
-                    return Err(Error::Other(format!("sm_length ({}) exceeds maximum of 254 bytes", sm_length).into()));
+                    return Err(Error::Other(
+                        format!("sm_length ({}) exceeds maximum of 254 bytes", sm_length).into(),
+                    ));
                 }
-                
+
                 // Ensure we have enough remaining bytes for the short message
                 if src.remaining() < sm_length as usize {
                     return Err(Error::Incomplete);
                 }
-                
+
                 // Read short message based on sm_length
                 let short_message = if sm_length > 0 {
                     let message_bytes = src.copy_to_bytes(sm_length as usize);
-                    String::from_utf8(message_bytes.into())
-                        .map_err(|e| Error::Other(format!("Invalid UTF-8 in short_message: {}", e).into()))?
+                    String::from_utf8(message_bytes.into()).map_err(|e| {
+                        Error::Other(format!("Invalid UTF-8 in short_message: {}", e).into())
+                    })?
                 } else {
                     String::new()
                 };
@@ -214,7 +221,7 @@ impl Frame {
                                 return Err(Error::Other("Cannot use both short_message and message_payload - they are mutually exclusive".into()));
                             }
                             message_payload = Some(tlv);
-                        },
+                        }
                         tags::PRIVACY_INDICATOR => privacy_indicator = Some(tlv),
                         tags::CALLBACK_NUM => callback_num = Some(tlv),
                         tags::CALLBACK_NUM_PRES_IND => callback_num_pres_ind = Some(tlv),
@@ -360,12 +367,14 @@ fn get_cstring_field(
     field_name: &str,
 ) -> Result<String, Error> {
     if !src.has_remaining() {
-        return Err(Error::Other(format!("No data available for field {}", field_name).into()));
+        return Err(Error::Other(
+            format!("No data available for field {}", field_name).into(),
+        ));
     }
 
     let _start_pos = src.position();
     let available_bytes = src.remaining().min(max_length);
-    
+
     // Look for null terminator within field bounds
     let mut terminator_pos = None;
     let current_chunk = src.chunk();
@@ -382,17 +391,26 @@ fn get_cstring_field(
             // If no null terminator found within max_length, check if we hit the field boundary
             if available_bytes == max_length {
                 // Field uses full width without null terminator - handle gracefully but log warning
-                tracing::warn!("Field {} missing null terminator, using full field length", field_name);
+                tracing::warn!(
+                    "Field {} missing null terminator, using full field length",
+                    field_name
+                );
                 max_length.saturating_sub(1) // Reserve space for implied null terminator
             } else {
-                return Err(Error::Other(format!("Missing null terminator in field {} (available: {}, max: {})", field_name, available_bytes, max_length).into()));
+                return Err(Error::Other(
+                    format!(
+                        "Missing null terminator in field {} (available: {}, max: {})",
+                        field_name, available_bytes, max_length
+                    )
+                    .into(),
+                ));
             }
         }
     };
 
     // Extract string content only (without null terminator)
     let string_bytes = src.copy_to_bytes(string_length);
-    
+
     // Skip null terminator if present
     if terminator_pos.is_some() && src.has_remaining() {
         src.advance(1);
@@ -401,7 +419,9 @@ fn get_cstring_field(
     // Validate UTF-8 and convert
     match String::from_utf8(string_bytes.into()) {
         Ok(s) => Ok(s),
-        Err(e) => Err(Error::Other(format!("Invalid UTF-8 in field {}: {}", field_name, e).into())),
+        Err(e) => Err(Error::Other(
+            format!("Invalid UTF-8 in field {}: {}", field_name, e).into(),
+        )),
     }
 }
 
@@ -652,13 +672,13 @@ mod tests {
     }
 
     #[test]
-    fn get_until_coctet_string_test() {
+    fn get_cstring_field_compatibility_test() {
         use std::io::Cursor;
 
         let data = "This is the first part\0This is the second.\0".as_bytes();
         let mut buff = Cursor::new(data);
 
-        let result = get_until_coctet_string(&mut buff, Some(23));
+        let result = get_cstring_field(&mut buff, 23, "test_field");
         assert!(result.is_ok());
 
         let result = result.unwrap();
@@ -666,10 +686,10 @@ mod tests {
         assert_eq!(result.len(), 22);
         assert_eq!("This is the first part".to_string(), result);
 
-        // Ensure that the cursor has advanced 4 bytes
+        // Ensure that the cursor has advanced 23 bytes (22 chars + null terminator)
         assert_eq!(buff.remaining(), data.len() - 23);
 
-        let result = get_until_coctet_string(&mut buff, None);
+        let result = get_cstring_field(&mut buff, 256, "test_field");
         assert!(result.is_ok());
 
         let result = result.unwrap();
@@ -678,7 +698,7 @@ mod tests {
         let data = "This is the first part\0This is the second.\0".as_bytes();
         let mut buff = Cursor::new(data);
 
-        let result = get_until_coctet_string(&mut buff, Some(4));
+        let result = get_cstring_field(&mut buff, 4, "test_field");
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 3); // "Thi" - truncated at 4 bytes but excluding null terminator
     }
@@ -768,8 +788,9 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
             // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id "SMPP3TEST\0"
-            // No TLV data - that's it
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54,
+            0x00, // system_id "SMPP3TEST\0"
+                  // No TLV data - that's it
         ];
 
         let data = data.as_slice();
@@ -840,7 +861,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x15, // command_id (enquire_link)
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
-            // No body for enquire_link
+                  // No body for enquire_link
         ];
 
         let data = data.as_slice();
@@ -867,8 +888,9 @@ mod tests {
             0x00, 0x00, 0x00, 0x10, // command_length
             0x80, 0x00, 0x00, 0x15, // command_id (enquire_link_resp)
             0x00, 0x00, 0x00, 0x00, // command_status
-            0x00, 0x00, 0x00, 0x01, // sequence_number
-            // No body for enquire_link_resp
+            0x00, 0x00, 0x00,
+            0x01, // sequence_number
+                  // No body for enquire_link_resp
         ];
 
         let data = data.as_slice();
@@ -1062,7 +1084,7 @@ mod tests {
             assert_eq!(bt.password, Some("PASS".to_string()));
             assert_eq!(bt.system_type, "TYPE");
             assert_eq!(bt.address_range, "");
-            
+
             // Verify no null bytes in strings
             assert!(!bt.system_id.contains('\0'));
             assert!(!bt.password.as_ref().unwrap().contains('\0'));
@@ -1079,7 +1101,7 @@ mod tests {
 
         // Test with maximum allowed field lengths per SMPP spec
         let system_id_max = "A".repeat(15); // 15 chars + null terminator = 16 total
-        let password_max = "B".repeat(8);   // 8 chars + null terminator = 9 total
+        let password_max = "B".repeat(8); // 8 chars + null terminator = 9 total
         let system_type_max = "C".repeat(12); // 12 chars + null terminator = 13 total
         let address_range_max = "D".repeat(40); // 40 chars + null terminator = 41 total
 
@@ -1109,9 +1131,9 @@ mod tests {
 
         let mut cursor = Cursor::new(data.as_slice());
         let result = Frame::parse(&mut cursor);
-        
+
         assert!(result.is_ok());
-        
+
         if let Frame::BindTransmitter(bt) = result.unwrap() {
             assert_eq!(bt.system_id, system_id_max);
             assert_eq!(bt.password, Some(password_max));
@@ -1137,7 +1159,8 @@ mod tests {
             b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', 0x00, // source_addr
             0x01, // dest_addr_ton (International)
             0x01, // dest_addr_npi (ISDN)
-            b'0', b'9', b'8', b'7', b'6', b'5', b'4', b'3', b'2', b'1', 0x00, // destination_addr
+            b'0', b'9', b'8', b'7', b'6', b'5', b'4', b'3', b'2', b'1',
+            0x00, // destination_addr
             0x00, // esm_class
             0x00, // protocol_id
             0x00, // priority_flag
@@ -1233,7 +1256,7 @@ mod tests {
             assert_eq!(submit_sm.sm_length, 4);
             assert!(submit_sm.user_message_reference.is_some());
             assert!(submit_sm.source_port.is_some());
-            
+
             let user_msg_ref = submit_sm.user_message_reference.unwrap();
             assert_eq!(user_msg_ref.tag, 0x0204);
             assert_eq!(user_msg_ref.length, 2);
@@ -1276,7 +1299,7 @@ mod tests {
             0x00, // data_coding
             0x00, // sm_default_msg_id
             0x00, // sm_length (0 bytes)
-            // No short_message data
+                  // No short_message data
         ];
 
         let mut cursor = Cursor::new(data.as_slice());
@@ -1298,7 +1321,7 @@ mod tests {
 
         let data: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x2F, // command_length 
+            0x00, 0x00, 0x00, 0x2F, // command_length
             0x00, 0x00, 0x00, 0x04, // command_id (submit_sm)
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
@@ -1330,7 +1353,7 @@ mod tests {
 
     #[test]
     fn submit_sm_roundtrip_test() {
-        use crate::datatypes::{SubmitSm, PriorityFlag, ToBytes};
+        use crate::datatypes::{PriorityFlag, SubmitSm, ToBytes};
 
         let original = SubmitSm {
             command_status: CommandStatus::Ok,
@@ -1384,7 +1407,7 @@ mod tests {
 
         // Serialize to bytes
         let serialized = original.to_bytes();
-        
+
         // Parse back from bytes
         let mut cursor = std::io::Cursor::new(serialized.as_ref());
         let parsed_frame = Frame::parse(&mut cursor).unwrap();
@@ -1403,10 +1426,16 @@ mod tests {
             assert_eq!(parsed.esm_class, original.esm_class);
             assert_eq!(parsed.protocol_id, original.protocol_id);
             assert_eq!(parsed.priority_flag, original.priority_flag);
-            assert_eq!(parsed.schedule_delivery_time, original.schedule_delivery_time);
+            assert_eq!(
+                parsed.schedule_delivery_time,
+                original.schedule_delivery_time
+            );
             assert_eq!(parsed.validity_period, original.validity_period);
             assert_eq!(parsed.registered_delivery, original.registered_delivery);
-            assert_eq!(parsed.replace_if_present_flag, original.replace_if_present_flag);
+            assert_eq!(
+                parsed.replace_if_present_flag,
+                original.replace_if_present_flag
+            );
             assert_eq!(parsed.data_coding, original.data_coding);
             assert_eq!(parsed.sm_default_msg_id, original.sm_default_msg_id);
             assert_eq!(parsed.sm_length, original.sm_length);
