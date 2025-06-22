@@ -51,13 +51,13 @@ mod integration_tests {
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: "A".repeat(16), // Max 16 chars
-            password: Some("B".repeat(9)), // Max 9 chars
-            system_type: "C".repeat(13), // Max 13 chars
+            system_id: "A".repeat(15), // Max 15 chars (16 with null terminator)
+            password: Some("B".repeat(8)), // Max 8 chars (9 with null terminator)
+            system_type: "C".repeat(12), // Max 12 chars (13 with null terminator)
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
             addr_npi: NumericPlanIndicator::Isdn,
-            address_range: "D".repeat(41), // Max 41 chars
+            address_range: "D".repeat(40), // Max 40 chars (41 with null terminator)
         };
 
         let bytes = bind_transmitter.to_bytes();
@@ -362,13 +362,13 @@ mod integration_tests {
 
     #[test]
     fn test_unicode_string_handling() {
-        // Test with Unicode characters
+        // Test with Unicode characters (keeping within byte limits)
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: "SMPP测试".to_string(), // Contains Chinese characters
-            password: Some("密码123".to_string()), // Contains Chinese characters
-            system_type: "テスト".to_string(), // Contains Japanese characters
+            system_id: "SMPP测试".to_string(), // Contains Chinese characters (8 bytes)
+            password: Some("密码".to_string()), // Contains Chinese characters (6 bytes)
+            system_type: "テスト".to_string(), // Contains Japanese characters (9 bytes)
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
             addr_npi: NumericPlanIndicator::Isdn,

@@ -10,7 +10,7 @@ use bytes::Buf;
 use core::fmt;
 use num_enum::TryFromPrimitiveError;
 use std::convert::TryFrom;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::mem::size_of;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
@@ -68,19 +68,19 @@ impl Frame {
         // Based on the command_id, parse the body
         let command = match command_id {
             CommandId::BindTransmitter => {
-                let system_id = get_until_coctet_string(src, Some(16))?;
-                let password = get_until_coctet_string(src, Some(9))?;
-                let system_type = get_until_coctet_string(src, Some(13))?;
+                let system_id = get_cstring_field(src, 16, "system_id")?;
+                let password = get_cstring_field(src, 9, "password")?;
+                let system_type = get_cstring_field(src, 13, "system_type")?;
                 let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
                 let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
                 let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let address_range = get_until_coctet_string(src, Some(41))?;
+                let address_range = get_cstring_field(src, 41, "address_range")?;
 
                 let pdu = BindTransmitter {
                     command_status,
                     sequence_number,
                     system_id,
-                    password: Some(password),
+                    password: if password.is_empty() { None } else { Some(password) },
                     system_type,
                     interface_version,
                     addr_ton,
@@ -90,7 +90,7 @@ impl Frame {
                 Frame::BindTransmitter(pdu)
             }
             CommandId::BindTransmitterResp => {
-                let system_id = get_until_coctet_string(src, Some(16))?;
+                let system_id = get_cstring_field(src, 16, "system_id")?;
 
                 let sc_interface_version = match src.has_remaining() {
                     true => Some(get_tlv(src)?),
@@ -115,7 +115,7 @@ impl Frame {
                 Frame::EnquireLinkResponse(pdu)
             }
             CommandId::SubmitSmResp => {
-                let message_id = get_until_coctet_string(src, Some(65))?;
+                let message_id = get_cstring_field(src, 65, "message_id")?;
 
                 let pdu = SubmitSmResponse {
                     command_status,
@@ -189,36 +189,66 @@ fn get_u32(src: &mut Cursor<&[u8]>) -> Result<u32, Error> {
 }
 
 #[tracing::instrument]
+fn get_cstring_field(
+    src: &mut Cursor<&[u8]>,
+    max_length: usize,
+    field_name: &str,
+) -> Result<String, Error> {
+    if !src.has_remaining() {
+        return Err(Error::Other(format!("No data available for field {}", field_name).into()));
+    }
+
+    let _start_pos = src.position();
+    let available_bytes = src.remaining().min(max_length);
+    
+    // Look for null terminator within field bounds
+    let mut terminator_pos = None;
+    let current_chunk = src.chunk();
+    for i in 0..available_bytes {
+        if i < current_chunk.len() && current_chunk[i] == 0 {
+            terminator_pos = Some(i);
+            break;
+        }
+    }
+
+    let string_length = match terminator_pos {
+        Some(pos) => pos,
+        None => {
+            // If no null terminator found within max_length, check if we hit the field boundary
+            if available_bytes == max_length {
+                // Field uses full width without null terminator - handle gracefully but log warning
+                tracing::warn!("Field {} missing null terminator, using full field length", field_name);
+                max_length.saturating_sub(1) // Reserve space for implied null terminator
+            } else {
+                return Err(Error::Other(format!("Missing null terminator in field {} (available: {}, max: {})", field_name, available_bytes, max_length).into()));
+            }
+        }
+    };
+
+    // Extract string content only (without null terminator)
+    let string_bytes = src.copy_to_bytes(string_length);
+    
+    // Skip null terminator if present
+    if terminator_pos.is_some() && src.has_remaining() {
+        src.advance(1);
+    }
+
+    // Validate UTF-8 and convert
+    match String::from_utf8(string_bytes.to_vec()) {
+        Ok(s) => Ok(s),
+        Err(e) => Err(Error::Other(format!("Invalid UTF-8 in field {}: {}", field_name, e).into())),
+    }
+}
+
+// Keep the old function for backward compatibility during transition
+#[tracing::instrument]
+#[deprecated(note = "Use get_cstring_field instead for better error handling and SMPP compliance")]
 fn get_until_coctet_string(
     src: &mut Cursor<&[u8]>,
     max_length: Option<u64>,
 ) -> Result<String, Error> {
-    if !&src.has_remaining() {
-        return Err(Error::Incomplete);
-    }
-
-    let sp = src.position();
-    let mut terminator_index = src
-        .bytes()
-        .into_iter()
-        .position(|x| x.is_ok() && x.unwrap() == 0u8)
-        .ok_or(Error::Incomplete)?;
-
-    if let Some(max_length) = max_length {
-        let last_position = (sp + max_length) as usize;
-        // Constrain to the max_length of the field if we haven't found a null terminator
-        if terminator_index >= last_position {
-            terminator_index = last_position - 1;
-        }
-    }
-
-    src.set_position(sp);
-
-    let buffer = src.copy_to_bytes(terminator_index + 1);
-
-    let result = String::from_utf8_lossy(&buffer).into();
-
-    Ok(result)
+    let max_len = max_length.unwrap_or(256) as usize;
+    get_cstring_field(src, max_len, "unknown_field")
 }
 
 #[tracing::instrument]
@@ -462,8 +492,8 @@ mod tests {
 
         let result = result.unwrap();
 
-        assert_eq!(result.len(), 23);
-        assert_eq!("This is the first part\0".to_string(), result);
+        assert_eq!(result.len(), 22);
+        assert_eq!("This is the first part".to_string(), result);
 
         // Ensure that the cursor has advanced 4 bytes
         assert_eq!(buff.remaining(), data.len() - 23);
@@ -472,14 +502,14 @@ mod tests {
         assert!(result.is_ok());
 
         let result = result.unwrap();
-        assert_eq!("This is the second.\0".to_string(), result);
+        assert_eq!("This is the second.".to_string(), result);
 
         let data = "This is the first part\0This is the second.\0".as_bytes();
         let mut buff = Cursor::new(data);
 
         let result = get_until_coctet_string(&mut buff, Some(4));
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 4);
+        assert_eq!(result.unwrap().len(), 3); // "Thi" - truncated at 4 bytes but excluding null terminator
     }
 
     #[test]
@@ -544,13 +574,13 @@ mod tests {
         let frame = result.unwrap();
         if let Frame::BindTransmitter(bt) = frame {
             assert_eq!(bt.command_status, CommandStatus::Ok);
-            assert_eq!(&bt.system_id, "SMPP3TEST\0");
-            assert_eq!(bt.password, Some("secret08\0".to_string()));
-            assert_eq!(&bt.system_type, "SUBMIT1\0");
+            assert_eq!(&bt.system_id, "SMPP3TEST");
+            assert_eq!(bt.password, Some("secret08".to_string()));
+            assert_eq!(&bt.system_type, "SUBMIT1");
             assert_eq!(bt.interface_version, InterfaceVersion::SmppV34);
             assert_eq!(bt.addr_ton, TypeOfNumber::International);
             assert_eq!(bt.addr_npi, NumericPlanIndicator::Isdn);
-            assert_eq!(&bt.address_range, "\0");
+            assert_eq!(&bt.address_range, "");
         } else {
             panic!("Unexpected frame variant");
         }
@@ -582,7 +612,7 @@ mod tests {
         if let Frame::BindTransmitterResponse(btr) = frame {
             assert_eq!(btr.command_status, CommandStatus::Ok);
             assert_eq!(btr.sequence_number, 1);
-            assert_eq!(&btr.system_id, "SMPP3TEST\0");
+            assert_eq!(&btr.system_id, "SMPP3TEST");
             assert!(btr.sc_interface_version.is_none());
         } else {
             panic!("Unexpected frame variant");
@@ -618,7 +648,7 @@ mod tests {
         if let Frame::BindTransmitterResponse(btr) = frame {
             assert_eq!(btr.command_status, CommandStatus::Ok);
             assert_eq!(btr.sequence_number, 1);
-            assert_eq!(&btr.system_id, "SMPP3TEST\0");
+            assert_eq!(&btr.system_id, "SMPP3TEST");
             assert!(btr.sc_interface_version.is_some());
             let tlv = btr.sc_interface_version.unwrap();
             assert_eq!(tlv.tag, 0x0010);
@@ -710,7 +740,7 @@ mod tests {
         if let Frame::SubmitSmResponse(ssr) = frame {
             assert_eq!(ssr.command_status, CommandStatus::Ok);
             assert_eq!(ssr.sequence_number, 1);
-            assert_eq!(&ssr.message_id, "msg_id\0");
+            assert_eq!(&ssr.message_id, "msg_id");
         } else {
             panic!("Unexpected frame variant");
         }
@@ -775,6 +805,147 @@ mod tests {
         match result.unwrap_err() {
             Error::Incomplete => (),
             _ => panic!("Expected Incomplete error"),
+        }
+    }
+
+    #[test]
+    fn test_cstring_field_parsing() {
+        use std::io::Cursor;
+
+        // Test normal null-terminated string
+        let data = b"TEST\0";
+        let mut cursor = Cursor::new(&data[..]);
+        let result = get_cstring_field(&mut cursor, 16, "test_field").unwrap();
+        assert_eq!(result, "TEST");
+        assert_eq!(cursor.position(), 5); // Should advance past null terminator
+
+        // Test string at max length with null terminator
+        let data = b"ABCDEFGHIJKLMNO\0"; // 15 chars + null = 16 total
+        let mut cursor = Cursor::new(&data[..]);
+        let result = get_cstring_field(&mut cursor, 16, "test_field").unwrap();
+        assert_eq!(result, "ABCDEFGHIJKLMNO");
+
+        // Test empty string
+        let data = b"\0";
+        let mut cursor = Cursor::new(&data[..]);
+        let result = get_cstring_field(&mut cursor, 16, "test_field").unwrap();
+        assert_eq!(result, "");
+
+        // Test UTF-8 validation
+        let data = b"Caf\xc3\xa9\0"; // "Café" in UTF-8
+        let mut cursor = Cursor::new(&data[..]);
+        let result = get_cstring_field(&mut cursor, 16, "test_field").unwrap();
+        assert_eq!(result, "Café");
+    }
+
+    #[test]
+    fn test_cstring_field_error_cases() {
+        use std::io::Cursor;
+
+        // Test missing null terminator within field boundary
+        let data = b"TOOLONGWITHOUTTRUNCATION";
+        let mut cursor = Cursor::new(&data[..]);
+        let result = get_cstring_field(&mut cursor, 5, "test_field");
+        assert!(result.is_ok()); // Should handle gracefully with warning
+
+        // Test invalid UTF-8
+        let data = b"\xff\xfe\0";
+        let mut cursor = Cursor::new(&data[..]);
+        let result = get_cstring_field(&mut cursor, 16, "test_field");
+        assert!(result.is_err());
+
+        // Test insufficient data
+        let data = b"";
+        let mut cursor = Cursor::new(&data[..]);
+        let result = get_cstring_field(&mut cursor, 16, "test_field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_string_parsing_no_null_terminators() {
+        use std::io::Cursor;
+
+        // Test data with various string fields
+        let data: Vec<u8> = vec![
+            // Header
+            0x00, 0x00, 0x00, 0x2F, // command_length
+            0x00, 0x00, 0x00, 0x02, // command_id
+            0x00, 0x00, 0x00, 0x00, // command_status
+            0x00, 0x00, 0x00, 0x01, // sequence_number
+            // Body
+            b'T', b'E', b'S', b'T', 0x00, // system_id: "TEST\0"
+            b'P', b'A', b'S', b'S', 0x00, // password: "PASS\0"
+            b'T', b'Y', b'P', b'E', 0x00, // system_type: "TYPE\0"
+            0x34, // interface_version
+            0x01, // addr_ton
+            0x01, // addr_npi
+            0x00, // address_range: empty
+        ];
+
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = Frame::parse(&mut cursor).unwrap();
+
+        if let Frame::BindTransmitter(bt) = result {
+            // Strings should not contain null terminators
+            assert_eq!(bt.system_id, "TEST");
+            assert_eq!(bt.password, Some("PASS".to_string()));
+            assert_eq!(bt.system_type, "TYPE");
+            assert_eq!(bt.address_range, "");
+            
+            // Verify no null bytes in strings
+            assert!(!bt.system_id.contains('\0'));
+            assert!(!bt.password.as_ref().unwrap().contains('\0'));
+            assert!(!bt.system_type.contains('\0'));
+            assert!(!bt.address_range.contains('\0'));
+        } else {
+            panic!("Expected BindTransmitter frame");
+        }
+    }
+
+    #[test]
+    fn test_field_length_boundaries() {
+        use std::io::Cursor;
+
+        // Test with maximum allowed field lengths per SMPP spec
+        let system_id_max = "A".repeat(15); // 15 chars + null terminator = 16 total
+        let password_max = "B".repeat(8);   // 8 chars + null terminator = 9 total
+        let system_type_max = "C".repeat(12); // 12 chars + null terminator = 13 total
+        let address_range_max = "D".repeat(40); // 40 chars + null terminator = 41 total
+
+        let mut data = Vec::new();
+        // Header
+        data.extend_from_slice(&0x00000000u32.to_be_bytes()); // command_length (will be updated)
+        data.extend_from_slice(&0x00000002u32.to_be_bytes()); // command_id
+        data.extend_from_slice(&0x00000000u32.to_be_bytes()); // command_status
+        data.extend_from_slice(&0x00000001u32.to_be_bytes()); // sequence_number
+
+        // Body with max length fields
+        data.extend_from_slice(system_id_max.as_bytes());
+        data.push(0); // null terminator
+        data.extend_from_slice(password_max.as_bytes());
+        data.push(0); // null terminator
+        data.extend_from_slice(system_type_max.as_bytes());
+        data.push(0); // null terminator
+        data.push(0x34); // interface_version
+        data.push(0x01); // addr_ton
+        data.push(0x01); // addr_npi
+        data.extend_from_slice(address_range_max.as_bytes());
+        data.push(0); // null terminator
+
+        // Update command_length
+        let length = data.len() as u32;
+        data[0..4].copy_from_slice(&length.to_be_bytes());
+
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = Frame::parse(&mut cursor);
+        
+        assert!(result.is_ok());
+        
+        if let Frame::BindTransmitter(bt) = result.unwrap() {
+            assert_eq!(bt.system_id, system_id_max);
+            assert_eq!(bt.password, Some(password_max));
+            assert_eq!(bt.system_type, system_type_max);
+            assert_eq!(bt.address_range, address_range_max);
         }
     }
 }

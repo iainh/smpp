@@ -65,6 +65,22 @@ pub struct BindTransmitterResponse {
 
 impl ToBytes for BindTransmitter {
     fn to_bytes(&self) -> Bytes {
+        // Validate field lengths according to SMPP v3.4 specification
+        if self.system_id.len() > 15 {
+            panic!("system_id exceeds maximum length of 15 characters (16 with null terminator)");
+        }
+        if let Some(ref password) = self.password {
+            if password.len() > 8 {
+                panic!("password exceeds maximum length of 8 characters (9 with null terminator)");
+            }
+        }
+        if self.system_type.len() > 12 {
+            panic!("system_type exceeds maximum length of 12 characters (13 with null terminator)");
+        }
+        if self.address_range.len() > 40 {
+            panic!("address_range exceeds maximum length of 40 characters (41 with null terminator)");
+        }
+
         let system_id = self.system_id.as_bytes();
         let password = self.password.as_ref().map(|p| p.as_bytes());
         let system_type = self.system_type.as_bytes();
@@ -360,16 +376,107 @@ mod tests {
         if let Frame::BindTransmitter(parsed) = parsed_frame {
             assert_eq!(parsed.command_status, original.command_status);
             assert_eq!(parsed.sequence_number, original.sequence_number);
-            // Note: parsed strings include null terminators due to parsing bug
-            assert_eq!(parsed.system_id, format!("{}\0", original.system_id));
-            assert_eq!(parsed.password, Some(format!("{}\0", original.password.unwrap())));
-            assert_eq!(parsed.system_type, format!("{}\0", original.system_type));
+            // Strings should now match exactly (no null terminators)
+            assert_eq!(parsed.system_id, original.system_id);
+            assert_eq!(parsed.password, original.password);
+            assert_eq!(parsed.system_type, original.system_type);
             assert_eq!(parsed.interface_version, original.interface_version);
             assert_eq!(parsed.addr_ton, original.addr_ton);
             assert_eq!(parsed.addr_npi, original.addr_npi);
-            assert_eq!(parsed.address_range, format!("{}\0", original.address_range));
+            assert_eq!(parsed.address_range, original.address_range);
         } else {
             panic!("Expected BindTransmitter frame");
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "system_id exceeds maximum length")]
+    fn bind_transmitter_field_length_validation_system_id() {
+        let bind_transmitter = BindTransmitter {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            system_id: "A".repeat(16), // Too long - max is 15
+            password: Some("pass".to_string()),
+            system_type: "TYPE".to_string(),
+            interface_version: InterfaceVersion::SmppV34,
+            addr_ton: TypeOfNumber::International,
+            addr_npi: NumericPlanIndicator::Isdn,
+            address_range: "".to_string(),
+        };
+
+        let _ = bind_transmitter.to_bytes(); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "password exceeds maximum length")]
+    fn bind_transmitter_field_length_validation_password() {
+        let bind_transmitter = BindTransmitter {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            system_id: "TEST".to_string(),
+            password: Some("A".repeat(9)), // Too long - max is 8
+            system_type: "TYPE".to_string(),
+            interface_version: InterfaceVersion::SmppV34,
+            addr_ton: TypeOfNumber::International,
+            addr_npi: NumericPlanIndicator::Isdn,
+            address_range: "".to_string(),
+        };
+
+        let _ = bind_transmitter.to_bytes(); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "system_type exceeds maximum length")]
+    fn bind_transmitter_field_length_validation_system_type() {
+        let bind_transmitter = BindTransmitter {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            system_id: "TEST".to_string(),
+            password: Some("pass".to_string()),
+            system_type: "A".repeat(13), // Too long - max is 12
+            interface_version: InterfaceVersion::SmppV34,
+            addr_ton: TypeOfNumber::International,
+            addr_npi: NumericPlanIndicator::Isdn,
+            address_range: "".to_string(),
+        };
+
+        let _ = bind_transmitter.to_bytes(); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "address_range exceeds maximum length")]
+    fn bind_transmitter_field_length_validation_address_range() {
+        let bind_transmitter = BindTransmitter {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            system_id: "TEST".to_string(),
+            password: Some("pass".to_string()),
+            system_type: "TYPE".to_string(),
+            interface_version: InterfaceVersion::SmppV34,
+            addr_ton: TypeOfNumber::International,
+            addr_npi: NumericPlanIndicator::Isdn,
+            address_range: "A".repeat(41), // Too long - max is 40
+        };
+
+        let _ = bind_transmitter.to_bytes(); // Should panic
+    }
+
+    #[test]
+    fn bind_transmitter_max_valid_lengths() {
+        // Test that maximum valid lengths work correctly
+        let bind_transmitter = BindTransmitter {
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+            system_id: "A".repeat(15), // Max allowed
+            password: Some("B".repeat(8)), // Max allowed
+            system_type: "C".repeat(12), // Max allowed
+            interface_version: InterfaceVersion::SmppV34,
+            addr_ton: TypeOfNumber::International,
+            addr_npi: NumericPlanIndicator::Isdn,
+            address_range: "D".repeat(40), // Max allowed
+        };
+
+        let bytes = bind_transmitter.to_bytes();
+        assert!(bytes.len() > 16); // Should serialize successfully
     }
 }
