@@ -23,7 +23,7 @@ pub struct EnquireLinkResponse {
 
 impl ToBytes for EnquireLink {
     fn to_bytes(&self) -> Bytes {
-        let length = 12;
+        let length = 16; // SMPP header is 16 bytes (4+4+4+4), enquire_link has no body
         let mut buffer = BytesMut::with_capacity(length);
 
         buffer.put_u32(length as u32);
@@ -37,7 +37,7 @@ impl ToBytes for EnquireLink {
 
 impl ToBytes for EnquireLinkResponse {
     fn to_bytes(&self) -> Bytes {
-        let length = 12;
+        let length = 16; // SMPP header is 16 bytes (4+4+4+4), enquire_link response has no body
         let mut buffer = BytesMut::with_capacity(length);
 
         // Write temporary data that we'll replace later with the actual length

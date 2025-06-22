@@ -25,12 +25,12 @@ pub struct UnbindResponse {
 
 impl ToBytes for Unbind {
     fn to_bytes(&self) -> Bytes {
-        let length = 12;
+        let length = 16; // SMPP header is 16 bytes (4+4+4+4), unbind has no body
         let mut buffer = BytesMut::with_capacity(length);
 
         buffer.put_u32(length as u32);
         buffer.put_u32(CommandId::Unbind as u32);
-        buffer.put_u32(self.command_status as u32);
+        buffer.put_u32(0u32); // Request PDUs must have command_status = 0 per SMPP spec
         buffer.put_u32(self.sequence_number);
         buffer.freeze()
     }
@@ -38,7 +38,7 @@ impl ToBytes for Unbind {
 
 impl ToBytes for UnbindResponse {
     fn to_bytes(&self) -> Bytes {
-        let length = 12;
+        let length = 16; // SMPP header is 16 bytes (4+4+4+4), unbind response has no body
         let mut buffer = BytesMut::with_capacity(length);
 
         buffer.put_u32(length as u32);
