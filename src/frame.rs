@@ -3,9 +3,9 @@
 
 use crate::datatypes::tags;
 use crate::datatypes::{
-    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, EnquireLink,
-    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, PriorityFlag, SubmitSm,
-    SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
+    BindReceiver, BindReceiverResponse, BindTransmitter, BindTransmitterResponse, CommandId,
+    CommandStatus, EnquireLink, EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator,
+    PriorityFlag, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
 };
 use bytes::Buf;
 use core::fmt;
@@ -18,6 +18,8 @@ use std::string::FromUtf8Error;
 
 #[derive(Clone, Debug)]
 pub enum Frame {
+    BindReceiver(BindReceiver),
+    BindReceiverResponse(BindReceiverResponse),
     BindTransmitter(BindTransmitter),
     BindTransmitterResponse(BindTransmitterResponse),
     EnquireLink(EnquireLink),
@@ -110,6 +112,49 @@ impl Frame {
                 };
 
                 Frame::BindTransmitterResponse(pdu)
+            }
+            CommandId::BindReceiver => {
+                let system_id = get_cstring_field(src, 16, "system_id")?;
+                let password = get_cstring_field(src, 9, "password")?;
+                let system_type = get_cstring_field(src, 13, "system_type")?;
+                let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
+                let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+                let address_range = get_cstring_field(src, 41, "address_range")?;
+
+                let pdu = BindReceiver {
+                    command_status,
+                    sequence_number,
+                    system_id,
+                    password: if password.is_empty() {
+                        None
+                    } else {
+                        Some(password)
+                    },
+                    system_type,
+                    interface_version,
+                    addr_ton,
+                    addr_npi,
+                    address_range,
+                };
+                Frame::BindReceiver(pdu)
+            }
+            CommandId::BindReceiverResp => {
+                let system_id = get_cstring_field(src, 16, "system_id")?;
+
+                let sc_interface_version = match src.has_remaining() {
+                    true => Some(get_tlv(src)?),
+                    false => None,
+                };
+
+                let pdu = BindReceiverResponse {
+                    command_status,
+                    sequence_number,
+                    system_id,
+                    sc_interface_version,
+                };
+
+                Frame::BindReceiverResponse(pdu)
             }
             CommandId::EnquireLink => {
                 let pdu = EnquireLink { sequence_number };
@@ -297,8 +342,28 @@ impl Frame {
 
                 Frame::SubmitSm(Box::new(pdu))
             }
+            CommandId::Unbind => {
+                let pdu = Unbind {
+                    command_status,
+                    sequence_number,
+                };
+                Frame::Unbind(pdu)
+            }
+            CommandId::UnbindResp => {
+                let pdu = UnbindResponse {
+                    command_status,
+                    sequence_number,
+                };
+                Frame::UnbindResponse(pdu)
+            }
 
-            _ => todo!("Implement the parse function for all the other PDUs"),
+            _ => {
+                eprintln!(
+                    "Unimplemented command ID: {command_id:?} (0x{:08x})",
+                    command_id.clone() as u32
+                );
+                todo!("Implement the parse function for all the other PDUs")
+            }
         };
 
         Ok(command)
@@ -487,6 +552,12 @@ impl fmt::Display for Frame {
             }
             Frame::UnbindResponse(msg) => {
                 write!(fmt, "Unbind Response {:?}", msg.command_status)
+            }
+            Frame::BindReceiver(msg) => {
+                write!(fmt, "Bind Receiver {:?}", msg.command_status)
+            }
+            Frame::BindReceiverResponse(msg) => {
+                write!(fmt, "Bind Receiver Response {:?}", msg.command_status)
             }
         }
     }
@@ -860,7 +931,8 @@ mod tests {
             0x00, 0x00, 0x00, 0x10, // command_length
             0x00, 0x00, 0x00, 0x15, // command_id (enquire_link)
             0x00, 0x00, 0x00, 0x00, // command_status
-            0x00, 0x00, 0x00, 0x01, // sequence_number
+            0x00, 0x00, 0x00,
+            0x01, // sequence_number
                   // No body for enquire_link
         ];
 

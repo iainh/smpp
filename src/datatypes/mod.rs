@@ -1,3 +1,4 @@
+mod bind_receiver;
 mod bind_transmitter;
 mod command_id;
 mod command_status;
@@ -19,6 +20,7 @@ pub use priority_flag::PriorityFlag;
 pub use tlv::{tags, Tlv};
 pub use type_of_number::TypeOfNumber;
 
+pub use bind_receiver::{BindReceiver, BindReceiverResponse, BindReceiverValidationError};
 pub use bind_transmitter::{
     BindTransmitter, BindTransmitterResponse, BindTransmitterValidationError,
 };

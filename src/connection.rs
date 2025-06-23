@@ -173,6 +173,12 @@ impl Connection {
             Frame::UnbindResponse(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
+            Frame::BindReceiver(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::BindReceiverResponse(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
         }
 
         // Ensure the encoded frame is written to the socket. The calls above
