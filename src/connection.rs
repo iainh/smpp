@@ -194,6 +194,9 @@ impl Connection {
             Frame::Outbind(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
+            Frame::GenericNack(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
         }
 
         // Ensure the encoded frame is written to the socket. The calls above

@@ -5,6 +5,7 @@ mod command_id;
 mod command_status;
 mod deliver_sm;
 mod enquire_link;
+mod generic_nack;
 mod interface_version;
 mod numeric_plan_indicator;
 mod outbind;
@@ -31,6 +32,7 @@ pub use bind_transmitter::{
 };
 pub use deliver_sm::{DeliverSm, DeliverSmResponse, DeliverSmValidationError};
 pub use enquire_link::{EnquireLink, EnquireLinkResponse};
+pub use generic_nack::GenericNack;
 pub use outbind::{Outbind, OutbindValidationError};
 pub use submit_sm::{SubmitSm, SubmitSmResponse, SubmitSmValidationError};
 pub use unbind::{Unbind, UnbindResponse};

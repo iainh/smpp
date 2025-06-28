@@ -5,8 +5,8 @@ use crate::datatypes::tags;
 use crate::datatypes::{
     BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse, BindTransmitter,
     BindTransmitterResponse, CommandId, CommandStatus, DeliverSm, DeliverSmResponse, EnquireLink,
-    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, Outbind, PriorityFlag, SubmitSm,
-    SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
+    EnquireLinkResponse, GenericNack, InterfaceVersion, NumericPlanIndicator, Outbind, PriorityFlag, 
+    SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
 };
 use bytes::Buf;
 use core::fmt;
@@ -29,6 +29,7 @@ pub enum Frame {
     DeliverSmResponse(DeliverSmResponse),
     EnquireLink(EnquireLink),
     EnquireLinkResponse(EnquireLinkResponse),
+    GenericNack(GenericNack),
     Outbind(Outbind),
     SubmitSm(Box<SubmitSm>),
     SubmitSmResponse(SubmitSmResponse),
@@ -574,6 +575,15 @@ impl Frame {
 
                 Frame::Outbind(pdu)
             }
+            CommandId::GenericNack => {
+                // GenericNack has no body, only the standard header
+                let pdu = GenericNack {
+                    command_status,
+                    sequence_number,
+                };
+
+                Frame::GenericNack(pdu)
+            }
 
             _ => {
                 eprintln!(
@@ -790,6 +800,9 @@ impl fmt::Display for Frame {
             }
             Frame::Outbind(msg) => {
                 write!(fmt, "Outbind {:?}", msg.sequence_number)
+            }
+            Frame::GenericNack(msg) => {
+                write!(fmt, "Generic NACK {:?} (seq: {})", msg.command_status, msg.sequence_number)
             }
         }
     }
