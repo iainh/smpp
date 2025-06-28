@@ -195,4 +195,32 @@ mod tests {
         let bytes = outbind.to_bytes();
         assert!(bytes.len() > 16); // Should serialize successfully
     }
+
+    #[test]
+    fn outbind_roundtrip_test() {
+        use crate::frame::Frame;
+        use std::io::Cursor;
+
+        let original = Outbind {
+            sequence_number: 42,
+            system_id: "SMPP3TEST".to_string(),
+            password: Some("secret08".to_string()),
+        };
+
+        // Serialize to bytes
+        let serialized = original.to_bytes();
+
+        // Parse back from bytes
+        let mut cursor = Cursor::new(serialized.as_ref());
+        let parsed_frame = Frame::parse(&mut cursor).unwrap();
+
+        // Verify it matches
+        if let Frame::Outbind(parsed) = parsed_frame {
+            assert_eq!(parsed.sequence_number, original.sequence_number);
+            assert_eq!(parsed.system_id, original.system_id);
+            assert_eq!(parsed.password, original.password);
+        } else {
+            panic!("Expected Outbind frame");
+        }
+    }
 }

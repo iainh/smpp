@@ -191,6 +191,9 @@ impl Connection {
             Frame::DeliverSmResponse(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
+            Frame::Outbind(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
         }
 
         // Ensure the encoded frame is written to the socket. The calls above

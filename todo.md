@@ -18,10 +18,8 @@ This document tracks the implementation status of all SMPP v3.4 PDUs for full pr
 - [x] submit_sm (0x00000004)
 - [x] submit_sm_resp (0x80000004)
 
-## 🚧 Partially Implemented PDUs
-
-### Connection Management
-- [ ] outbind (0x0000000B) - Data structure exists, needs parsing integration
+### Network Initiated Operations
+- [x] outbind (0x0000000B)
 
 ## ❌ Missing PDUs for Full SMPP v3.4 Compliance
 
@@ -64,7 +62,7 @@ This document tracks the implementation status of all SMPP v3.4 PDUs for full pr
 ## Implementation Notes
 
 ### Current Status
-- **Completed**: 14/16 core PDUs (87.5%)
+- **Completed**: 15/16 core PDUs (93.75%)
 - **Command IDs**: All defined in CommandId enum
 - **Infrastructure**: Frame parsing architecture ready for new PDUs
 - **TODO**: Explicit TODO in `src/frame.rs:365` to implement remaining PDUs

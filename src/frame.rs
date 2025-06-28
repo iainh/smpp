@@ -5,7 +5,7 @@ use crate::datatypes::tags;
 use crate::datatypes::{
     BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse, BindTransmitter,
     BindTransmitterResponse, CommandId, CommandStatus, DeliverSm, DeliverSmResponse, EnquireLink,
-    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, PriorityFlag, SubmitSm,
+    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, Outbind, PriorityFlag, SubmitSm,
     SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
 };
 use bytes::Buf;
@@ -29,6 +29,7 @@ pub enum Frame {
     DeliverSmResponse(DeliverSmResponse),
     EnquireLink(EnquireLink),
     EnquireLinkResponse(EnquireLinkResponse),
+    Outbind(Outbind),
     SubmitSm(Box<SubmitSm>),
     SubmitSmResponse(SubmitSmResponse),
     Unbind(Unbind),
@@ -557,6 +558,22 @@ impl Frame {
 
                 Frame::DeliverSmResponse(pdu)
             }
+            CommandId::Outbind => {
+                let system_id = get_cstring_field(src, 16, "system_id")?;
+                let password = get_cstring_field(src, 9, "password")?;
+
+                let pdu = Outbind {
+                    sequence_number,
+                    system_id,
+                    password: if password.is_empty() {
+                        None
+                    } else {
+                        Some(password)
+                    },
+                };
+
+                Frame::Outbind(pdu)
+            }
 
             _ => {
                 eprintln!(
@@ -770,6 +787,9 @@ impl fmt::Display for Frame {
             }
             Frame::DeliverSmResponse(msg) => {
                 write!(fmt, "Deliver SM Response {:?}", msg.command_status)
+            }
+            Frame::Outbind(msg) => {
+                write!(fmt, "Outbind {:?}", msg.sequence_number)
             }
         }
     }
