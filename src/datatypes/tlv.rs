@@ -30,6 +30,17 @@ pub mod tags {
     pub const ITS_REPLY_TYPE: u16 = 0x1380;
     pub const ITS_SESSION_INFO: u16 = 0x1383;
     pub const USSD_SERVICE_OP: u16 = 0x0501;
+
+    // Additional TLV tags for deliver_sm and other PDUs
+    pub const USER_DATA_HEADER: u16 = 0x0005;
+    pub const NETWORK_ERROR_CODE: u16 = 0x0423;
+    pub const DELIVERY_FAILURE_REASON: u16 = 0x0425;
+    pub const ADDITIONAL_STATUS_INFO_TEXT: u16 = 0x001D;
+    pub const DPF_RESULT: u16 = 0x0420;
+    pub const SET_DPF: u16 = 0x0421;
+    pub const MS_AVAILABILITY_STATUS: u16 = 0x0422;
+    pub const RECEIPTED_MESSAGE_ID: u16 = 0x001E;
+    pub const MESSAGE_STATE: u16 = 0x0427;
 }
 
 #[derive(Clone, Debug, PartialEq)]

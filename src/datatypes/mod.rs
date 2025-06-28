@@ -1,7 +1,9 @@
 mod bind_receiver;
+mod bind_transceiver;
 mod bind_transmitter;
 mod command_id;
 mod command_status;
+mod deliver_sm;
 mod enquire_link;
 mod interface_version;
 mod numeric_plan_indicator;
@@ -21,9 +23,13 @@ pub use tlv::{tags, Tlv};
 pub use type_of_number::TypeOfNumber;
 
 pub use bind_receiver::{BindReceiver, BindReceiverResponse, BindReceiverValidationError};
+pub use bind_transceiver::{
+    BindTransceiver, BindTransceiverResponse, BindTransceiverValidationError,
+};
 pub use bind_transmitter::{
     BindTransmitter, BindTransmitterResponse, BindTransmitterValidationError,
 };
+pub use deliver_sm::{DeliverSm, DeliverSmResponse, DeliverSmValidationError};
 pub use enquire_link::{EnquireLink, EnquireLinkResponse};
 pub use outbind::{Outbind, OutbindValidationError};
 pub use submit_sm::{SubmitSm, SubmitSmResponse, SubmitSmValidationError};

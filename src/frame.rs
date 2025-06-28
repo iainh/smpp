@@ -3,9 +3,10 @@
 
 use crate::datatypes::tags;
 use crate::datatypes::{
-    BindReceiver, BindReceiverResponse, BindTransmitter, BindTransmitterResponse, CommandId,
-    CommandStatus, EnquireLink, EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator,
-    PriorityFlag, SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
+    BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse, BindTransmitter,
+    BindTransmitterResponse, CommandId, CommandStatus, DeliverSm, DeliverSmResponse, EnquireLink,
+    EnquireLinkResponse, InterfaceVersion, NumericPlanIndicator, PriorityFlag, SubmitSm,
+    SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
 };
 use bytes::Buf;
 use core::fmt;
@@ -20,8 +21,12 @@ use std::string::FromUtf8Error;
 pub enum Frame {
     BindReceiver(BindReceiver),
     BindReceiverResponse(BindReceiverResponse),
+    BindTransceiver(BindTransceiver),
+    BindTransceiverResponse(BindTransceiverResponse),
     BindTransmitter(BindTransmitter),
     BindTransmitterResponse(BindTransmitterResponse),
+    DeliverSm(Box<DeliverSm>),
+    DeliverSmResponse(DeliverSmResponse),
     EnquireLink(EnquireLink),
     EnquireLinkResponse(EnquireLinkResponse),
     SubmitSm(Box<SubmitSm>),
@@ -356,6 +361,202 @@ impl Frame {
                 };
                 Frame::UnbindResponse(pdu)
             }
+            CommandId::BindTransceiver => {
+                let system_id = get_cstring_field(src, 16, "system_id")?;
+                let password = get_cstring_field(src, 9, "password")?;
+                let system_type = get_cstring_field(src, 13, "system_type")?;
+                let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
+                let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+                let address_range = get_cstring_field(src, 41, "address_range")?;
+
+                let pdu = BindTransceiver {
+                    command_status,
+                    sequence_number,
+                    system_id,
+                    password: if password.is_empty() {
+                        None
+                    } else {
+                        Some(password)
+                    },
+                    system_type,
+                    interface_version,
+                    addr_ton,
+                    addr_npi,
+                    address_range,
+                };
+                Frame::BindTransceiver(pdu)
+            }
+            CommandId::BindTransceiverResp => {
+                let system_id = get_cstring_field(src, 16, "system_id")?;
+
+                let sc_interface_version = match src.has_remaining() {
+                    true => Some(get_tlv(src)?),
+                    false => None,
+                };
+
+                let pdu = BindTransceiverResponse {
+                    command_status,
+                    sequence_number,
+                    system_id,
+                    sc_interface_version,
+                };
+
+                Frame::BindTransceiverResponse(pdu)
+            }
+            CommandId::DeliverSm => {
+                // Parse mandatory fields
+                let service_type = get_cstring_field(src, 6, "service_type")?;
+                let source_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+                let source_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+                let source_addr = get_cstring_field(src, 21, "source_addr")?;
+                let dest_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+                let dest_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+                let destination_addr = get_cstring_field(src, 21, "destination_addr")?;
+                let esm_class = get_u8(src)?;
+                let protocol_id = get_u8(src)?;
+                let priority_flag = get_u8(src)?;
+                let schedule_delivery_time = get_cstring_field(src, 17, "schedule_delivery_time")?;
+                let validity_period = get_cstring_field(src, 17, "validity_period")?;
+                let registered_delivery = get_u8(src)?;
+                let replace_if_present_flag = get_u8(src)?;
+                let data_coding = get_u8(src)?;
+                let sm_default_msg_id = get_u8(src)?;
+
+                // Parse sm_length and short_message
+                let sm_length = get_u8(src)?;
+
+                // Validate sm_length is within bounds
+                if sm_length > 254 {
+                    return Err(Error::Other(
+                        format!("sm_length ({sm_length}) exceeds maximum of 254 bytes").into(),
+                    ));
+                }
+
+                // Read short_message based on sm_length
+                let short_message = if sm_length > 0 {
+                    let message_bytes = src.copy_to_bytes(sm_length as usize);
+                    String::from_utf8(message_bytes.into()).map_err(|e| {
+                        Error::Other(format!("Invalid UTF-8 in short_message: {e}").into())
+                    })?
+                } else {
+                    String::new()
+                };
+
+                // Parse optional TLV parameters
+                let mut user_message_reference = None;
+                let mut source_port = None;
+                let mut destination_port = None;
+                let mut sar_msg_ref_num = None;
+                let mut sar_total_segments = None;
+                let mut sar_segment_seqnum = None;
+                let mut user_data_header = None;
+                let mut privacy_indicator = None;
+                let mut callback_num = None;
+                let mut source_subaddress = None;
+                let mut dest_subaddress = None;
+                let mut language_indicator = None;
+                let mut its_session_info = None;
+                let mut network_error_code = None;
+                let mut message_payload = None;
+                let mut delivery_failure_reason = None;
+                let mut additional_status_info_text = None;
+                let mut dpf_result = None;
+                let mut set_dpf = None;
+                let mut ms_availability_status = None;
+                let mut receipted_message_id = None;
+                let mut message_state = None;
+
+                while src.has_remaining() {
+                    let tlv = get_tlv(src)?;
+                    match tlv.tag {
+                        tags::USER_MESSAGE_REFERENCE => user_message_reference = Some(tlv),
+                        tags::SOURCE_PORT => source_port = Some(tlv),
+                        tags::DESTINATION_PORT => destination_port = Some(tlv),
+                        tags::SAR_MSG_REF_NUM => sar_msg_ref_num = Some(tlv),
+                        tags::SAR_TOTAL_SEGMENTS => sar_total_segments = Some(tlv),
+                        tags::SAR_SEGMENT_SEQNUM => sar_segment_seqnum = Some(tlv),
+                        tags::USER_DATA_HEADER => user_data_header = Some(tlv),
+                        tags::PRIVACY_INDICATOR => privacy_indicator = Some(tlv),
+                        tags::CALLBACK_NUM => callback_num = Some(tlv),
+                        tags::SOURCE_SUBADDRESS => source_subaddress = Some(tlv),
+                        tags::DEST_SUBADDRESS => dest_subaddress = Some(tlv),
+                        tags::LANGUAGE_INDICATOR => language_indicator = Some(tlv),
+                        tags::ITS_SESSION_INFO => its_session_info = Some(tlv),
+                        tags::NETWORK_ERROR_CODE => network_error_code = Some(tlv),
+                        tags::MESSAGE_PAYLOAD => message_payload = Some(tlv),
+                        tags::DELIVERY_FAILURE_REASON => delivery_failure_reason = Some(tlv),
+                        tags::ADDITIONAL_STATUS_INFO_TEXT => additional_status_info_text = Some(tlv),
+                        tags::DPF_RESULT => dpf_result = Some(tlv),
+                        tags::SET_DPF => set_dpf = Some(tlv),
+                        tags::MS_AVAILABILITY_STATUS => ms_availability_status = Some(tlv),
+                        tags::RECEIPTED_MESSAGE_ID => receipted_message_id = Some(tlv),
+                        tags::MESSAGE_STATE => message_state = Some(tlv),
+                        _ => {
+                            // Unknown TLV, skip or handle as needed
+                            eprintln!("Unknown TLV tag in DeliverSm: 0x{:04x}", tlv.tag);
+                        }
+                    }
+                }
+
+                let pdu = DeliverSm {
+                    command_status,
+                    sequence_number,
+                    service_type,
+                    source_addr_ton,
+                    source_addr_npi,
+                    source_addr,
+                    dest_addr_ton,
+                    dest_addr_npi,
+                    destination_addr,
+                    esm_class,
+                    protocol_id,
+                    priority_flag,
+                    schedule_delivery_time,
+                    validity_period,
+                    registered_delivery,
+                    replace_if_present_flag,
+                    data_coding,
+                    sm_default_msg_id,
+                    sm_length,
+                    short_message,
+                    user_message_reference,
+                    source_port,
+                    destination_port,
+                    sar_msg_ref_num,
+                    sar_total_segments,
+                    sar_segment_seqnum,
+                    user_data_header,
+                    privacy_indicator,
+                    callback_num,
+                    source_subaddress,
+                    dest_subaddress,
+                    language_indicator,
+                    its_session_info,
+                    network_error_code,
+                    message_payload,
+                    delivery_failure_reason,
+                    additional_status_info_text,
+                    dpf_result,
+                    set_dpf,
+                    ms_availability_status,
+                    receipted_message_id,
+                    message_state,
+                };
+
+                Frame::DeliverSm(Box::new(pdu))
+            }
+            CommandId::DeliverSmResp => {
+                let message_id = get_cstring_field(src, 65, "message_id")?;
+
+                let pdu = DeliverSmResponse {
+                    command_status,
+                    sequence_number,
+                    message_id,
+                };
+
+                Frame::DeliverSmResponse(pdu)
+            }
 
             _ => {
                 eprintln!(
@@ -557,6 +758,18 @@ impl fmt::Display for Frame {
             }
             Frame::BindReceiverResponse(msg) => {
                 write!(fmt, "Bind Receiver Response {:?}", msg.command_status)
+            }
+            Frame::BindTransceiver(msg) => {
+                write!(fmt, "Bind Transceiver {:?}", msg.command_status)
+            }
+            Frame::BindTransceiverResponse(msg) => {
+                write!(fmt, "Bind Transceiver Response {:?}", msg.command_status)
+            }
+            Frame::DeliverSm(msg) => {
+                write!(fmt, "Deliver SM {:?}", msg.command_status)
+            }
+            Frame::DeliverSmResponse(msg) => {
+                write!(fmt, "Deliver SM Response {:?}", msg.command_status)
             }
         }
     }
