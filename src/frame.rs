@@ -198,7 +198,7 @@ impl Frame {
                 // Validate sm_length is within bounds
                 if sm_length > 254 {
                     return Err(Error::Other(
-                        format!("sm_length ({}) exceeds maximum of 254 bytes", sm_length).into(),
+                        format!("sm_length ({sm_length}) exceeds maximum of 254 bytes").into(),
                     ));
                 }
 
@@ -211,7 +211,7 @@ impl Frame {
                 let short_message = if sm_length > 0 {
                     let message_bytes = src.copy_to_bytes(sm_length as usize);
                     String::from_utf8(message_bytes.into()).map_err(|e| {
-                        Error::Other(format!("Invalid UTF-8 in short_message: {}", e).into())
+                        Error::Other(format!("Invalid UTF-8 in short_message: {e}").into())
                     })?
                 } else {
                     String::new()
@@ -433,7 +433,7 @@ fn get_cstring_field(
 ) -> Result<String, Error> {
     if !src.has_remaining() {
         return Err(Error::Other(
-            format!("No data available for field {}", field_name).into(),
+            format!("No data available for field {field_name}").into(),
         ));
     }
 
@@ -464,8 +464,7 @@ fn get_cstring_field(
             } else {
                 return Err(Error::Other(
                     format!(
-                        "Missing null terminator in field {} (available: {}, max: {})",
-                        field_name, available_bytes, max_length
+                        "Missing null terminator in field {field_name} (available: {available_bytes}, max: {max_length})"
                     )
                     .into(),
                 ));
@@ -485,7 +484,7 @@ fn get_cstring_field(
     match String::from_utf8(string_bytes.into()) {
         Ok(s) => Ok(s),
         Err(e) => Err(Error::Other(
-            format!("Invalid UTF-8 in field {}: {}", field_name, e).into(),
+            format!("Invalid UTF-8 in field {field_name}: {e}").into(),
         )),
     }
 }

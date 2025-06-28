@@ -96,7 +96,7 @@ mod tests {
         let expected = vec![
             0x02, 0x04, // tag
             0x00, 0x00, // length (0)
-            // no value bytes
+                  // no value bytes
         ];
 
         assert_eq!(bytes.as_ref(), &expected);
@@ -145,7 +145,7 @@ mod tests {
         // Test case where length field doesn't match actual value length
         let tlv = Tlv {
             tag: 0x0010,
-            length: 2, // Says 2 bytes
+            length: 2,                                            // Says 2 bytes
             value: Bytes::from_static(&[0x01, 0x02, 0x03, 0x04]), // But has 4 bytes
         };
 
@@ -191,7 +191,7 @@ mod tests {
         };
 
         let serialized = original.to_bytes();
-        
+
         // Manually parse it back (since we don't have a from_bytes method)
         assert_eq!(serialized.len(), 7); // 2 + 2 + 3
         assert_eq!(&serialized[0..2], &[0x02, 0x0A]); // tag
