@@ -33,61 +33,84 @@ impl Client {
         self.sequence_number += 1;
 
         let bind_transmitter = BindTransmitter {
-            command_status: CommandStatus::Ok,
+            command_status: CommandStatus::Ok, // Will be set to 0 in to_bytes() for requests
             sequence_number: self.sequence_number,
-            system_id: system_id.to_string(),
-            password: Some(password.to_string()),
-            system_type: "".to_string(),
+            system_id: system_id.to_owned(),
+            password: Some(password.to_owned()),
+            system_type: String::new(),
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::Unknown,
             addr_npi: NumericPlanIndicator::Unknown,
-            address_range: "".to_string(),
+            address_range: String::new(),
         };
 
-        println!("-> {:?}", &bind_transmitter);
+        println!("-> {bind_transmitter:?}");
 
         let frame = Frame::BindTransmitter(bind_transmitter);
         self.connection.write_frame(&frame).await?;
 
+        // Wait for and validate bind response
         match self.connection.read_frame().await {
-            Ok(r) => println!("<- {:?}", r),
-            Err(e) => {
-                eprintln!("Error decoding bind response: {}", e);
+            Ok(Some(Frame::BindTransmitterResponse(response))) => {
+                println!("<- {response:?}");
+                if response.command_status != CommandStatus::Ok {
+                    return Err(
+                        format!("Bind failed with status: {:?}", response.command_status).into(),
+                    );
+                }
+                println!("Bind successful");
             }
-        };
+            Ok(Some(other)) => {
+                return Err(format!("Expected BindTransmitterResponse, got {other:?}").into());
+            }
+            Ok(None) => {
+                return Err("Connection closed during bind".into());
+            }
+            Err(e) => {
+                return Err(format!("Error reading bind response: {e}").into());
+            }
+        }
 
         Ok(())
     }
 
     async fn send(
         &mut self,
-        to: String,
-        from: String,
-        message: String,
-    ) -> Result<(), Box<dyn Error>> {
+        to: &str,
+        from: &str,
+        message: &str,
+    ) -> Result<String, Box<dyn Error>> {
+        // Validate message length
+        if message.len() > 254 {
+            return Err(
+                "Message too long (>254 bytes). Use message_payload TLV for longer messages."
+                    .into(),
+            );
+        }
+
         self.sequence_number += 1;
 
         let submit_sm = SubmitSm {
-            command_status: CommandStatus::Ok,
+            command_status: CommandStatus::Ok, // Will be set to 0 in to_bytes() for requests
             sequence_number: self.sequence_number,
-            service_type: "".to_string(),
+            service_type: String::new(),
             source_addr_ton: TypeOfNumber::Unknown,
             source_addr_npi: NumericPlanIndicator::Unknown,
-            source_addr: from,
+            source_addr: from.to_owned(),
             dest_addr_ton: TypeOfNumber::Unknown,
             dest_addr_npi: NumericPlanIndicator::Unknown,
-            destination_addr: to,
+            destination_addr: to.to_owned(),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: String::new(),
+            validity_period: String::new(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: message.len() as u8,
-            short_message: message,
+            short_message: message.to_owned(),
             user_message_reference: None,
             source_port: None,
             source_addr_submit: None,
@@ -117,36 +140,67 @@ impl Client {
             ussd_service_op: None,
         };
 
-        println!("-> {:?}", &submit_sm);
+        println!("-> {submit_sm:?}");
 
         let frame = Frame::SubmitSm(Box::new(submit_sm));
         self.connection.write_frame(&frame).await?;
 
+        // Wait for and validate submit response
         match self.connection.read_frame().await {
-            Ok(response) => {
-                if let Some(response) = response {
-                    println!("<- {:?}", response);
+            Ok(Some(Frame::SubmitSmResponse(response))) => {
+                println!("<- {response:?}");
+                if response.command_status != CommandStatus::Ok {
+                    return Err(format!(
+                        "Submit failed with status: {:?}",
+                        response.command_status
+                    )
+                    .into());
                 }
+                println!("Message submitted successfully");
+                Ok(response.message_id)
             }
-            Err(e) => {
-                eprintln!("Error response from send_sm: {}", e)
-            }
+            Ok(Some(other)) => Err(format!("Expected SubmitSmResponse, got {other:?}").into()),
+            Ok(None) => Err("Connection closed during submit".into()),
+            Err(e) => Err(format!("Error reading submit response: {e}").into()),
         }
-
-        Ok(())
     }
 
     async fn unbind(&mut self) -> Result<(), Box<dyn Error>> {
         self.sequence_number += 1;
 
         let unbind = Unbind {
-            command_status: CommandStatus::Ok,
+            command_status: CommandStatus::Ok, // Will be set to 0 in to_bytes() for requests
             sequence_number: self.sequence_number,
         };
 
-        let frame = Frame::Unbind(unbind);
+        println!("-> {unbind:?}");
 
+        let frame = Frame::Unbind(unbind);
         self.connection.write_frame(&frame).await?;
+
+        // Wait for unbind response
+        match self.connection.read_frame().await {
+            Ok(Some(Frame::UnbindResponse(response))) => {
+                println!("<- {response:?}");
+                if response.command_status != CommandStatus::Ok {
+                    return Err(format!(
+                        "Unbind failed with status: {:?}",
+                        response.command_status
+                    )
+                    .into());
+                }
+                println!("Unbind successful");
+            }
+            Ok(Some(other)) => {
+                return Err(format!("Expected UnbindResponse, got {other:?}").into());
+            }
+            Ok(None) => {
+                println!("Connection closed during unbind (this may be normal)");
+            }
+            Err(e) => {
+                return Err(format!("Error reading unbind response: {e}").into());
+            }
+        }
 
         Ok(())
     }
@@ -222,7 +276,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     let debugging = cli_args.debugging;
-    let host = cli_args.host.unwrap_or_else(|| "localhost".to_string());
+    let host = cli_args.host.unwrap_or_else(|| "localhost".to_owned());
     let port = cli_args.port.unwrap_or(2775);
     let system_id = cli_args.system_id.unwrap_or_default();
     let password = cli_args.password.unwrap_or_default();
@@ -232,17 +286,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let message = cli_args.message;
 
     if debugging {
-        println!("Connecting to {}:{}", host, port);
+        println!("Connecting to {host}:{port}");
     }
 
-    let mut client = connect(format!("{}:{}", host, port)).await?;
+    let mut client = connect(format!("{host}:{port}")).await?;
 
-    client.bind(&system_id, &password).await?;
+    // Bind to SMSC
+    client.bind(&system_id, &password).await.map_err(|e| {
+        eprintln!("Bind failed: {e}");
+        e
+    })?;
 
-    match client.send(to, from, message).await {
-        Ok(_) => println!("Message sent."),
-        Err(e) => eprintln!("An error has occurred: {}", e),
+    // Send message
+    let unbind_result = match client.send(&to, &from, &message).await {
+        Ok(message_id) => {
+            println!("Message sent successfully! Message ID: {message_id}");
+            client.unbind().await
+        }
+        Err(e) => {
+            eprintln!("Failed to send message: {e}");
+            // Still attempt to unbind cleanly
+            match client.unbind().await {
+                Ok(_) => Err(e),
+                Err(unbind_err) => {
+                    eprintln!("Also failed to unbind: {unbind_err}");
+                    Err(e) // Return original error
+                }
+            }
+        }
     };
 
-    client.unbind().await
+    unbind_result
 }
