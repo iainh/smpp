@@ -21,6 +21,7 @@
 //! PDU-specific mandatory and optional parameters.
 
 use crate::datatypes::tags;
+use tracing::warn;
 use crate::datatypes::{
     AddressRange, BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse,
     BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, DataCoding, DeliverSm,
@@ -727,7 +728,7 @@ impl Frame {
                         tags::MESSAGE_STATE => message_state = Some(tlv),
                         _ => {
                             // Unknown TLV, skip or handle as needed
-                            eprintln!("Unknown TLV tag in DeliverSm: 0x{:04x}", tlv.tag);
+                            warn!(tag = tlv.tag, "Unknown TLV tag in DeliverSm: 0x{:04x}", tlv.tag);
                         }
                     }
                 }
@@ -830,10 +831,7 @@ impl Frame {
             }
 
             _ => {
-                eprintln!(
-                    "Unimplemented command ID: {command_id:?} (0x{:08x})",
-                    command_id.clone() as u32
-                );
+                warn!(command_id = ?command_id, value = command_id.clone() as u32, "Unimplemented command ID: {command_id:?} (0x{:08x})", command_id.clone() as u32);
                 todo!("Implement the parse function for all the other PDUs")
             }
         };

@@ -41,7 +41,7 @@ struct CliArgs {
     from: String,
 }
 
-use tracing::Level;
+use tracing::{Level, error, warn};
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ClientBuilder::quick_transmitter(format!("{host}:{port}"), system_id, password)
             .await
             .map_err(|e| {
-                eprintln!("Connection/bind failed: {e}");
+                error!("Connection/bind failed: {e}");
                 Box::<dyn Error>::from(e.to_string())
             })?;
 
@@ -92,17 +92,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             // Clean shutdown
             if let Err(e) = client.unbind().await {
-                eprintln!("Warning: Unbind failed: {e}");
+                warn!("Unbind failed: {e}");
             }
 
             if let Err(e) = client.disconnect().await {
-                eprintln!("Warning: Disconnect failed: {e}");
+                warn!("Disconnect failed: {e}");
             }
 
             Ok(())
         }
         Err(e) => {
-            eprintln!("Failed to send message: {e}");
+            error!("Failed to send message: {e}");
 
             // Still attempt to unbind cleanly
             let _ = client.unbind().await;
