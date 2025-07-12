@@ -41,7 +41,7 @@ struct CliArgs {
     from: String,
 }
 
-use tracing::{Level, error, warn};
+use tracing::{Level, error, warn, info};
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let message = cli_args.message;
 
     if debugging {
-        println!("Connecting to {host}:{port}");
+        info!("Connecting to {host}:{port}");
     }
 
     // Use the new trait-based client API
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Box::<dyn Error>::from(e.to_string())
             })?;
 
-    println!("Connected and bound successfully");
+    info!("Connected and bound successfully");
 
     // Create SMS message using the builder
     let sms = SmsMessage::new(&to, &from, &message);
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Send message
     match client.send_sms(&sms).await {
         Ok(message_id) => {
-            println!("Message sent successfully! Message ID: {message_id}");
+            info!("Message sent successfully! Message ID: {message_id}");
 
             // Clean shutdown
             if let Err(e) = client.unbind().await {
