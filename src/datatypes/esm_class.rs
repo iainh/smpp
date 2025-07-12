@@ -25,15 +25,6 @@ impl EsmClass {
         }
     }
 
-    /// Creates a default ESM class (default mode, default type, no features)
-    pub fn default() -> Self {
-        Self {
-            message_mode: MessageMode::Default,
-            message_type: MessageType::Default,
-            features: EsmFeatures::default(),
-        }
-    }
-
     /// Creates an ESM class for store and forward mode
     pub fn store_and_forward(message_type: StoreAndForwardType) -> Self {
         Self {
@@ -196,10 +187,10 @@ pub enum MessageType {
 
 impl MessageType {
     /// Converts to bit representation for wire protocol
-    fn to_bits(&self) -> u8 {
+    fn to_bits(self) -> u8 {
         match self {
             MessageType::Default => 0b00,
-            MessageType::StoreAndForward(sf_type) => *sf_type as u8,
+            MessageType::StoreAndForward(sf_type) => sf_type as u8,
         }
     }
 
@@ -269,7 +260,7 @@ impl EsmFeatures {
     }
 
     /// Converts features to bit representation
-    fn to_bits(&self) -> u8 {
+    fn to_bits(self) -> u8 {
         let mut bits = 0u8;
         if self.udhi {
             bits |= 0x40;
@@ -340,7 +331,11 @@ impl std::error::Error for EsmClassError {}
 // Default implementation
 impl Default for EsmClass {
     fn default() -> Self {
-        Self::default()
+        Self {
+            message_mode: MessageMode::Default,
+            message_type: MessageType::Default,
+            features: EsmFeatures::default(),
+        }
     }
 }
 

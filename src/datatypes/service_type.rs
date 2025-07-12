@@ -63,17 +63,13 @@ impl ServiceType {
                     });
                 }
 
-                let fixed_string =
-                    FixedString::from_str(service).map_err(ServiceTypeError::FixedStringError)?;
+                let fixed_string = service
+                    .parse::<FixedString<6>>()
+                    .map_err(ServiceTypeError::FixedStringError)?;
 
                 Ok(ServiceType::Custom(fixed_string))
             }
         }
-    }
-
-    /// Creates a default service type (empty)
-    pub fn default() -> Self {
-        ServiceType::Default
     }
 
     /// Creates a CMT (Cellular Messaging Teleservice) service type
@@ -415,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_service_type_fixed_string_conversion() {
-        let fixed = FixedString::<6>::from_str("TEST").unwrap();
+        let fixed = "TEST".parse::<FixedString<6>>().unwrap();
         let st = ServiceType::from(fixed);
         assert!(matches!(st, ServiceType::Custom(_)));
         assert_eq!(st.as_str(), "TEST");
