@@ -2,7 +2,7 @@ pub(crate) use argh::FromArgs;
 use smpp::connection::Connection;
 use smpp::datatypes::SubmitSm;
 use smpp::datatypes::{BindTransmitter, NumericPlanIndicator, TypeOfNumber, Unbind, SystemId, Password, SystemType, AddressRange};
-use smpp::datatypes::{CommandStatus, InterfaceVersion, PriorityFlag, ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, ValidityPeriod, ShortMessage};
+use smpp::datatypes::{CommandStatus, InterfaceVersion, PriorityFlag, ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, ValidityPeriod, ShortMessage, EsmClass, DataCoding};
 use smpp::Frame;
 use std::error::Error;
 use tokio::net::{TcpStream, ToSocketAddrs};
@@ -96,18 +96,18 @@ impl Client {
             service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::Unknown,
             source_addr_npi: NumericPlanIndicator::Unknown,
-            source_addr: SourceAddr::from(from),
+            source_addr: SourceAddr::new(from, TypeOfNumber::Unknown).unwrap_or_default(),
             dest_addr_ton: TypeOfNumber::Unknown,
             dest_addr_npi: NumericPlanIndicator::Unknown,
-            destination_addr: DestinationAddr::from(to),
-            esm_class: 0,
+            destination_addr: DestinationAddr::new(to, TypeOfNumber::Unknown).unwrap_or_default(),
+            esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: ScheduleDeliveryTime::default(),
             validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
-            data_coding: 0,
+            data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
             sm_length: message.len() as u8,
             short_message: ShortMessage::from(message),

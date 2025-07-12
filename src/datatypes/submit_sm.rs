@@ -3,7 +3,8 @@ use crate::datatypes::priority_flag::PriorityFlag;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
     CommandId, CommandStatus, ToBytes, TypeOfNumber, ServiceType, SourceAddr, DestinationAddr,
-    ScheduleDeliveryTime, ValidityPeriod, MessageId, ShortMessage,
+    ScheduleDeliveryTime, ValidityPeriod, MessageId, ShortMessage, EsmClass, DataCoding,
+    AddressError, ServiceTypeError, DateTimeError, EsmClassError, DataCodingError,
 };
 use bytes::{BufMut, Bytes, BytesMut};
 
@@ -51,9 +52,8 @@ pub struct SubmitSm {
 
     /// 4.1.8 esm_class: Indicates Message Mode and Message Type. The esm_class field is used to
     ///       indicate special message attributes associated with the short message.
-    ///       Bits 7..2: Message Mode (00=Default, 01=Datagram, 10=Forward, 11=Store and Forward)
-    ///       Bits 1..0: Message Type (00=Default, others vary by mode)
-    pub esm_class: u8,
+    ///       Strongly-typed bitfield that enforces valid mode/type combinations.
+    pub esm_class: EsmClass,
 
     /// 4.1.9 protocol_id: Protocol Identifier. Network specific field. Set to NULL if not applicable.
     pub protocol_id: u8,
@@ -85,16 +85,8 @@ pub struct SubmitSm {
     pub replace_if_present_flag: u8,
 
     /// 4.1.15 data_coding: Defines the encoding scheme of the short message user data.
-    ///        0x00 = SMSC Default Alphabet (GSM 7-bit default)
-    ///        0x01 = IA5 (CCITT T.50)/ASCII
-    ///        0x02 = Octet unspecified (8-bit binary)
-    ///        0x03 = Latin-1 (ISO-8859-1)
-    ///        0x04 = Octet unspecified (8-bit binary)
-    ///        0x05 = JIS (X 0208-1990)
-    ///        0x06 = Cyrillic (ISO-8859-5)
-    ///        0x07 = Latin/Hebrew (ISO-8859-8)
-    ///        0x08 = UCS2 (ISO/IEC-10646)
-    pub data_coding: u8,
+    ///        Strongly-typed enum that validates encoding schemes and provides character set information.
+    pub data_coding: DataCoding,
 
     /// 4.1.16 sm_default_msg_id: Indicates the short message to send from a list of pre-defined
     ///        ('canned') short messages stored on the SMSC. If not using a pre-defined message,
@@ -227,13 +219,37 @@ pub enum SubmitSmValidationError {
     #[error("Cannot use both short_message and message_payload - they are mutually exclusive")]
     MutualExclusivityViolation,
 
+    #[error("Source address format invalid for Type of Number: {0}")]
+    SourceAddressError(#[from] AddressError),
+
+    #[error("Destination address format invalid for Type of Number: {0}")]
+    DestinationAddressError(AddressError),
+
+    #[error("Service type validation failed: {0}")]
+    ServiceTypeError(#[from] ServiceTypeError),
+
+    #[error("Schedule delivery time validation failed: {0}")]
+    ScheduleDeliveryTimeError(#[from] DateTimeError),
+
+    #[error("Validity period validation failed: {0}")]
+    ValidityPeriodError(DateTimeError),
+
+    #[error("ESM class validation failed: {0}")]
+    EsmClassError(#[from] EsmClassError),
+
+    #[error("Data coding validation failed: {0}")]
+    DataCodingError(#[from] DataCodingError),
+
+    #[error("Message text incompatible with data coding scheme")]
+    MessageTextIncompatible,
+
     #[error("Fixed array fields are always valid - this error should not occur")]
     FixedArrayError,
 }
 
 impl SubmitSm {
     /// Validates the SubmitSm PDU according to SMPP v3.4 specification
-    /// Fixed array fields are always valid by construction
+    /// Includes validation of strongly-typed fields and protocol-specific rules
     pub fn validate(&self) -> Result<(), SubmitSmValidationError> {
         // Validate sm_length matches actual short_message length
         if self.sm_length as usize != self.short_message.len() as usize {
@@ -243,10 +259,32 @@ impl SubmitSm {
             });
         }
 
-        // Validate mutual exclusivity
+        // Validate mutual exclusivity between short_message and message_payload
         if !self.short_message.is_empty() && self.message_payload.is_some() {
             return Err(SubmitSmValidationError::MutualExclusivityViolation);
         }
+
+        // Validate source address format against its Type of Number
+        self.source_addr.validate_for_ton(self.source_addr_ton)
+            .map_err(SubmitSmValidationError::SourceAddressError)?;
+
+        // Validate destination address format against its Type of Number
+        self.destination_addr.validate_for_ton(self.dest_addr_ton)
+            .map_err(SubmitSmValidationError::DestinationAddressError)?;
+
+        // Validate ESM class structure (mode/type combinations)
+        self.esm_class.validate()?;
+
+        // Validate message text compatibility with data coding scheme
+        if !self.short_message.is_empty() {
+            if let Ok(message_text) = self.short_message.as_str() {
+                self.data_coding.validate_text(message_text)
+                    .map_err(|_| SubmitSmValidationError::MessageTextIncompatible)?;
+            }
+        }
+
+        // Note: Service type, schedule delivery time, and validity period are
+        // validated at construction time by their respective types
 
         Ok(())
     }
@@ -268,15 +306,16 @@ pub struct SubmitSmBuilder {
     dest_addr_ton: TypeOfNumber,
     dest_addr_npi: NumericPlanIndicator,
     destination_addr: DestinationAddr,
-    esm_class: u8,
+    esm_class: EsmClass,
     protocol_id: u8,
     priority_flag: PriorityFlag,
     schedule_delivery_time: ScheduleDeliveryTime,
     validity_period: ValidityPeriod,
     registered_delivery: u8,
     replace_if_present_flag: u8,
-    data_coding: u8,
+    data_coding: DataCoding,
     sm_default_msg_id: u8,
+    sm_length: u8,
     short_message: ShortMessage,
     // Optional TLVs
     user_message_reference: Option<Tlv>,
@@ -306,7 +345,6 @@ pub struct SubmitSmBuilder {
     its_reply_type: Option<Tlv>,
     its_session_info: Option<Tlv>,
     ussd_service_op: Option<Tlv>,
-    sm_length: u8,
 }
 
 impl Default for SubmitSmBuilder {
@@ -327,17 +365,17 @@ impl SubmitSmBuilder {
             dest_addr_ton: TypeOfNumber::Unknown,
             dest_addr_npi: NumericPlanIndicator::Unknown,
             destination_addr: DestinationAddr::default(),
-            esm_class: 0,
+            esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: ScheduleDeliveryTime::default(),
             validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
-            data_coding: 0,
+            data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
-            short_message: ShortMessage::default(),
             sm_length: 0,
+            short_message: ShortMessage::default(),
             user_message_reference: None,
             source_port: None,
             source_addr_submit: None,
@@ -379,12 +417,12 @@ impl SubmitSmBuilder {
     }
 
     pub fn source_addr(mut self, addr: &str) -> Self {
-        self.source_addr = SourceAddr::from(addr);
+        self.source_addr = SourceAddr::new(addr, TypeOfNumber::Unknown).unwrap_or_default();
         self
     }
 
     pub fn destination_addr(mut self, addr: &str) -> Self {
-        self.destination_addr = DestinationAddr::from(addr);
+        self.destination_addr = DestinationAddr::new(addr, TypeOfNumber::Unknown).unwrap_or_default();
         self
     }
 
@@ -420,6 +458,26 @@ impl SubmitSmBuilder {
 
     pub fn registered_delivery(mut self, delivery: u8) -> Self {
         self.registered_delivery = delivery;
+        self
+    }
+
+    pub fn esm_class(mut self, esm_class: EsmClass) -> Self {
+        self.esm_class = esm_class;
+        self
+    }
+
+    pub fn data_coding(mut self, data_coding: DataCoding) -> Self {
+        self.data_coding = data_coding;
+        self
+    }
+
+    pub fn schedule_delivery_time(mut self, time: ScheduleDeliveryTime) -> Self {
+        self.schedule_delivery_time = time;
+        self
+    }
+
+    pub fn validity_period(mut self, period: ValidityPeriod) -> Self {
+        self.validity_period = period;
         self
     }
 
@@ -550,7 +608,7 @@ impl ToBytes for SubmitSm {
         buffer.put(self.destination_addr.as_ref());
         buffer.put_u8(b'\0');
 
-        buffer.put_u8(self.esm_class);
+        buffer.put_u8(self.esm_class.to_byte());
         buffer.put_u8(self.protocol_id);
         buffer.put_u8(self.priority_flag as u8);
 
@@ -562,7 +620,7 @@ impl ToBytes for SubmitSm {
 
         buffer.put_u8(self.registered_delivery);
         buffer.put_u8(self.replace_if_present_flag);
-        buffer.put_u8(self.data_coding);
+        buffer.put_u8(self.data_coding.to_byte());
         buffer.put_u8(self.sm_default_msg_id);
 
         // If we are using the short message and short message length
@@ -729,18 +787,18 @@ mod tests {
             service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: SourceAddr::from("1234567890"),
+            source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::from("0987654321"),
-            esm_class: 0,
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: ScheduleDeliveryTime::default(),
             validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
-            data_coding: 0,
+            data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
             sm_length: 11,
             short_message: ShortMessage::from("Hello World"),
@@ -815,18 +873,18 @@ mod tests {
             service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: SourceAddr::from("1234567890"),
+            source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::from("0987654321"),
-            esm_class: 0,
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: ScheduleDeliveryTime::default(),
             validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
-            data_coding: 0,
+            data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
             sm_length: 11,
             short_message: ShortMessage::from("Hello World"),
@@ -938,18 +996,18 @@ mod tests {
             service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: SourceAddr::from("1234567890"),
+            source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::from("0987654321"),
-            esm_class: 0,
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: ScheduleDeliveryTime::default(),
             validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
-            data_coding: 0,
+            data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
             sm_length: 5, // Wrong length - should be 11
             short_message: ShortMessage::from("Hello World"),
@@ -986,19 +1044,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "String too long for FixedString")]
+    #[should_panic(expected = "Invalid service type format")]
     fn submit_sm_validation_service_type_too_long() {
-        // With fixed arrays, the string length is validated at construction time
+        // With strongly-typed ServiceType, length validation returns Result with specific error
         // "TOOLONG" is 7 chars, max for ServiceType is 5
         let _service_type = ServiceType::from("TOOLONG");
     }
 
     #[test]
-    #[should_panic(expected = "String too long for FixedString")]
     fn submit_sm_validation_source_addr_too_long() {
-        // With fixed arrays, the string length is validated at construction time
-        // 21 chars, max for SourceAddr is 20
-        let _source_addr = SourceAddr::from("A".repeat(21).as_str());
+        // With strongly-typed addresses, length validation returns Result instead of panicking
+        // 21 chars is too long for SourceAddr (max 20)
+        let result = SourceAddr::new(&"A".repeat(21), TypeOfNumber::Unknown);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -1021,18 +1079,18 @@ mod tests {
             service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: SourceAddr::from("1234567890"),
+            source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::from("0987654321"),
-            esm_class: 0,
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: ScheduleDeliveryTime::default(),
             validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
-            data_coding: 0,
+            data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
             sm_length: 5,
             short_message: ShortMessage::from("Hello"), // Has short message

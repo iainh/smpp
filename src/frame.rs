@@ -7,7 +7,8 @@ use crate::datatypes::{
     BindTransmitterResponse, CommandId, CommandStatus, DeliverSm, DeliverSmResponse, EnquireLink,
     EnquireLinkResponse, GenericNack, InterfaceVersion, NumericPlanIndicator, Outbind, PriorityFlag, 
     SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse, SystemId, Password, 
-    SystemType, AddressRange, ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, 
+    SystemType, AddressRange, ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime,
+    EsmClass, DataCoding, 
     ValidityPeriod, MessageId, ShortMessage,
 };
 use bytes::Buf;
@@ -317,14 +318,14 @@ impl Frame {
                     dest_addr_ton,
                     dest_addr_npi,
                     destination_addr,
-                    esm_class,
+                    esm_class: EsmClass::from(esm_class),
                     protocol_id,
                     priority_flag,
                     schedule_delivery_time,
                     validity_period,
                     registered_delivery,
                     replace_if_present_flag,
-                    data_coding,
+                    data_coding: DataCoding::from(data_coding),
                     sm_default_msg_id,
                     sm_length,
                     short_message,
@@ -521,14 +522,14 @@ impl Frame {
                     dest_addr_ton,
                     dest_addr_npi,
                     destination_addr: DestinationAddr::from_parsed_string(destination_addr).map_err(|e| Error::Other(Box::new(e)))?,
-                    esm_class,
+                    esm_class: EsmClass::from(esm_class),
                     protocol_id,
                     priority_flag,
                     schedule_delivery_time: ScheduleDeliveryTime::from_parsed_string(schedule_delivery_time).map_err(|e| Error::Other(Box::new(e)))?,
                     validity_period: ValidityPeriod::from_parsed_string(validity_period).map_err(|e| Error::Other(Box::new(e)))?,
                     registered_delivery,
                     replace_if_present_flag,
-                    data_coding,
+                    data_coding: DataCoding::from(data_coding),
                     sm_default_msg_id,
                     sm_length,
                     short_message: ShortMessage::from_parsed_string(short_message).map_err(|e| Error::Other(Box::new(e)))?,
@@ -1516,14 +1517,14 @@ mod tests {
             assert_eq!(submit_sm.dest_addr_ton, TypeOfNumber::International);
             assert_eq!(submit_sm.dest_addr_npi, NumericPlanIndicator::Isdn);
             assert_eq!(submit_sm.destination_addr, "0987654321");
-            assert_eq!(submit_sm.esm_class, 0);
+            assert_eq!(submit_sm.esm_class, EsmClass::default());
             assert_eq!(submit_sm.protocol_id, 0);
             assert_eq!(submit_sm.priority_flag, PriorityFlag::Level0);
             assert_eq!(submit_sm.schedule_delivery_time, "");
             assert_eq!(submit_sm.validity_period, "");
             assert_eq!(submit_sm.registered_delivery, 0);
             assert_eq!(submit_sm.replace_if_present_flag, 0);
-            assert_eq!(submit_sm.data_coding, 0);
+            assert_eq!(submit_sm.data_coding, DataCoding::default());
             assert_eq!(submit_sm.sm_default_msg_id, 0);
             assert_eq!(submit_sm.sm_length, 11);
             assert_eq!(submit_sm.short_message.as_str().unwrap(), "Hello World");
@@ -1688,18 +1689,18 @@ mod tests {
             service_type: ServiceType::from("SMS"),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: SourceAddr::from("1234567890"),
+            source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::from("0987654321"),
-            esm_class: 0,
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
             schedule_delivery_time: ScheduleDeliveryTime::default(),
             validity_period: ValidityPeriod::default(),
             registered_delivery: 1,
             replace_if_present_flag: 0,
-            data_coding: 0,
+            data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
             sm_length: 13,
             short_message: ShortMessage::from("Hello, world!"),

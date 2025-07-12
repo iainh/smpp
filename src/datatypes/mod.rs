@@ -1,16 +1,21 @@
+mod address;
 mod bind_receiver;
 mod bind_transceiver;
 mod bind_transmitter;
 mod command_id;
 mod command_status;
+mod data_coding;
+mod datetime;
 mod deliver_sm;
 mod enquire_link;
+mod esm_class;
 mod fixed_string;
 mod generic_nack;
 mod interface_version;
 mod numeric_plan_indicator;
 mod outbind;
 mod priority_flag;
+mod service_type;
 mod submit_sm;
 mod tlv;
 mod type_of_number;
@@ -20,9 +25,13 @@ pub(crate) use command_id::CommandId;
 pub use command_status::CommandStatus;
 pub use fixed_string::{
     FixedString, FixedStringError, SystemId, Password, SystemType, AddressRange,
-    ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, ValidityPeriod,
     MessageId, ShortMessage,
 };
+pub use address::{PhoneNumber, AlphanumericAddress, SourceAddr, DestinationAddr, AddressError};
+pub use datetime::{SmppDateTime, ScheduleDeliveryTime, ValidityPeriod, DateTimeError};
+pub use service_type::{ServiceType, ServiceTypeError};
+pub use esm_class::{EsmClass, MessageMode, MessageType, StoreAndForwardType, EsmFeatures, EsmClassError};
+pub use data_coding::{DataCoding, MessageClass, DataCodingError};
 pub use interface_version::InterfaceVersion;
 pub use numeric_plan_indicator::NumericPlanIndicator;
 pub use priority_flag::PriorityFlag;

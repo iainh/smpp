@@ -153,15 +153,12 @@ impl fmt::Display for FixedStringError {
 impl std::error::Error for FixedStringError {}
 
 // SMPP-specific type aliases for common field sizes
+// Note: ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, and ValidityPeriod
+// are now strongly-typed in their own modules
 pub type SystemId = FixedString<16>;          // 15 chars + null terminator
 pub type Password = FixedString<9>;           // 8 chars + null terminator  
 pub type SystemType = FixedString<13>;        // 12 chars + null terminator
 pub type AddressRange = FixedString<41>;      // 40 chars + null terminator
-pub type ServiceType = FixedString<6>;        // 5 chars + null terminator
-pub type SourceAddr = FixedString<21>;        // 20 chars + null terminator
-pub type DestinationAddr = FixedString<21>;   // 20 chars + null terminator
-pub type ScheduleDeliveryTime = FixedString<17>; // 16 chars + null terminator
-pub type ValidityPeriod = FixedString<17>;    // 16 chars + null terminator
 pub type MessageId = FixedString<66>;         // 65 chars + null terminator
 
 /// A length-prefixed message (not null-terminated)
