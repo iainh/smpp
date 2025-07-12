@@ -92,8 +92,8 @@ mod tests {
     fn outbind_to_bytes() {
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: SystemId::from_str("SMPP3TEST").unwrap(),
-            password: Some(Password::from_str("secret").unwrap()),
+            system_id: "SMPP3TEST".parse::<SystemId>().unwrap(),
+            password: Some("secret".parse::<Password>().unwrap()),
         };
 
         let expected = vec![
@@ -115,7 +115,7 @@ mod tests {
     fn outbind_to_bytes_no_password() {
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: SystemId::from_str("SMPP3TEST").unwrap(),
+            system_id: "SMPP3TEST".parse::<SystemId>().unwrap(),
             password: None,
         };
 
@@ -136,14 +136,14 @@ mod tests {
     fn outbind_field_length_validation_system_id() {
         // Test that SystemId correctly rejects strings that are too long
         let long_system_id = "A".repeat(16); // Too long - max is 15
-        let result = SystemId::from_str(&long_system_id);
+        let result = long_system_id.parse::<SystemId>();
         assert!(result.is_err());
 
         // Valid SystemId should work in Outbind
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: SystemId::from_str("valid").unwrap(),
-            password: Some(Password::from_str("pass").unwrap()),
+            system_id: "valid".parse::<SystemId>().unwrap(),
+            password: Some("pass".parse::<Password>().unwrap()),
         };
 
         // Fixed arrays are always valid
@@ -154,14 +154,14 @@ mod tests {
     fn outbind_field_length_validation_password() {
         // Test that Password correctly rejects strings that are too long
         let long_password = "A".repeat(9); // Too long - max is 8
-        let result = Password::from_str(&long_password);
+        let result = long_password.parse::<Password>();
         assert!(result.is_err());
 
         // Valid Password should work in Outbind
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: SystemId::from_str("TEST").unwrap(),
-            password: Some(Password::from_str("validpw").unwrap()),
+            system_id: "TEST".parse::<SystemId>().unwrap(),
+            password: Some("validpw".parse::<Password>().unwrap()),
         };
 
         // Fixed arrays are always valid
@@ -173,8 +173,8 @@ mod tests {
         // Test that maximum valid lengths work correctly
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: SystemId::from_str(&"A".repeat(15)).unwrap(), // Max allowed
-            password: Some(Password::from_str(&"B".repeat(8)).unwrap()), // Max allowed
+            system_id: "A".repeat(15).parse::<SystemId>().unwrap(), // Max allowed
+            password: Some("B".repeat(8).parse::<Password>().unwrap()), // Max allowed
         };
 
         let bytes = outbind.to_bytes();
@@ -188,8 +188,8 @@ mod tests {
 
         let original = Outbind {
             sequence_number: 42,
-            system_id: SystemId::from_str("SMPP3TEST").unwrap(),
-            password: Some(Password::from_str("secret08").unwrap()),
+            system_id: "SMPP3TEST".parse::<SystemId>().unwrap(),
+            password: Some("secret08".parse::<Password>().unwrap()),
         };
 
         // Serialize to bytes

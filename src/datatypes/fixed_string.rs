@@ -3,6 +3,7 @@
 
 use std::fmt;
 use std::str;
+use std::str::FromStr;
 
 /// A fixed-size null-terminated string with compile-time size validation
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -23,11 +24,6 @@ impl<const N: usize> FixedString<N> {
         let mut data = [0u8; N];
         data[..s.len()].copy_from_slice(s);
         Ok(Self { data })
-    }
-
-    /// Creates a new FixedString from a string slice
-    pub fn from_str(s: &str) -> Result<Self, FixedStringError> {
-        Self::new(s.as_bytes())
     }
 
     /// Creates a new FixedString from raw bytes without validation (unsafe)
@@ -107,7 +103,7 @@ impl<const N: usize> Default for FixedString<N> {
 
 impl<const N: usize> From<&str> for FixedString<N> {
     fn from(s: &str) -> Self {
-        Self::from_str(s).expect("String too long for FixedString")
+        s.parse().expect("String too long for FixedString")
     }
 }
 
@@ -115,7 +111,15 @@ impl<const N: usize> TryFrom<String> for FixedString<N> {
     type Error = FixedStringError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        Self::from_str(&s)
+        s.parse()
+    }
+}
+
+impl<const N: usize> FromStr for FixedString<N> {
+    type Err = FixedStringError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s.as_bytes())
     }
 }
 
@@ -199,11 +203,6 @@ impl ShortMessage {
         })
     }
 
-    /// Creates a new ShortMessage from a string slice
-    pub fn from_str(s: &str) -> Result<Self, FixedStringError> {
-        Self::new(s.as_bytes())
-    }
-
     /// Returns the message content as a byte slice
     pub fn as_bytes(&self) -> &[u8] {
         &self.data[..self.length as usize]
@@ -259,7 +258,7 @@ impl Default for ShortMessage {
 
 impl From<&str> for ShortMessage {
     fn from(s: &str) -> Self {
-        Self::from_str(s).expect("Message too long for ShortMessage")
+        s.parse().expect("Message too long for ShortMessage")
     }
 }
 
@@ -267,7 +266,15 @@ impl TryFrom<String> for ShortMessage {
     type Error = FixedStringError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        Self::from_str(&s)
+        s.parse()
+    }
+}
+
+impl FromStr for ShortMessage {
+    type Err = FixedStringError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s.as_bytes())
     }
 }
 
@@ -275,14 +282,14 @@ impl TryFrom<String> for ShortMessage {
 impl<const N: usize> FixedString<N> {
     /// Creates a FixedString from a parsed C-string, converting from String
     pub fn from_parsed_string(s: String) -> Result<Self, FixedStringError> {
-        Self::from_str(&s)
+        s.parse()
     }
 }
 
 impl ShortMessage {
     /// Creates a ShortMessage from a parsed string
     pub fn from_parsed_string(s: String) -> Result<Self, FixedStringError> {
-        Self::from_str(&s)
+        s.parse()
     }
 }
 
@@ -292,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_fixed_string_creation() {
-        let system_id = SystemId::from_str("test_system").unwrap();
+        let system_id = "test_system".parse::<SystemId>().unwrap();
         assert_eq!(system_id.as_str().unwrap(), "test_system");
         assert_eq!(system_id.len(), 11);
     }
@@ -300,19 +307,19 @@ mod tests {
     #[test]
     fn test_fixed_string_too_long() {
         let long_string = "a".repeat(20);
-        let result = SystemId::from_str(&long_string);
+        let result = long_string.parse::<SystemId>();
         assert!(matches!(result, Err(FixedStringError::TooLong { .. })));
     }
 
     #[test]
     fn test_fixed_string_display() {
-        let system_id = SystemId::from_str("test").unwrap();
+        let system_id = "test".parse::<SystemId>().unwrap();
         assert_eq!(format!("{}", system_id), "test");
     }
 
     #[test]
     fn test_short_message() {
-        let msg = ShortMessage::from_str("Hello, world!").unwrap();
+        let msg = "Hello, world!".parse::<ShortMessage>().unwrap();
         assert_eq!(msg.as_str().unwrap(), "Hello, world!");
         assert_eq!(msg.len(), 13);
     }
@@ -320,13 +327,13 @@ mod tests {
     #[test]
     fn test_short_message_too_long() {
         let long_msg = "x".repeat(255);
-        let result = ShortMessage::from_str(&long_msg);
+        let result = long_msg.parse::<ShortMessage>();
         assert!(matches!(result, Err(FixedStringError::TooLong { .. })));
     }
 
     #[test]
     fn test_fixed_string_null_padding() {
-        let system_id = SystemId::from_str("test").unwrap();
+        let system_id = "test".parse::<SystemId>().unwrap();
         let bytes = system_id.as_bytes();
         assert_eq!(bytes[4], 0); // Should be null-padded
         assert_eq!(bytes[15], 0); // Last byte should be null
