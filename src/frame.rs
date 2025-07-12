@@ -21,7 +21,6 @@
 //! PDU-specific mandatory and optional parameters.
 
 use crate::datatypes::tags;
-use tracing::warn;
 use crate::datatypes::{
     AddressRange, BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse,
     BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, DataCoding, DeliverSm,
@@ -38,6 +37,7 @@ use std::io::Cursor;
 use std::mem::size_of;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
+use tracing::warn;
 
 /// SMPP v3.4 Protocol Data Unit (PDU) Frame
 ///
@@ -728,7 +728,10 @@ impl Frame {
                         tags::MESSAGE_STATE => message_state = Some(tlv),
                         _ => {
                             // Unknown TLV, skip or handle as needed
-                            warn!(tag = tlv.tag, "Unknown TLV tag in DeliverSm: 0x{:04x}", tlv.tag);
+                            warn!(
+                                tag = tlv.tag,
+                                "Unknown TLV tag in DeliverSm: 0x{:04x}", tlv.tag
+                            );
                         }
                     }
                 }
@@ -1646,13 +1649,14 @@ mod tests {
 
             // Verify no null bytes in string content
             assert!(!bt.system_id.as_str().unwrap().contains('\0'));
-            assert!(!bt
-                .password
-                .as_ref()
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .contains('\0'));
+            assert!(
+                !bt.password
+                    .as_ref()
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .contains('\0')
+            );
             assert!(!bt.system_type.as_str().unwrap().contains('\0'));
             assert!(!bt.address_range.as_str().unwrap().contains('\0'));
         } else {
@@ -1747,31 +1751,34 @@ mod tests {
 
         assert!(result.is_ok());
 
-        if let Frame::SubmitSm(submit_sm) = result.unwrap() {
-            assert_eq!(submit_sm.command_status, CommandStatus::Ok);
-            assert_eq!(submit_sm.sequence_number, 1);
-            assert_eq!(submit_sm.service_type, "");
-            assert_eq!(submit_sm.source_addr_ton, TypeOfNumber::International);
-            assert_eq!(submit_sm.source_addr_npi, NumericPlanIndicator::Isdn);
-            assert_eq!(submit_sm.source_addr, "1234567890");
-            assert_eq!(submit_sm.dest_addr_ton, TypeOfNumber::International);
-            assert_eq!(submit_sm.dest_addr_npi, NumericPlanIndicator::Isdn);
-            assert_eq!(submit_sm.destination_addr, "0987654321");
-            assert_eq!(submit_sm.esm_class, EsmClass::default());
-            assert_eq!(submit_sm.protocol_id, 0);
-            assert_eq!(submit_sm.priority_flag, PriorityFlag::Level0);
-            assert_eq!(submit_sm.schedule_delivery_time, "");
-            assert_eq!(submit_sm.validity_period, "");
-            assert_eq!(submit_sm.registered_delivery, 0);
-            assert_eq!(submit_sm.replace_if_present_flag, 0);
-            assert_eq!(submit_sm.data_coding, DataCoding::default());
-            assert_eq!(submit_sm.sm_default_msg_id, 0);
-            assert_eq!(submit_sm.sm_length, 11);
-            assert_eq!(submit_sm.short_message.as_str().unwrap(), "Hello World");
-            assert!(submit_sm.user_message_reference.is_none());
-            assert!(submit_sm.message_payload.is_none());
-        } else {
-            panic!("Expected SubmitSm frame");
+        match result.unwrap() {
+            Frame::SubmitSm(submit_sm) => {
+                assert_eq!(submit_sm.command_status, CommandStatus::Ok);
+                assert_eq!(submit_sm.sequence_number, 1);
+                assert_eq!(submit_sm.service_type, "");
+                assert_eq!(submit_sm.source_addr_ton, TypeOfNumber::International);
+                assert_eq!(submit_sm.source_addr_npi, NumericPlanIndicator::Isdn);
+                assert_eq!(submit_sm.source_addr, "1234567890");
+                assert_eq!(submit_sm.dest_addr_ton, TypeOfNumber::International);
+                assert_eq!(submit_sm.dest_addr_npi, NumericPlanIndicator::Isdn);
+                assert_eq!(submit_sm.destination_addr, "0987654321");
+                assert_eq!(submit_sm.esm_class, EsmClass::default());
+                assert_eq!(submit_sm.protocol_id, 0);
+                assert_eq!(submit_sm.priority_flag, PriorityFlag::Level0);
+                assert_eq!(submit_sm.schedule_delivery_time, "");
+                assert_eq!(submit_sm.validity_period, "");
+                assert_eq!(submit_sm.registered_delivery, 0);
+                assert_eq!(submit_sm.replace_if_present_flag, 0);
+                assert_eq!(submit_sm.data_coding, DataCoding::default());
+                assert_eq!(submit_sm.sm_default_msg_id, 0);
+                assert_eq!(submit_sm.sm_length, 11);
+                assert_eq!(submit_sm.short_message.as_str().unwrap(), "Hello World");
+                assert!(submit_sm.user_message_reference.is_none());
+                assert!(submit_sm.message_payload.is_none());
+            }
+            _ => {
+                panic!("Expected SubmitSm frame");
+            }
         }
     }
 
@@ -1819,23 +1826,26 @@ mod tests {
 
         assert!(result.is_ok());
 
-        if let Frame::SubmitSm(submit_sm) = result.unwrap() {
-            assert_eq!(submit_sm.short_message.as_str().unwrap(), "Test");
-            assert_eq!(submit_sm.sm_length, 4);
-            assert!(submit_sm.user_message_reference.is_some());
-            assert!(submit_sm.source_port.is_some());
+        match result.unwrap() {
+            Frame::SubmitSm(submit_sm) => {
+                assert_eq!(submit_sm.short_message.as_str().unwrap(), "Test");
+                assert_eq!(submit_sm.sm_length, 4);
+                assert!(submit_sm.user_message_reference.is_some());
+                assert!(submit_sm.source_port.is_some());
 
-            let user_msg_ref = submit_sm.user_message_reference.unwrap();
-            assert_eq!(user_msg_ref.tag, 0x0204);
-            assert_eq!(user_msg_ref.length, 2);
-            assert_eq!(user_msg_ref.value.as_ref(), &[0x00, 0x01]);
+                let user_msg_ref = submit_sm.user_message_reference.unwrap();
+                assert_eq!(user_msg_ref.tag, 0x0204);
+                assert_eq!(user_msg_ref.length, 2);
+                assert_eq!(user_msg_ref.value.as_ref(), &[0x00, 0x01]);
 
-            let source_port = submit_sm.source_port.unwrap();
-            assert_eq!(source_port.tag, 0x020A);
-            assert_eq!(source_port.length, 2);
-            assert_eq!(source_port.value.as_ref(), &[0x1F, 0x90]);
-        } else {
-            panic!("Expected SubmitSm frame");
+                let source_port = submit_sm.source_port.unwrap();
+                assert_eq!(source_port.tag, 0x020A);
+                assert_eq!(source_port.length, 2);
+                assert_eq!(source_port.value.as_ref(), &[0x1F, 0x90]);
+            }
+            _ => {
+                panic!("Expected SubmitSm frame");
+            }
         }
     }
 
@@ -1875,11 +1885,14 @@ mod tests {
 
         assert!(result.is_ok());
 
-        if let Frame::SubmitSm(submit_sm) = result.unwrap() {
-            assert_eq!(submit_sm.sm_length, 0);
-            assert_eq!(submit_sm.short_message.as_str().unwrap(), "");
-        } else {
-            panic!("Expected SubmitSm frame");
+        match result.unwrap() {
+            Frame::SubmitSm(submit_sm) => {
+                assert_eq!(submit_sm.sm_length, 0);
+                assert_eq!(submit_sm.short_message.as_str().unwrap(), "");
+            }
+            _ => {
+                panic!("Expected SubmitSm frame");
+            }
         }
     }
 

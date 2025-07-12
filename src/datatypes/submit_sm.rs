@@ -853,9 +853,11 @@ mod tests {
 
         // Check that short message is included
         let message_bytes = "Hello World".as_bytes();
-        assert!(bytes
-            .windows(message_bytes.len())
-            .any(|window| window == message_bytes));
+        assert!(
+            bytes
+                .windows(message_bytes.len())
+                .any(|window| window == message_bytes)
+        );
     }
 
     #[test]
@@ -929,12 +931,16 @@ mod tests {
         let tlv1_bytes = [0x02, 0x04, 0x00, 0x02, 0x00, 0x01]; // user_message_reference TLV
         let tlv2_bytes = [0x02, 0x0A, 0x00, 0x02, 0x1F, 0x90]; // source_port TLV
 
-        assert!(bytes
-            .windows(tlv1_bytes.len())
-            .any(|window| window == tlv1_bytes));
-        assert!(bytes
-            .windows(tlv2_bytes.len())
-            .any(|window| window == tlv2_bytes));
+        assert!(
+            bytes
+                .windows(tlv1_bytes.len())
+                .any(|window| window == tlv1_bytes)
+        );
+        assert!(
+            bytes
+                .windows(tlv2_bytes.len())
+                .any(|window| window == tlv2_bytes)
+        );
     }
 
     #[test]

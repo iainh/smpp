@@ -78,7 +78,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 ///     // Connect and bind as transmitter
 ///     let mut client = ClientBuilder::quick_transmitter(
 ///         "localhost:2775",
-///         "system_id", 
+///         "system_id",
 ///         "password"
 ///     ).await?;
 ///
