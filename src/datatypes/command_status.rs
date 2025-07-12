@@ -1,59 +1,90 @@
+// ABOUTME: Defines SMPP v3.4 command status codes per specification Section 5.1.3
+// ABOUTME: Implements error code validation and provides comprehensive error categorization
+
 use num_enum::TryFromPrimitive;
-/// The command_status field of an SMPP message response indicates the success
-/// or failure of an SMPP request. It is relevant only in the SMPP response
-/// message and should be set to NULL inSMPP request messages. The SMPP Error
-/// status codes are returned by the SMSC in the command_status field  of the
-/// SMPP message header and in the error_status_code field of a
-/// submit_multi_resp message
+
+/// SMPP v3.4 Command Status Codes (Section 5.1.3)
+///
+/// The command_status field indicates the success or failure of an SMPP request.
+/// Per SMPP v3.4 specification Section 2.2.1, this is a 4-octet field in the PDU header.
+///
+/// ## Usage Rules (Section 5.1.3)
+/// - **Request PDUs**: Must always set command_status to 0x00000000 (Ok)
+/// - **Response PDUs**: Contains the actual result code indicating success or failure
+/// - **Error Responses**: SMSC returns error codes in the command_status field
+///
+/// ## Error Code Categories
+/// - **0x00000000**: Success
+/// - **0x00000001-0x000000FF**: Standard SMPP errors  
+/// - **0x00000100-0x000003FF**: Reserved for SMPP extension
+/// - **0x00000400-0x000004FF**: Reserved for SMSC vendor specific errors
+/// - **0x00000500-0xFFFFFFFF**: Reserved
+///
+/// ## Related Fields
+/// Error codes also appear in the error_status_code field of submit_multi_resp PDUs
+/// for individual destination failures (Section 4.5.2).
+///
+/// ## References
+/// - SMPP v3.4 Specification Section 5.1.3 (SMPP Error Status Codes)
+/// - SMPP v3.4 Specification Section 2.2.1 (PDU Header Format)
+/// - SMPP v3.4 Specification Table 5-2 (Error Code Definitions)
 
 #[derive(TryFromPrimitive)]
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum CommandStatus {
-    /// No Error
+    // Success Status (Table 5-2)
+    /// No Error - Operation completed successfully
     Ok = 0x0000_0000,
 
-    /// Message Length is invalid
+    // PDU Format Errors (Table 5-2)
+    /// Message Length is invalid - PDU exceeds maximum size or is too small
     InvalidMsgLength = 0x0000_0001,
 
-    /// Command Length is invalid
+    /// Command Length is invalid - command_length field value is incorrect
     InvalidCommandLength = 0x0000_0002,
 
-    /// Invalid Command ID
+    /// Invalid Command ID - Unrecognized command_id in PDU header
     InvalidCommandId = 0x0000_0003,
 
-    /// Incorrect BIND Status for given command
+    // Session State Errors (Table 5-2)
+    /// Incorrect BIND Status for given command - Operation not allowed in current bind state
     IncorrectBindStatus = 0x0000_0004,
 
-    /// ESME Already in Bound State
+    /// ESME Already in Bound State - Attempting to bind when already bound
     AlreadyBoundState = 0x0000_0005,
 
-    /// Invalid Priority Flag
+    // Parameter Validation Errors (Table 5-2)
+    /// Invalid Priority Flag - priority_flag field contains invalid value (valid: 0-3)
     InvalidPriorityFlag = 0x0000_0006,
 
-    /// Invalid Registered Delivery Flag
+    /// Invalid Registered Delivery Flag - registered_delivery field has invalid bits set
     InvalidRegisteredDeliveryFlag = 0x0000_0007,
 
-    /// System Error
+    // System Errors (Table 5-2)
+    /// System Error - Internal SMSC error occurred during processing
     SystemError = 0x0000_0008,
 
-    // Reserved   0x00000009
-    /// Invalid Source Address
+    // Reserved   0x00000009 (Table 5-2)
+
+    // Address Validation Errors (Table 5-2)
+    /// Invalid Source Address - source_addr field format invalid for given TON/NPI
     InvalidSourceAddress = 0x0000_000A,
 
-    /// Invalid Dest Addr
+    /// Invalid Destination Address - destination_addr field format invalid for given TON/NPI  
     InvalidDestinationAddress = 0x0000_000B,
 
-    /// Message ID is invalid
+    /// Message ID is invalid - message_id format invalid or message not found
     InvalidMessageId = 0x0000_000C,
 
-    /// Bind Failed
+    // Authentication Errors (Table 5-2)
+    /// Bind Failed - Authentication or authorization failure during bind
     BindFailed = 0x0000_000D,
 
-    /// Invalid Password
+    /// Invalid Password - password field does not match SMSC configuration
     InvalidPassword = 0x0000_000E,
 
-    /// Invalid System ID
+    /// Invalid System ID - system_id field not recognized by SMSC
     InvalidSystemId = 0x0000_000F,
 
     // Reserved 0x00000010
