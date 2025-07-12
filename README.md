@@ -67,51 +67,70 @@ tokio = { version = "1.0", features = ["full"] }
 ### Basic SMS Sending Example
 
 ```rust
-use smpp::connection::connect;
-use smpp::datatypes::{SubmitSm, TypeOfNumber, NumericPlanIndicator};
+use smpp::client::{ClientBuilder, SmppClient, SmppTransmitter, SmsMessage};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect to SMSC (Section 4.1 - Bind Operations)
-    let mut client = connect("localhost:2775").await?;
-
-    // Bind as transmitter (Section 4.1.1 - bind_transmitter)
-    client.bind("system_id", "password").await?;
-
-    // Submit SMS message (Section 4.4.1 - submit_sm)
-    let message_id = client.send(
-        "1234567890",    // destination_addr
-        "0987654321",    // source_addr
-        "Hello, World!"  // short_message
+    // Connect and bind as transmitter (Section 4.1 - Bind Operations)
+    let mut client = ClientBuilder::quick_transmitter(
+        "localhost:2775",
+        "system_id",
+        "password"
     ).await?;
+
+    // Create SMS message
+    let sms = SmsMessage::new("1234567890", "0987654321", "Hello, World!");
+
+    // Send SMS message (Section 4.4.1 - submit_sm)
+    let message_id = client.send_sms(&sms).await?;
 
     println!("Message sent with ID: {}", message_id);
 
     // Clean disconnect (Section 4.2.1 - unbind)
     client.unbind().await?;
+    client.disconnect().await?;
 
     Ok(())
 }
 ```
 
-### Advanced Usage with TLV Parameters
+### Advanced Usage with Message Options
 
 ```rust
-use smpp::datatypes::{SubmitSm, Tlv, tags};
-use bytes::Bytes;
+use smpp::client::{ClientBuilder, SmppClient, SmppTransmitter, SmsMessage};
+use smpp::datatypes::{TypeOfNumber, NumericPlanIndicator, PriorityFlag, DataCoding};
 
-// Create submit_sm with TLV parameters (Section 5.3 - TLV Parameters)
-let submit_sm = SubmitSm::builder()
-    .sequence_number(1)
-    .source_addr("12345")
-    .destination_addr("67890")
-    .short_message("Hello with TLV!")
-    .user_message_reference(Tlv {
-        tag: tags::USER_MESSAGE_REFERENCE,    // 0x0204 per Table 5-1
-        length: 2,
-        value: Bytes::from_static(&[0x00, 0x01]),
-    })
-    .build()?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect and bind as transmitter
+    let mut client = ClientBuilder::quick_transmitter(
+        "localhost:2775",
+        "system_id", 
+        "password"
+    ).await?;
+
+    // Create SMS with advanced options
+    let sms = SmsMessage::builder()
+        .to("1234567890")
+        .from("0987654321")
+        .text("Hello with options!")
+        .priority(PriorityFlag::Level1)
+        .data_coding(DataCoding::default())
+        .with_delivery_receipt()
+        .source_numbering(TypeOfNumber::International, NumericPlanIndicator::Isdn)
+        .dest_numbering(TypeOfNumber::International, NumericPlanIndicator::Isdn)
+        .build()?;
+
+    // Send message
+    let message_id = client.send_sms(&sms).await?;
+    println!("Message sent with ID: {}", message_id);
+
+    // Clean disconnect
+    client.unbind().await?;
+    client.disconnect().await?;
+
+    Ok(())
+}
 ```
 
 ## Architecture

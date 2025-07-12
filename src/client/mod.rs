@@ -14,7 +14,7 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use smpp::client::{ClientBuilder, SmsMessage};
+//! use smpp::client::{ClientBuilder, SmsMessage, SmppClient, SmppConnection, SmppTransmitter};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a transmitter client
