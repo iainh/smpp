@@ -60,7 +60,7 @@ All fields validated according to SMPP v3.4 specification:
 
 ```toml
 [dependencies]
-smpp = "0.1.0"
+smpp = "0.2.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
