@@ -1,5 +1,6 @@
-/target
-/.idea
-Cargo.lock
 .DS_Store
-.direnv
+.direnv/
+.idea/
+Cargo.lock
+target/
+*.md
