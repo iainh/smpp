@@ -4,44 +4,44 @@ use num_enum::TryFromPrimitive;
 #[repr(u32)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum CommandId {
-    GenericNack = 0x80000000,
-    BindReceiver = 0x00000001,
-    BindReceiverResp = 0x80000001,
-    BindTransmitter = 0x00000002,
-    BindTransmitterResp = 0x80000002,
-    QuerySm = 0x00000003,
-    QuerySmResp = 0x80000003,
-    SubmitSm = 0x00000004,
-    SubmitSmResp = 0x80000004,
-    DeliverSm = 0x00000005,
-    DeliverSmResp = 0x80000005,
-    Unbind = 0x00000006,
-    UnbindResp = 0x80000006,
-    ReplaceSm = 0x00000007,
-    ReplaceSmResp = 0x80000007,
-    CancelSm = 0x00000008,
-    CancelSmResp = 0x80000008,
-    BindTransceiver = 0x00000009,
-    BindTransceiverResp = 0x80000009,
+    GenericNack = 0x8000_0000,
+    BindReceiver = 0x0000_0001,
+    BindReceiverResp = 0x8000_0001,
+    BindTransmitter = 0x0000_0002,
+    BindTransmitterResp = 0x8000_0002,
+    QuerySm = 0x0000_0003,
+    QuerySmResp = 0x8000_0003,
+    SubmitSm = 0x0000_0004,
+    SubmitSmResp = 0x8000_0004,
+    DeliverSm = 0x0000_0005,
+    DeliverSmResp = 0x8000_0005,
+    Unbind = 0x0000_0006,
+    UnbindResp = 0x8000_0006,
+    ReplaceSm = 0x0000_0007,
+    ReplaceSmResp = 0x8000_0007,
+    CancelSm = 0x0000_0008,
+    CancelSmResp = 0x8000_0008,
+    BindTransceiver = 0x0000_0009,
+    BindTransceiverResp = 0x8000_0009,
     // Reserved 0x0000000A - 0x8000000A
-    Outbind = 0x0000000B,
+    Outbind = 0x0000_000B,
     // Reserved 0x0000000C - 0x00000014
     //          0x8000000B - 0x80000014
-    EnquireLink = 0x00000015,
-    EnquireLinkResp = 0x80000015,
+    EnquireLink = 0x0000_0015,
+    EnquireLinkResp = 0x8000_0015,
     // Reserved 0x00000016 - 0x00000020
     //          0x80000016 - 0x80000020
-    SubmitMulti = 0x00000021,
-    SubmitMultiResp = 0x80000021,
+    SubmitMulti = 0x0000_0021,
+    SubmitMultiResp = 0x8000_0021,
     // Reserved 0x00000022 - 0x000000FF
     //          0x80000022 - 0x800000FF
     // Reserved 0x00000100
     // Reserved 0x80000100
     // Reserved 0x00000101 - 0x80000101
-    AlertNotification = 0x00000102,
+    AlertNotification = 0x0000_0102,
     // Reserved 0x80000102
-    DataSm = 0x00000103,
-    DataSmResp = 0x80000103,
+    DataSm = 0x0000_0103,
+    DataSmResp = 0x8000_0103,
     // Reserved for SMPP extension
     //          0x00000104 - 0x0000FFFF
     //          0x80000104 - 0x8000FFFF

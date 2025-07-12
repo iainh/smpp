@@ -186,13 +186,13 @@ impl ToBytes for BindReceiver {
         self.validate().expect("BindReceiver validation failed");
 
         let system_id = self.system_id.as_ref();
-        let password = self.password.as_ref().map(|p| p.as_ref());
+        let password = self.password.as_ref().map(std::convert::AsRef::as_ref);
         let system_type = self.system_type.as_ref();
         let address_range = self.address_range.as_ref();
 
         let length = 23
             + system_id.len()
-            + password.map_or(0, |p| p.len())
+            + password.map_or(0, <[u8]>::len)
             + system_type.len()
             + address_range.len();
 

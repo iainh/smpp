@@ -178,21 +178,6 @@ fn parse_bind_transceiver(command_status: CommandStatus, sequence_number: u32, s
     Ok(Frame::BindTransceiver(pdu))
 }
 
-/// Parse an address triplet (TON, NPI, address string) - common pattern in message PDUs
-#[tracing::instrument]
-fn parse_address_triplet<T>(src: &mut Cursor<&[u8]>, max_addr_len: usize, field_name: &str) -> Result<(TypeOfNumber, NumericPlanIndicator, T), Error>
-where
-    T: TryFrom<String>,
-    T::Error: std::fmt::Display + Send + Sync + 'static,
-{
-    let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
-    let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-    let addr_string = get_cstring_field(src, max_addr_len, field_name)?;
-    let addr_typed = T::try_from(addr_string)
-        .map_err(|e| Error::Other(format!("{field_name} field error: {e}").into()))?;
-    
-    Ok((addr_ton, addr_npi, addr_typed))
-}
 
 /// TLV fields for SubmitSm PDU
 struct SubmitSmTlvs {
@@ -734,7 +719,9 @@ impl Frame {
     // }
 }
 
+
 /// Peek a u8 from the buffer
+#[cfg(test)]
 #[tracing::instrument]
 fn peek_u8(src: &mut Cursor<&[u8]>) -> Result<u8, Error> {
     src.has_remaining()
@@ -849,15 +836,6 @@ fn get_cstring_field(
 }
 
 // Keep the old function for backward compatibility during transition
-#[tracing::instrument]
-#[deprecated(note = "Use get_cstring_field instead for better error handling and SMPP compliance")]
-fn get_until_coctet_string(
-    src: &mut Cursor<&[u8]>,
-    max_length: Option<u64>,
-) -> Result<String, Error> {
-    let max_len = max_length.unwrap_or(256) as usize;
-    get_cstring_field(src, max_len, "unknown_field")
-}
 
 #[tracing::instrument]
 fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
@@ -876,6 +854,7 @@ fn get_tlv(src: &mut Cursor<&[u8]>) -> Result<Tlv, Error> {
 
 /// Advance the buffer by n bytes. If there are not enough bytes remaining,
 /// return an error indicating that the data is incomplete.
+#[cfg(test)]
 #[tracing::instrument]
 fn skip(src: &mut Cursor<&[u8]>, n: usize) -> Result<(), Error> {
     (src.remaining() >= n)

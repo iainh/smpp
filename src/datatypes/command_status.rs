@@ -11,68 +11,68 @@ use num_enum::TryFromPrimitive;
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum CommandStatus {
     /// No Error
-    Ok = 0x00000000,
+    Ok = 0x0000_0000,
 
     /// Message Length is invalid
-    InvalidMsgLength = 0x00000001,
+    InvalidMsgLength = 0x0000_0001,
 
     /// Command Length is invalid
-    InvalidCommandLength = 0x00000002,
+    InvalidCommandLength = 0x0000_0002,
 
     /// Invalid Command ID
-    InvalidCommandId = 0x00000003,
+    InvalidCommandId = 0x0000_0003,
 
     /// Incorrect BIND Status for given command
-    IncorrectBindStatus = 0x00000004,
+    IncorrectBindStatus = 0x0000_0004,
 
     /// ESME Already in Bound State
-    AlreadyBoundState = 0x00000005,
+    AlreadyBoundState = 0x0000_0005,
 
     /// Invalid Priority Flag
-    InvalidPriorityFlag = 0x00000006,
+    InvalidPriorityFlag = 0x0000_0006,
 
     /// Invalid Registered Delivery Flag
-    InvalidRegisteredDeliveryFlag = 0x00000007,
+    InvalidRegisteredDeliveryFlag = 0x0000_0007,
 
     /// System Error
-    SystemError = 0x00000008,
+    SystemError = 0x0000_0008,
 
     // Reserved   0x00000009
     /// Invalid Source Address
-    InvalidSourceAddress = 0x0000000A,
+    InvalidSourceAddress = 0x0000_000A,
 
     /// Invalid Dest Addr
-    InvalidDestinationAddress = 0x0000000B,
+    InvalidDestinationAddress = 0x0000_000B,
 
     /// Message ID is invalid
-    InvalidMessageId = 0x0000000C,
+    InvalidMessageId = 0x0000_000C,
 
     /// Bind Failed
-    BindFailed = 0x0000000D,
+    BindFailed = 0x0000_000D,
 
     /// Invalid Password
-    InvalidPassword = 0x0000000E,
+    InvalidPassword = 0x0000_000E,
 
     /// Invalid System ID
-    InvalidSystemId = 0x0000000F,
+    InvalidSystemId = 0x0000_000F,
 
     // Reserved 0x00000010
     /// Cancel SM Failed
-    CancelSmFailed = 0x00000011,
+    CancelSmFailed = 0x0000_0011,
 
     // Reserved 0x00000012
     /// Replace SM Failed
-    ReplacedSmFailed = 0x00000013,
+    ReplacedSmFailed = 0x0000_0013,
 
     /// Message Queue Full
-    MessageQueueFull = 0x00000014,
+    MessageQueueFull = 0x0000_0014,
 
     /// Invalid Service Type
-    InvalidServiceType = 0x00000015,
+    InvalidServiceType = 0x0000_0015,
 
     // Reserved 0x00000016 - 0x00000032
     /// Invalid number of destinations
-    InvalidNumberOfDestinations = 0x00000033,
+    InvalidNumberOfDestinations = 0x0000_0033,
 
     /// Invalid Distribution List name
     InvalidDistributionListName = 0x00000034,

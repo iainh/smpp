@@ -71,7 +71,7 @@ impl<const N: usize> PhoneNumber<N> {
         
         Ok(Self {
             data,
-            length: addr_bytes.len() as u8,
+            length: u8::try_from(addr_bytes.len()).map_err(|_| AddressError::TooLong { max_len: N - 1, actual_len: addr_bytes.len() })?,
         })
     }
 
@@ -119,6 +119,7 @@ impl<const N: usize> PhoneNumber<N> {
 
     /// Creates a PhoneNumber from a parsed C-string, for frame parsing compatibility
     /// Uses Unknown TON since TON is parsed separately in SMPP frames
+    #[allow(clippy::needless_pass_by_value)] // String is consumed to avoid clone in common usage
     pub fn from_parsed_string(s: String) -> Result<Self, AddressError> {
         Self::new(&s, TypeOfNumber::Unknown)
     }
@@ -152,7 +153,7 @@ impl<const N: usize> AlphanumericAddress<N> {
         
         Ok(Self {
             data,
-            length: addr_bytes.len() as u8,
+            length: u8::try_from(addr_bytes.len()).map_err(|_| AddressError::TooLong { max_len: N - 1, actual_len: addr_bytes.len() })?,
         })
     }
 
@@ -182,6 +183,7 @@ impl<const N: usize> AlphanumericAddress<N> {
     }
 
     /// Creates an AlphanumericAddress from a parsed C-string, for frame parsing compatibility
+    #[allow(clippy::needless_pass_by_value)] // String is consumed to avoid clone in common usage
     pub fn from_parsed_string(s: String) -> Result<Self, AddressError> {
         Self::new(&s)
     }
@@ -202,10 +204,10 @@ impl fmt::Display for AddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AddressError::TooLong { max_len, actual_len } => {
-                write!(f, "Address too long: {} bytes (max {})", actual_len, max_len)
+                write!(f, "Address too long: {actual_len} bytes (max {max_len})")
             }
             AddressError::InvalidFormat { ton, reason } => {
-                write!(f, "Invalid address format for {:?}: {}", ton, reason)
+                write!(f, "Invalid address format for {ton:?}: {reason}")
             }
             AddressError::InvalidUtf8 => {
                 write!(f, "Address contains invalid UTF-8")
@@ -292,25 +294,25 @@ impl<const N: usize> AsRef<[u8]> for AlphanumericAddress<N> {
 // Comparison implementations
 impl<const N: usize> PartialEq<str> for PhoneNumber<N> {
     fn eq(&self, other: &str) -> bool {
-        self.as_str().map_or(false, |s| s == other)
+        self.as_str() == Ok(other)
     }
 }
 
 impl<const N: usize> PartialEq<&str> for PhoneNumber<N> {
     fn eq(&self, other: &&str) -> bool {
-        self.as_str().map_or(false, |s| s == *other)
+        self.as_str() == Ok(*other)
     }
 }
 
 impl<const N: usize> PartialEq<str> for AlphanumericAddress<N> {
     fn eq(&self, other: &str) -> bool {
-        self.as_str().map_or(false, |s| s == other)
+        self.as_str() == Ok(other)
     }
 }
 
 impl<const N: usize> PartialEq<&str> for AlphanumericAddress<N> {
     fn eq(&self, other: &&str) -> bool {
-        self.as_str().map_or(false, |s| s == *other)
+        self.as_str() == Ok(*other)
     }
 }
 
