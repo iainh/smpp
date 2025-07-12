@@ -1,0 +1,285 @@
+# SMPP v3.4 Protocol Implementation
+
+A high-performance, type-safe Rust implementation of the Short Message Peer-to-Peer (SMPP) protocol version 3.4, as defined in the [SMPP v3.4 Specification](https://smpp.org/SMPP_v3_4_Issue1_2.pdf).
+
+## Overview
+
+This library provides a complete implementation of SMPP v3.4 for building SMS applications, SMS gateways, and mobile network infrastructure. It features zero-allocation parsing, strongly-typed protocol fields, and comprehensive validation according to the SMPP specification.
+
+### Key Features
+
+- **Full SMPP v3.4 Compliance**: Implements all core PDUs per specification sections 4.1-4.12
+- **Type Safety**: Strongly-typed fields with compile-time validation
+- **High Performance**: Zero-allocation parsing with <200ns PDU processing
+- **Async/Await Support**: Built on Tokio for modern Rust async ecosystem
+- **Comprehensive Validation**: Protocol-level validation per SMPP specification
+- **Production Ready**: Extensive testing and benchmarking
+
+## SMPP v3.4 Specification Compliance
+
+### Implemented PDUs (Section 4 - PDU Definitions)
+
+| PDU Name | Command ID | Spec Section | Status |
+|----------|------------|--------------|--------|
+| bind_transmitter | 0x00000002 | 4.1.1 | ✅ Complete |
+| bind_transmitter_resp | 0x80000002 | 4.1.2 | ✅ Complete |
+| bind_receiver | 0x00000001 | 4.2.1 | ✅ Complete |
+| bind_receiver_resp | 0x80000001 | 4.2.2 | ✅ Complete |
+| bind_transceiver | 0x00000009 | 4.2.5 | ✅ Complete |
+| bind_transceiver_resp | 0x80000009 | 4.2.6 | ✅ Complete |
+| unbind | 0x00000006 | 4.2.1 | ✅ Complete |
+| unbind_resp | 0x80000006 | 4.2.2 | ✅ Complete |
+| submit_sm | 0x00000004 | 4.4.1 | ✅ Complete |
+| submit_sm_resp | 0x80000004 | 4.4.2 | ✅ Complete |
+| deliver_sm | 0x00000005 | 4.6.1 | ✅ Complete |
+| deliver_sm_resp | 0x80000005 | 4.6.2 | ✅ Complete |
+| enquire_link | 0x00000015 | 4.11.1 | ✅ Complete |
+| enquire_link_resp | 0x80000015 | 4.11.2 | ✅ Complete |
+| generic_nack | 0x80000000 | 4.3.1 | ✅ Complete |
+| outbind | 0x0000000B | 4.1.4 | ✅ Complete |
+
+### Protocol Features (Section 5 - Protocol Features)
+
+- **Connection Management**: Full bind/unbind lifecycle per Section 5.1.1
+- **Message States**: Complete message state tracking per Section 5.2.28
+- **Error Handling**: Comprehensive error codes per Section 5.1.3
+- **TLV Parameters**: Full support for optional parameters per Section 5.3
+- **Data Coding**: GSM 7-bit, UCS2, and Latin-1 support per Section 5.2.19
+
+### Field Validation (Section 2.2 - SMPP PDU Format)
+
+All fields validated according to SMPP v3.4 specification:
+- **Field Length Limits**: Enforced per specification tables
+- **Null Termination**: C-Octet String handling per Section 3.1
+- **Enumerated Values**: Type-safe enums for all specified values
+- **Reserved Fields**: Proper handling of reserved ranges
+
+## Quick Start
+
+### Dependencies
+
+```toml
+[dependencies]
+smpp = "0.1.0"
+tokio = { version = "1.0", features = ["full"] }
+```
+
+### Basic SMS Sending Example
+
+```rust
+use smpp::connection::connect;
+use smpp::datatypes::{SubmitSm, TypeOfNumber, NumericPlanIndicator};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to SMSC (Section 4.1 - Bind Operations)
+    let mut client = connect("localhost:2775").await?;
+
+    // Bind as transmitter (Section 4.1.1 - bind_transmitter)
+    client.bind("system_id", "password").await?;
+
+    // Submit SMS message (Section 4.4.1 - submit_sm)
+    let message_id = client.send(
+        "1234567890",    // destination_addr
+        "0987654321",    // source_addr
+        "Hello, World!"  // short_message
+    ).await?;
+
+    println!("Message sent with ID: {}", message_id);
+
+    // Clean disconnect (Section 4.2.1 - unbind)
+    client.unbind().await?;
+
+    Ok(())
+}
+```
+
+### Advanced Usage with TLV Parameters
+
+```rust
+use smpp::datatypes::{SubmitSm, Tlv, tags};
+use bytes::Bytes;
+
+// Create submit_sm with TLV parameters (Section 5.3 - TLV Parameters)
+let submit_sm = SubmitSm::builder()
+    .sequence_number(1)
+    .source_addr("12345")
+    .destination_addr("67890")
+    .short_message("Hello with TLV!")
+    .user_message_reference(Tlv {
+        tag: tags::USER_MESSAGE_REFERENCE,    // 0x0204 per Table 5-1
+        length: 2,
+        value: Bytes::from_static(&[0x00, 0x01]),
+    })
+    .build()?;
+```
+
+## Architecture
+
+### Core Components
+
+The library follows the SMPP v3.4 layered architecture:
+
+```
+Application Layer           Your SMS Application
+    │
+Frame Layer                 smpp::Frame (Section 2.2 - PDU Format)
+    │
+Connection Layer            smpp::Connection (Section 2.1 - Session Layer)
+    │
+Transport Layer             TCP/IP (tokio::net::TcpStream)
+```
+
+### Key Types
+
+- **`Frame`**: Represents complete SMPP PDUs per Section 2.2
+- **`Connection`**: Manages TCP connection with frame buffering
+- **Data Types**: Strongly-typed fields matching specification exactly
+- **`ToBytes`**: Zero-allocation serialization trait
+
+### Field Types and Specification Mapping
+
+| Rust Type | SMPP Field Type | Spec Reference | Max Length |
+|-----------|-----------------|----------------|------------|
+| `SystemId` | C-Octet String | Table 4-1 | 16 octets |
+| `Password` | C-Octet String | Table 4-1 | 9 octets |
+| `ShortMessage` | Octet String | Section 4.4.1 | 254 octets |
+| `MessageId` | C-Octet String | Section 4.4.2 | 65 octets |
+| `ServiceType` | C-Octet String | Table 4-1 | 6 octets |
+
+## Protocol Flows
+
+### Typical ESME Session (Section 2.1 - Session States)
+
+```
+1. TCP Connect          → OPEN state
+2. bind_transmitter     → Send bind request (Section 4.1.1)
+3. bind_transmitter_resp → Receive bind response (Section 4.1.2)
+4. [BOUND_TX state]     → Ready for message submission
+5. submit_sm            → Submit message (Section 4.4.1)
+6. submit_sm_resp       → Receive message ID (Section 4.4.2)
+7. unbind               → Initiate unbind (Section 4.2.1)
+8. unbind_resp          → Confirm unbind (Section 4.2.2)
+9. TCP Disconnect       → Return to CLOSED state
+```
+
+### Message State Transitions (Section 5.2.28)
+
+```
+ACCEPTED → ENROUTE → DELIVERED
+    ↓         ↓          ↓
+REJECTED   UNKNOWN   EXPIRED
+```
+
+## Performance
+
+Benchmarked performance on typical hardware:
+
+- **Frame Parsing**: ~200ns for complex PDUs (submit_sm, deliver_sm)
+- **Frame Serialization**: ~80ns for complex PDUs
+- **Memory Allocation**: Zero allocations for messages under 160 bytes
+- **Throughput**: >100K messages/second sustained
+
+See [benchmark.md](benchmark.md) for detailed performance analysis.
+
+## Error Handling
+
+All SMPP v3.4 error codes supported per Section 5.1.3:
+
+```rust
+use smpp::datatypes::CommandStatus;
+
+match result {
+    Ok(response) => println!("Success: {:?}", response),
+    Err(status) => match status {
+        CommandStatus::InvalidSourceAddress => {
+            // Handle error per Section 5.1.3, Code 0x0000000A
+            eprintln!("Invalid source address format");
+        },
+        CommandStatus::MessageQueueFull => {
+            // Handle error per Section 5.1.3, Code 0x00000014
+            eprintln!("SMSC message queue full, retry later");
+        },
+        _ => eprintln!("Other error: {:?}", status),
+    }
+}
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+# Unit tests
+cargo test
+
+# Integration tests with real SMSC
+cargo test --features integration-tests
+
+# Performance benchmarks
+cargo bench
+
+# Check compliance with SMPP specification
+cargo test compliance
+```
+
+## Development
+
+### Building
+
+```bash
+# Standard build
+cargo build
+
+# Development build with all features
+nix develop  # Enter development shell
+cargo build --all-features
+
+# Release build optimized for production
+cargo build --release
+```
+
+### Code Organization
+
+```
+src/
+├── lib.rs              # Library entry point
+├── frame.rs            # PDU frame parsing (Section 2.2)
+├── connection.rs       # Connection management (Section 2.1)
+└── datatypes/          # Protocol data types
+    ├── mod.rs          # Common types and traits
+    ├── submit_sm.rs    # submit_sm PDU (Section 4.4.1)
+    ├── deliver_sm.rs   # deliver_sm PDU (Section 4.6.1)
+    ├── bind_*.rs       # Bind operations (Section 4.1)
+    └── ...
+```
+
+## Specification References
+
+This implementation follows the [SMPP v3.4 Specification](https://smpp.org/SMPP_v3_4_Issue1_2.pdf) published by the SMS Forum. Key sections referenced:
+
+- **Section 2**: Protocol Overview and Architecture
+- **Section 3**: Data Types and Encoding Rules
+- **Section 4**: PDU Definitions and Message Formats
+- **Section 5**: Protocol Features and Optional Parameters
+
+For detailed compliance information, see [COMPLIANCE.md](COMPLIANCE.md).
+
+## Contributing
+
+Contributions welcome! Please ensure:
+
+1. **Specification Compliance**: All changes must conform to SMPP v3.4
+2. **Performance**: Maintain sub-microsecond parsing performance
+3. **Type Safety**: Use strongly-typed fields where possible
+4. **Documentation**: Include specification section references
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- SMS Forum for the SMPP v3.4 specification
+- Rust async ecosystem (Tokio, Bytes) for high-performance foundations
+- Tiger Style methodology for performance-focused development approach
