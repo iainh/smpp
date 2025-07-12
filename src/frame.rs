@@ -68,44 +68,387 @@ impl Frame {
             .then_some(command_length)
             .ok_or(Error::Incomplete)
     }
+}
 
+/// Parse the common 16-byte SMPP header from all PDUs
+#[tracing::instrument]
+fn parse_header(src: &mut Cursor<&[u8]>) -> Result<(CommandId, CommandStatus, u32), Error> {
+    let _command_length = get_u32(src)?;
+    let command_id = CommandId::try_from(get_u32(src)?)?;
+    let command_status = CommandStatus::try_from(get_u32(src)?)?;
+    let sequence_number = get_u32(src)?;
+    
+    Ok((command_id, command_status, sequence_number))
+}
+
+/// Common fields shared by all bind PDU types (BindTransmitter, BindReceiver, BindTransceiver)
+struct BindFields {
+    system_id: SystemId,
+    password: Option<Password>,
+    system_type: SystemType,
+    interface_version: InterfaceVersion,
+    addr_ton: TypeOfNumber,
+    addr_npi: NumericPlanIndicator,
+    address_range: AddressRange,
+}
+
+/// Parse the common fields for bind PDUs (BindTransmitter, BindReceiver, BindTransceiver)
+#[tracing::instrument]
+fn parse_bind_fields(src: &mut Cursor<&[u8]>) -> Result<BindFields, Error> {
+    let system_id = get_cstring_field(src, 16, "system_id")?;
+    let password = get_cstring_field(src, 9, "password")?;
+    let system_type = get_cstring_field(src, 13, "system_type")?;
+    let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
+    let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+    let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+    let address_range = get_cstring_field(src, 41, "address_range")?;
+
+    Ok(BindFields {
+        system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
+        password: if password.is_empty() {
+            None
+        } else {
+            Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
+        },
+        system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
+        interface_version,
+        addr_ton,
+        addr_npi,
+        address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
+    })
+}
+
+/// Parse a BindTransmitter PDU
+#[tracing::instrument]
+fn parse_bind_transmitter(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+    let fields = parse_bind_fields(src)?;
+    
+    let pdu = BindTransmitter {
+        command_status,
+        sequence_number,
+        system_id: fields.system_id,
+        password: fields.password,
+        system_type: fields.system_type,
+        interface_version: fields.interface_version,
+        addr_ton: fields.addr_ton,
+        addr_npi: fields.addr_npi,
+        address_range: fields.address_range,
+    };
+    
+    Ok(Frame::BindTransmitter(pdu))
+}
+
+/// Parse a BindReceiver PDU
+#[tracing::instrument]
+fn parse_bind_receiver(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+    let fields = parse_bind_fields(src)?;
+    
+    let pdu = BindReceiver {
+        command_status,
+        sequence_number,
+        system_id: fields.system_id,
+        password: fields.password,
+        system_type: fields.system_type,
+        interface_version: fields.interface_version,
+        addr_ton: fields.addr_ton,
+        addr_npi: fields.addr_npi,
+        address_range: fields.address_range,
+    };
+    
+    Ok(Frame::BindReceiver(pdu))
+}
+
+/// Parse a BindTransceiver PDU
+#[tracing::instrument]
+fn parse_bind_transceiver(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+    let fields = parse_bind_fields(src)?;
+    
+    let pdu = BindTransceiver {
+        command_status,
+        sequence_number,
+        system_id: fields.system_id,
+        password: fields.password,
+        system_type: fields.system_type,
+        interface_version: fields.interface_version,
+        addr_ton: fields.addr_ton,
+        addr_npi: fields.addr_npi,
+        address_range: fields.address_range,
+    };
+    
+    Ok(Frame::BindTransceiver(pdu))
+}
+
+/// Parse an address triplet (TON, NPI, address string) - common pattern in message PDUs
+#[tracing::instrument]
+fn parse_address_triplet<T>(src: &mut Cursor<&[u8]>, max_addr_len: usize, field_name: &str) -> Result<(TypeOfNumber, NumericPlanIndicator, T), Error>
+where
+    T: TryFrom<String>,
+    T::Error: std::fmt::Display + Send + Sync + 'static,
+{
+    let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+    let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+    let addr_string = get_cstring_field(src, max_addr_len, field_name)?;
+    let addr_typed = T::try_from(addr_string)
+        .map_err(|e| Error::Other(format!("{field_name} field error: {e}").into()))?;
+    
+    Ok((addr_ton, addr_npi, addr_typed))
+}
+
+/// TLV fields for SubmitSm PDU
+struct SubmitSmTlvs {
+    user_message_reference: Option<Tlv>,
+    source_port: Option<Tlv>,
+    source_addr_submit: Option<Tlv>,
+    destination_port: Option<Tlv>,
+    dest_addr_submit: Option<Tlv>,
+    sar_msg_ref_num: Option<Tlv>,
+    sar_total_segments: Option<Tlv>,
+    sar_segment_seqnum: Option<Tlv>,
+    more_messages_to_send: Option<Tlv>,
+    payload_type: Option<Tlv>,
+    message_payload: Option<Tlv>,
+    privacy_indicator: Option<Tlv>,
+    callback_num: Option<Tlv>,
+    callback_num_pres_ind: Option<Tlv>,
+    callback_num_atag: Option<Tlv>,
+    source_subaddress: Option<Tlv>,
+    dest_subaddress: Option<Tlv>,
+    display_time: Option<Tlv>,
+    sms_signal: Option<Tlv>,
+    ms_validity: Option<Tlv>,
+    ms_msg_wait_facilities: Option<Tlv>,
+    number_of_messages: Option<Tlv>,
+    alert_on_msg_delivery: Option<Tlv>,
+    language_indicator: Option<Tlv>,
+    its_reply_type: Option<Tlv>,
+    its_session_info: Option<Tlv>,
+    ussd_service_op: Option<Tlv>,
+}
+
+/// Parse TLV parameters for SubmitSm PDU
+#[tracing::instrument]
+fn parse_submit_sm_tlvs(src: &mut Cursor<&[u8]>, short_message: &ShortMessage) -> Result<SubmitSmTlvs, Error> {
+    let mut user_message_reference = None;
+    let mut source_port = None;
+    let mut source_addr_submit = None;
+    let mut destination_port = None;
+    let mut dest_addr_submit = None;
+    let mut sar_msg_ref_num = None;
+    let mut sar_total_segments = None;
+    let mut sar_segment_seqnum = None;
+    let mut more_messages_to_send = None;
+    let mut payload_type = None;
+    let mut message_payload = None;
+    let mut privacy_indicator = None;
+    let mut callback_num = None;
+    let mut callback_num_pres_ind = None;
+    let mut callback_num_atag = None;
+    let mut source_subaddress = None;
+    let mut dest_subaddress = None;
+    let mut display_time = None;
+    let mut sms_signal = None;
+    let mut ms_validity = None;
+    let mut ms_msg_wait_facilities = None;
+    let mut number_of_messages = None;
+    let mut alert_on_msg_delivery = None;
+    let mut language_indicator = None;
+    let mut its_reply_type = None;
+    let mut its_session_info = None;
+    let mut ussd_service_op = None;
+
+    while src.has_remaining() {
+        let tlv = get_tlv(src)?;
+        match tlv.tag {
+            tags::USER_MESSAGE_REFERENCE => user_message_reference = Some(tlv),
+            tags::SOURCE_PORT => source_port = Some(tlv),
+            tags::SOURCE_ADDR_SUBMIT => source_addr_submit = Some(tlv),
+            tags::DESTINATION_PORT => destination_port = Some(tlv),
+            tags::DEST_ADDR_SUBMIT => dest_addr_submit = Some(tlv),
+            tags::SAR_MSG_REF_NUM => sar_msg_ref_num = Some(tlv),
+            tags::SAR_TOTAL_SEGMENTS => sar_total_segments = Some(tlv),
+            tags::SAR_SEGMENT_SEQNUM => sar_segment_seqnum = Some(tlv),
+            tags::MORE_MESSAGES_TO_SEND => more_messages_to_send = Some(tlv),
+            tags::PAYLOAD_TYPE => payload_type = Some(tlv),
+            tags::MESSAGE_PAYLOAD => {
+                // Validate mutual exclusivity with short_message
+                if !short_message.is_empty() {
+                    return Err(Error::Other("Cannot use both short_message and message_payload - they are mutually exclusive".into()));
+                }
+                message_payload = Some(tlv);
+            }
+            tags::PRIVACY_INDICATOR => privacy_indicator = Some(tlv),
+            tags::CALLBACK_NUM => callback_num = Some(tlv),
+            tags::CALLBACK_NUM_PRES_IND => callback_num_pres_ind = Some(tlv),
+            tags::CALLBACK_NUM_ATAG => callback_num_atag = Some(tlv),
+            tags::SOURCE_SUBADDRESS => source_subaddress = Some(tlv),
+            tags::DEST_SUBADDRESS => dest_subaddress = Some(tlv),
+            tags::DISPLAY_TIME => display_time = Some(tlv),
+            tags::SMS_SIGNAL => sms_signal = Some(tlv),
+            tags::MS_VALIDITY => ms_validity = Some(tlv),
+            tags::MS_MSG_WAIT_FACILITIES => ms_msg_wait_facilities = Some(tlv),
+            tags::NUMBER_OF_MESSAGES => number_of_messages = Some(tlv),
+            tags::ALERT_ON_MSG_DELIVERY => alert_on_msg_delivery = Some(tlv),
+            tags::LANGUAGE_INDICATOR => language_indicator = Some(tlv),
+            tags::ITS_REPLY_TYPE => its_reply_type = Some(tlv),
+            tags::ITS_SESSION_INFO => its_session_info = Some(tlv),
+            tags::USSD_SERVICE_OP => ussd_service_op = Some(tlv),
+            _ => {
+                // Unknown TLV - log warning but continue
+                tracing::warn!("Unknown TLV tag: 0x{:04X}", tlv.tag);
+            }
+        }
+    }
+
+    Ok(SubmitSmTlvs {
+        user_message_reference,
+        source_port,
+        source_addr_submit,
+        destination_port,
+        dest_addr_submit,
+        sar_msg_ref_num,
+        sar_total_segments,
+        sar_segment_seqnum,
+        more_messages_to_send,
+        payload_type,
+        message_payload,
+        privacy_indicator,
+        callback_num,
+        callback_num_pres_ind,
+        callback_num_atag,
+        source_subaddress,
+        dest_subaddress,
+        display_time,
+        sms_signal,
+        ms_validity,
+        ms_msg_wait_facilities,
+        number_of_messages,
+        alert_on_msg_delivery,
+        language_indicator,
+        its_reply_type,
+        its_session_info,
+        ussd_service_op,
+    })
+}
+
+/// Parse a SubmitSm PDU  
+#[tracing::instrument]
+fn parse_submit_sm(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+    // Parse mandatory fields
+    let service_type = ServiceType::from_parsed_string(get_cstring_field(src, 6, "service_type")?)
+        .map_err(|e| Error::Other(format!("service_type field error: {e}").into()))?;
+    
+    let source_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+    let source_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+    let source_addr = SourceAddr::from_parsed_string(get_cstring_field(src, 21, "source_addr")?)
+        .map_err(|e| Error::Other(format!("source_addr field error: {e}").into()))?;
+    let dest_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
+    let dest_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
+    let destination_addr = DestinationAddr::from_parsed_string(get_cstring_field(src, 21, "destination_addr")?)
+        .map_err(|e| Error::Other(format!("destination_addr field error: {e}").into()))?;
+    
+    let esm_class = get_u8(src)?;
+    let protocol_id = get_u8(src)?;
+    let priority_flag = PriorityFlag::try_from(get_u8(src)?)?;
+    let schedule_delivery_time = ScheduleDeliveryTime::from_parsed_string(get_cstring_field(src, 17, "schedule_delivery_time")?)
+        .map_err(|e| Error::Other(format!("schedule_delivery_time field error: {e}").into()))?;
+    let validity_period = ValidityPeriod::from_parsed_string(get_cstring_field(src, 17, "validity_period")?)
+        .map_err(|e| Error::Other(format!("validity_period field error: {e}").into()))?;
+    let registered_delivery = get_u8(src)?;
+    let replace_if_present_flag = get_u8(src)?;
+    let data_coding = get_u8(src)?;
+    let sm_default_msg_id = get_u8(src)?;
+    let sm_length = get_u8(src)?;
+
+    // Validate sm_length is within bounds
+    if sm_length > 254 {
+        return Err(Error::Other(
+            format!("sm_length ({sm_length}) exceeds maximum of 254 bytes").into(),
+        ));
+    }
+
+    // Ensure we have enough remaining bytes for the short message
+    if src.remaining() < sm_length as usize {
+        return Err(Error::Incomplete);
+    }
+
+    // Read short message based on sm_length
+    let short_message = if sm_length > 0 {
+        let message_bytes = src.copy_to_bytes(sm_length as usize);
+        let message_string = String::from_utf8(message_bytes.into()).map_err(|e| {
+            Error::Other(format!("Invalid UTF-8 in short_message: {e}").into())
+        })?;
+        ShortMessage::from_parsed_string(message_string)
+            .map_err(|e| Error::Other(format!("short_message field error: {e}").into()))?
+    } else {
+        ShortMessage::default()
+    };
+
+    // Parse optional TLV parameters
+    let tlvs = parse_submit_sm_tlvs(src, &short_message)?;
+
+    let pdu = SubmitSm {
+        command_status,
+        sequence_number,
+        service_type,
+        source_addr_ton,
+        source_addr_npi,
+        source_addr,
+        dest_addr_ton,
+        dest_addr_npi,
+        destination_addr,
+        esm_class: EsmClass::from(esm_class),
+        protocol_id,
+        priority_flag,
+        schedule_delivery_time,
+        validity_period,
+        registered_delivery,
+        replace_if_present_flag,
+        data_coding: DataCoding::from(data_coding),
+        sm_default_msg_id,
+        sm_length,
+        short_message,
+        user_message_reference: tlvs.user_message_reference,
+        source_port: tlvs.source_port,
+        source_addr_submit: tlvs.source_addr_submit,
+        destination_port: tlvs.destination_port,
+        dest_addr_submit: tlvs.dest_addr_submit,
+        sar_msg_ref_num: tlvs.sar_msg_ref_num,
+        sar_total_segments: tlvs.sar_total_segments,
+        sar_segment_seqnum: tlvs.sar_segment_seqnum,
+        more_messages_to_send: tlvs.more_messages_to_send,
+        payload_type: tlvs.payload_type,
+        message_payload: tlvs.message_payload,
+        privacy_indicator: tlvs.privacy_indicator,
+        callback_num: tlvs.callback_num,
+        callback_num_pres_ind: tlvs.callback_num_pres_ind,
+        callback_num_atag: tlvs.callback_num_atag,
+        source_subaddress: tlvs.source_subaddress,
+        dest_subaddress: tlvs.dest_subaddress,
+        display_time: tlvs.display_time,
+        sms_signal: tlvs.sms_signal,
+        ms_validity: tlvs.ms_validity,
+        ms_msg_wait_facilities: tlvs.ms_msg_wait_facilities,
+        number_of_messages: tlvs.number_of_messages,
+        alert_on_msg_delivery: tlvs.alert_on_msg_delivery,
+        language_indicator: tlvs.language_indicator,
+        its_reply_type: tlvs.its_reply_type,
+        its_session_info: tlvs.its_session_info,
+        ussd_service_op: tlvs.ussd_service_op,
+    };
+
+    Ok(Frame::SubmitSm(Box::new(pdu)))
+}
+
+impl Frame {
     /// The message has already been validated with `check`.
     #[tracing::instrument]
     pub fn parse(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
-        // parse the header
-        let _command_length = get_u32(src)?;
-        let command_id = CommandId::try_from(get_u32(src)?)?;
-        let command_status = CommandStatus::try_from(get_u32(src)?)?;
-        let sequence_number = get_u32(src)?;
+        // Parse common header
+        let (command_id, command_status, sequence_number) = parse_header(src)?;
 
         // Based on the command_id, parse the body
         let command = match command_id {
-            CommandId::BindTransmitter => {
-                let system_id = get_cstring_field(src, 16, "system_id")?;
-                let password = get_cstring_field(src, 9, "password")?;
-                let system_type = get_cstring_field(src, 13, "system_type")?;
-                let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
-                let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
-                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let address_range = get_cstring_field(src, 41, "address_range")?;
-
-                let pdu = BindTransmitter {
-                    command_status,
-                    sequence_number,
-                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
-                    password: if password.is_empty() {
-                        None
-                    } else {
-                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
-                    },
-                    system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
-                    interface_version,
-                    addr_ton,
-                    addr_npi,
-                    address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
-                };
-                Frame::BindTransmitter(pdu)
-            }
+            CommandId::BindTransmitter => parse_bind_transmitter(command_status, sequence_number, src)?,
             CommandId::BindTransmitterResp => {
                 let system_id = get_cstring_field(src, 16, "system_id")?;
 
@@ -123,32 +466,7 @@ impl Frame {
 
                 Frame::BindTransmitterResponse(pdu)
             }
-            CommandId::BindReceiver => {
-                let system_id = get_cstring_field(src, 16, "system_id")?;
-                let password = get_cstring_field(src, 9, "password")?;
-                let system_type = get_cstring_field(src, 13, "system_type")?;
-                let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
-                let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
-                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let address_range = get_cstring_field(src, 41, "address_range")?;
-
-                let pdu = BindReceiver {
-                    command_status,
-                    sequence_number,
-                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
-                    password: if password.is_empty() {
-                        None
-                    } else {
-                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
-                    },
-                    system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
-                    interface_version,
-                    addr_ton,
-                    addr_npi,
-                    address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
-                };
-                Frame::BindReceiver(pdu)
-            }
+            CommandId::BindReceiver => parse_bind_receiver(command_status, sequence_number, src)?,
             CommandId::BindReceiverResp => {
                 let system_id = get_cstring_field(src, 16, "system_id")?;
 
@@ -186,180 +504,7 @@ impl Frame {
 
                 Frame::SubmitSmResponse(pdu)
             }
-            CommandId::SubmitSm => {
-                // Parse mandatory fields
-                let service_type = ServiceType::from_parsed_string(get_cstring_field(src, 6, "service_type")?)
-                    .map_err(|e| Error::Other(format!("service_type field error: {e}").into()))?;
-                let source_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
-                let source_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let source_addr = SourceAddr::from_parsed_string(get_cstring_field(src, 21, "source_addr")?)
-                    .map_err(|e| Error::Other(format!("source_addr field error: {e}").into()))?;
-                let dest_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
-                let dest_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let destination_addr = DestinationAddr::from_parsed_string(get_cstring_field(src, 21, "destination_addr")?)
-                    .map_err(|e| Error::Other(format!("destination_addr field error: {e}").into()))?;
-                let esm_class = get_u8(src)?;
-                let protocol_id = get_u8(src)?;
-                let priority_flag = PriorityFlag::try_from(get_u8(src)?)?;
-                let schedule_delivery_time = ScheduleDeliveryTime::from_parsed_string(get_cstring_field(src, 17, "schedule_delivery_time")?)
-                    .map_err(|e| Error::Other(format!("schedule_delivery_time field error: {e}").into()))?;
-                let validity_period = ValidityPeriod::from_parsed_string(get_cstring_field(src, 17, "validity_period")?)
-                    .map_err(|e| Error::Other(format!("validity_period field error: {e}").into()))?;
-                let registered_delivery = get_u8(src)?;
-                let replace_if_present_flag = get_u8(src)?;
-                let data_coding = get_u8(src)?;
-                let sm_default_msg_id = get_u8(src)?;
-                let sm_length = get_u8(src)?;
-
-                // Validate sm_length is within bounds
-                if sm_length > 254 {
-                    return Err(Error::Other(
-                        format!("sm_length ({sm_length}) exceeds maximum of 254 bytes").into(),
-                    ));
-                }
-
-                // Ensure we have enough remaining bytes for the short message
-                if src.remaining() < sm_length as usize {
-                    return Err(Error::Incomplete);
-                }
-
-                // Read short message based on sm_length
-                let short_message = if sm_length > 0 {
-                    let message_bytes = src.copy_to_bytes(sm_length as usize);
-                    let message_string = String::from_utf8(message_bytes.into()).map_err(|e| {
-                        Error::Other(format!("Invalid UTF-8 in short_message: {e}").into())
-                    })?;
-                    ShortMessage::from_parsed_string(message_string)
-                        .map_err(|e| Error::Other(format!("short_message field error: {e}").into()))?
-                } else {
-                    ShortMessage::default()
-                };
-
-                // Parse optional TLV parameters
-                let mut user_message_reference = None;
-                let mut source_port = None;
-                let mut source_addr_submit = None;
-                let mut destination_port = None;
-                let mut dest_addr_submit = None;
-                let mut sar_msg_ref_num = None;
-                let mut sar_total_segments = None;
-                let mut sar_segment_seqnum = None;
-                let mut more_messages_to_send = None;
-                let mut payload_type = None;
-                let mut message_payload = None;
-                let mut privacy_indicator = None;
-                let mut callback_num = None;
-                let mut callback_num_pres_ind = None;
-                let mut callback_num_atag = None;
-                let mut source_subaddress = None;
-                let mut dest_subaddress = None;
-                let mut display_time = None;
-                let mut sms_signal = None;
-                let mut ms_validity = None;
-                let mut ms_msg_wait_facilities = None;
-                let mut number_of_messages = None;
-                let mut alert_on_msg_delivery = None;
-                let mut language_indicator = None;
-                let mut its_reply_type = None;
-                let mut its_session_info = None;
-                let mut ussd_service_op = None;
-
-                // Parse any remaining TLV parameters
-                while src.has_remaining() {
-                    let tlv = get_tlv(src)?;
-                    match tlv.tag {
-                        tags::USER_MESSAGE_REFERENCE => user_message_reference = Some(tlv),
-                        tags::SOURCE_PORT => source_port = Some(tlv),
-                        tags::SOURCE_ADDR_SUBMIT => source_addr_submit = Some(tlv),
-                        tags::DESTINATION_PORT => destination_port = Some(tlv),
-                        tags::DEST_ADDR_SUBMIT => dest_addr_submit = Some(tlv),
-                        tags::SAR_MSG_REF_NUM => sar_msg_ref_num = Some(tlv),
-                        tags::SAR_TOTAL_SEGMENTS => sar_total_segments = Some(tlv),
-                        tags::SAR_SEGMENT_SEQNUM => sar_segment_seqnum = Some(tlv),
-                        tags::MORE_MESSAGES_TO_SEND => more_messages_to_send = Some(tlv),
-                        tags::PAYLOAD_TYPE => payload_type = Some(tlv),
-                        tags::MESSAGE_PAYLOAD => {
-                            // Validate mutual exclusivity with short_message
-                            if !short_message.is_empty() {
-                                return Err(Error::Other("Cannot use both short_message and message_payload - they are mutually exclusive".into()));
-                            }
-                            message_payload = Some(tlv);
-                        }
-                        tags::PRIVACY_INDICATOR => privacy_indicator = Some(tlv),
-                        tags::CALLBACK_NUM => callback_num = Some(tlv),
-                        tags::CALLBACK_NUM_PRES_IND => callback_num_pres_ind = Some(tlv),
-                        tags::CALLBACK_NUM_ATAG => callback_num_atag = Some(tlv),
-                        tags::SOURCE_SUBADDRESS => source_subaddress = Some(tlv),
-                        tags::DEST_SUBADDRESS => dest_subaddress = Some(tlv),
-                        tags::DISPLAY_TIME => display_time = Some(tlv),
-                        tags::SMS_SIGNAL => sms_signal = Some(tlv),
-                        tags::MS_VALIDITY => ms_validity = Some(tlv),
-                        tags::MS_MSG_WAIT_FACILITIES => ms_msg_wait_facilities = Some(tlv),
-                        tags::NUMBER_OF_MESSAGES => number_of_messages = Some(tlv),
-                        tags::ALERT_ON_MSG_DELIVERY => alert_on_msg_delivery = Some(tlv),
-                        tags::LANGUAGE_INDICATOR => language_indicator = Some(tlv),
-                        tags::ITS_REPLY_TYPE => its_reply_type = Some(tlv),
-                        tags::ITS_SESSION_INFO => its_session_info = Some(tlv),
-                        tags::USSD_SERVICE_OP => ussd_service_op = Some(tlv),
-                        _ => {
-                            // Unknown TLV - log warning but continue
-                            tracing::warn!("Unknown TLV tag: 0x{:04X}", tlv.tag);
-                        }
-                    }
-                }
-
-                let pdu = SubmitSm {
-                    command_status,
-                    sequence_number,
-                    service_type,
-                    source_addr_ton,
-                    source_addr_npi,
-                    source_addr,
-                    dest_addr_ton,
-                    dest_addr_npi,
-                    destination_addr,
-                    esm_class: EsmClass::from(esm_class),
-                    protocol_id,
-                    priority_flag,
-                    schedule_delivery_time,
-                    validity_period,
-                    registered_delivery,
-                    replace_if_present_flag,
-                    data_coding: DataCoding::from(data_coding),
-                    sm_default_msg_id,
-                    sm_length,
-                    short_message,
-                    user_message_reference,
-                    source_port,
-                    source_addr_submit,
-                    destination_port,
-                    dest_addr_submit,
-                    sar_msg_ref_num,
-                    sar_total_segments,
-                    sar_segment_seqnum,
-                    more_messages_to_send,
-                    payload_type,
-                    message_payload,
-                    privacy_indicator,
-                    callback_num,
-                    callback_num_pres_ind,
-                    callback_num_atag,
-                    source_subaddress,
-                    dest_subaddress,
-                    display_time,
-                    sms_signal,
-                    ms_validity,
-                    ms_msg_wait_facilities,
-                    number_of_messages,
-                    alert_on_msg_delivery,
-                    language_indicator,
-                    its_reply_type,
-                    its_session_info,
-                    ussd_service_op,
-                };
-
-                Frame::SubmitSm(Box::new(pdu))
-            }
+            CommandId::SubmitSm => parse_submit_sm(command_status, sequence_number, src)?,
             CommandId::Unbind => {
                 let pdu = Unbind {
                     command_status,
@@ -374,32 +519,7 @@ impl Frame {
                 };
                 Frame::UnbindResponse(pdu)
             }
-            CommandId::BindTransceiver => {
-                let system_id = get_cstring_field(src, 16, "system_id")?;
-                let password = get_cstring_field(src, 9, "password")?;
-                let system_type = get_cstring_field(src, 13, "system_type")?;
-                let interface_version = InterfaceVersion::try_from(get_u8(src)?)?;
-                let addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
-                let addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let address_range = get_cstring_field(src, 41, "address_range")?;
-
-                let pdu = BindTransceiver {
-                    command_status,
-                    sequence_number,
-                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
-                    password: if password.is_empty() {
-                        None
-                    } else {
-                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
-                    },
-                    system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
-                    interface_version,
-                    addr_ton,
-                    addr_npi,
-                    address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
-                };
-                Frame::BindTransceiver(pdu)
-            }
+            CommandId::BindTransceiver => parse_bind_transceiver(command_status, sequence_number, src)?,
             CommandId::BindTransceiverResp => {
                 let system_id = get_cstring_field(src, 16, "system_id")?;
 
