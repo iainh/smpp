@@ -317,20 +317,18 @@ impl fmt::Display for EsmClassError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EsmClassError::InvalidMessageMode(bits) => {
-                write!(f, "Invalid message mode bits: 0x{:02X}", bits)
+                write!(f, "Invalid message mode bits: 0x{bits:02X}")
             }
             EsmClassError::InvalidMessageType { mode, type_bits } => {
                 write!(
                     f,
-                    "Invalid message type bits 0x{:02X} for mode {:?}",
-                    type_bits, mode
+                    "Invalid message type bits 0x{type_bits:02X} for mode {mode:?}"
                 )
             }
             EsmClassError::InvalidCombination { mode, message_type } => {
                 write!(
                     f,
-                    "Invalid combination: mode {:?} with message type {:?}",
-                    mode, message_type
+                    "Invalid combination: mode {mode:?} with message type {message_type:?}"
                 )
             }
         }

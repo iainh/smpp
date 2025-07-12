@@ -32,6 +32,13 @@ impl<const N: usize> FixedString<N> {
 
     /// Creates a new FixedString from raw bytes without validation (unsafe)
     /// The caller must ensure the data is valid and properly null-terminated
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - The data array contains valid UTF-8 bytes (up to the first null byte)
+    /// - The data is properly null-terminated or contains only valid content
+    /// - The length semantics are preserved (content before first null byte)
     pub const unsafe fn from_raw_bytes(data: [u8; N]) -> Self {
         Self { data }
     }
@@ -70,14 +77,14 @@ impl<const N: usize> FixedString<N> {
 
     /// Returns true if the string contains the given character
     pub fn contains(&self, ch: char) -> bool {
-        self.as_str().map_or(false, |s| s.contains(ch))
+        self.as_str().is_ok_and(|s| s.contains(ch))
     }
 }
 
 impl<const N: usize> fmt::Display for FixedString<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "{}", s),
+            Ok(s) => write!(f, "{s}"),
             Err(_) => write!(f, "<invalid UTF-8>"),
         }
     }
@@ -86,7 +93,7 @@ impl<const N: usize> fmt::Display for FixedString<N> {
 impl<const N: usize> fmt::Debug for FixedString<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "FixedString<{}>(\"{}\")", N, s),
+            Ok(s) => write!(f, "FixedString<{N}>(\"{s}\")"),
             Err(_) => write!(f, "FixedString<{}>({:?})", N, self.as_str_bytes()),
         }
     }
@@ -120,19 +127,19 @@ impl<const N: usize> AsRef<[u8]> for FixedString<N> {
 
 impl<const N: usize> PartialEq<str> for FixedString<N> {
     fn eq(&self, other: &str) -> bool {
-        self.as_str().map_or(false, |s| s == other)
+        self.as_str() == Ok(other)
     }
 }
 
 impl<const N: usize> PartialEq<&str> for FixedString<N> {
     fn eq(&self, other: &&str) -> bool {
-        self.as_str().map_or(false, |s| s == *other)
+        self.as_str() == Ok(*other)
     }
 }
 
 impl<const N: usize> PartialEq<String> for FixedString<N> {
     fn eq(&self, other: &String) -> bool {
-        self.as_str().map_or(false, |s| s == other)
+        self.as_str().is_ok_and(|s| s == other)
     }
 }
 
@@ -150,7 +157,7 @@ impl fmt::Display for FixedStringError {
                 max_len,
                 actual_len,
             } => {
-                write!(f, "String too long: {} bytes (max {})", actual_len, max_len)
+                write!(f, "String too long: {actual_len} bytes (max {max_len})")
             }
         }
     }
@@ -226,7 +233,7 @@ impl ShortMessage {
 impl fmt::Display for ShortMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "{}", s),
+            Ok(s) => write!(f, "{s}"),
             Err(_) => write!(f, "<invalid UTF-8>"),
         }
     }
@@ -235,7 +242,7 @@ impl fmt::Display for ShortMessage {
 impl fmt::Debug for ShortMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "ShortMessage(\"{}\")", s),
+            Ok(s) => write!(f, "ShortMessage(\"{s}\")"),
             Err(_) => write!(f, "ShortMessage({:?})", self.as_bytes()),
         }
     }

@@ -377,7 +377,7 @@ impl DeliverSmBuilder {
     /// Build the DeliverSm, performing validation and calculating sm_length automatically
     pub fn build(mut self) -> Result<DeliverSm, DeliverSmValidationError> {
         // Auto-calculate sm_length from short_message
-        self.sm_length = self.short_message.len() as u8;
+        self.sm_length = self.short_message.len();
 
         let deliver_sm = DeliverSm {
             command_status: self.command_status,
@@ -669,9 +669,11 @@ mod tests {
 
         // Check that short message is included
         let message_bytes = "Hello World".as_bytes();
-        assert!(bytes
-            .windows(message_bytes.len())
-            .any(|window| window == message_bytes));
+        assert!(
+            bytes
+                .windows(message_bytes.len())
+                .any(|window| window == message_bytes)
+        );
     }
 
     #[test]

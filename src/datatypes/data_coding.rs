@@ -5,9 +5,10 @@ use std::fmt;
 
 /// Strongly-typed data coding scheme that enforces SMPP protocol validation
 /// Replaces raw u8 values with validated encoding schemes and character sets
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum DataCoding {
     /// SMSC Default Alphabet (typically GSM 7-bit)
+    #[default]
     SmscDefault,
     /// IA5 (CCITT T.50)/ASCII encoding
     Ascii,
@@ -263,15 +264,13 @@ impl fmt::Display for DataCodingError {
             DataCodingError::IncompatibleCharacters { encoding, text } => {
                 write!(
                     f,
-                    "Text contains characters incompatible with {:?}: {}",
-                    encoding, text
+                    "Text contains characters incompatible with {encoding:?}: {text}"
                 )
             }
             DataCodingError::TextNotAllowed { encoding } => {
                 write!(
                     f,
-                    "Text validation not supported for binary encoding: {:?}",
-                    encoding
+                    "Text validation not supported for binary encoding: {encoding:?}"
                 )
             }
         }
@@ -303,12 +302,7 @@ fn is_gsm_7bit_char(c: char) -> bool {
     }
 }
 
-// Default implementation (SMSC default)
-impl Default for DataCoding {
-    fn default() -> Self {
-        DataCoding::SmscDefault
-    }
-}
+// Default implementation is now derived
 
 // Display implementation
 impl fmt::Display for DataCoding {
@@ -324,7 +318,7 @@ impl fmt::Display for DataCoding {
 impl fmt::Debug for DataCoding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DataCoding::Custom(value) => write!(f, "DataCoding::Custom(0x{:02X})", value),
+            DataCoding::Custom(value) => write!(f, "DataCoding::Custom(0x{value:02X})"),
             _ => write!(
                 f,
                 "DataCoding::{} (0x{:02X})",

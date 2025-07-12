@@ -1,12 +1,12 @@
 // ABOUTME: Default SMPP client implementation providing complete trait implementations
 // ABOUTME: Based on the robust example client with proper error handling and response validation
 
+use crate::Frame;
 use crate::client::error::{SmppError, SmppResult};
 use crate::client::traits::{SmppClient, SmppConnection, SmppTransmitter};
 use crate::client::types::{BindCredentials, BindType, SmsMessage};
 use crate::connection::Connection;
 use crate::datatypes::*;
-use crate::Frame;
 use tokio::net::{TcpStream, ToSocketAddrs};
 
 /// Default SMPP client implementation
@@ -103,7 +103,7 @@ impl SmppClient for DefaultClient {
         self.connection
             .write_frame(&frame)
             .await
-            .map_err(|e| SmppError::Connection(e))?;
+            .map_err(SmppError::Connection)?;
 
         // Wait for and validate bind response
         match self.connection.read_frame().await {
@@ -115,7 +115,7 @@ impl SmppClient for DefaultClient {
                     other => {
                         return Err(SmppError::UnexpectedPdu {
                             expected: format!("Bind{:?}Response", credentials.bind_type),
-                            actual: format!("{:?}", other),
+                            actual: format!("{other:?}"),
                         });
                     }
                 };
@@ -147,7 +147,7 @@ impl SmppClient for DefaultClient {
         self.connection
             .write_frame(&frame)
             .await
-            .map_err(|e| SmppError::Connection(e))?;
+            .map_err(SmppError::Connection)?;
 
         // Wait for unbind response
         match self.connection.read_frame().await {
@@ -159,7 +159,7 @@ impl SmppClient for DefaultClient {
             }
             Ok(Some(other)) => Err(SmppError::UnexpectedPdu {
                 expected: "UnbindResponse".to_string(),
-                actual: format!("{:?}", other),
+                actual: format!("{other:?}"),
             }),
             Ok(None) => {
                 // Connection closed during unbind is acceptable
@@ -184,7 +184,7 @@ impl SmppClient for DefaultClient {
         self.connection
             .write_frame(&frame)
             .await
-            .map_err(|e| SmppError::Connection(e))?;
+            .map_err(SmppError::Connection)?;
 
         // Wait for enquire_link response
         match self.connection.read_frame().await {
@@ -194,7 +194,7 @@ impl SmppClient for DefaultClient {
             }
             Ok(Some(other)) => Err(SmppError::UnexpectedPdu {
                 expected: "EnquireLinkResponse".to_string(),
-                actual: format!("{:?}", other),
+                actual: format!("{other:?}"),
             }),
             Ok(None) => Err(SmppError::ConnectionClosed),
             Err(e) => Err(SmppError::from(e)),
@@ -283,7 +283,7 @@ impl SmppTransmitter for DefaultClient {
         self.connection
             .write_frame(&frame)
             .await
-            .map_err(|e| SmppError::Connection(e))?;
+            .map_err(SmppError::Connection)?;
 
         // Wait for and validate submit response
         match self.connection.read_frame().await {
@@ -295,7 +295,7 @@ impl SmppTransmitter for DefaultClient {
             }
             Ok(Some(other)) => Err(SmppError::UnexpectedPdu {
                 expected: "SubmitSmResponse".to_string(),
-                actual: format!("{:?}", other),
+                actual: format!("{other:?}"),
             }),
             Ok(None) => Err(SmppError::ConnectionClosed),
             Err(e) => Err(SmppError::from(e)),

@@ -267,7 +267,7 @@ impl<const N: usize> Default for AlphanumericAddress<N> {
 impl<const N: usize> fmt::Display for PhoneNumber<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "{}", s),
+            Ok(s) => write!(f, "{s}"),
             Err(_) => write!(f, "<invalid UTF-8>"),
         }
     }
@@ -276,7 +276,7 @@ impl<const N: usize> fmt::Display for PhoneNumber<N> {
 impl<const N: usize> fmt::Debug for PhoneNumber<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "PhoneNumber<{}>(\"{}\")", N, s),
+            Ok(s) => write!(f, "PhoneNumber<{N}>(\"{s}\")"),
             Err(_) => write!(f, "PhoneNumber<{}>({:?})", N, self.as_bytes()),
         }
     }
@@ -285,7 +285,7 @@ impl<const N: usize> fmt::Debug for PhoneNumber<N> {
 impl<const N: usize> fmt::Display for AlphanumericAddress<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "{}", s),
+            Ok(s) => write!(f, "{s}"),
             Err(_) => write!(f, "<invalid UTF-8>"),
         }
     }
@@ -294,7 +294,7 @@ impl<const N: usize> fmt::Display for AlphanumericAddress<N> {
 impl<const N: usize> fmt::Debug for AlphanumericAddress<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_str() {
-            Ok(s) => write!(f, "AlphanumericAddress<{}>(\"{}\")", N, s),
+            Ok(s) => write!(f, "AlphanumericAddress<{N}>(\"{s}\")"),
             Err(_) => write!(f, "AlphanumericAddress<{}>({:?})", N, self.as_bytes()),
         }
     }
@@ -394,9 +394,11 @@ mod tests {
 
         // Should validate for compatible TONs
         assert!(phone.validate_for_ton(TypeOfNumber::National).is_ok());
-        assert!(phone
-            .validate_for_ton(TypeOfNumber::NetworkSpecific)
-            .is_ok());
+        assert!(
+            phone
+                .validate_for_ton(TypeOfNumber::NetworkSpecific)
+                .is_ok()
+        );
 
         // Should fail for incompatible TONs (alphanumeric with digits-only content is still valid)
         assert!(phone.validate_for_ton(TypeOfNumber::Alphanumeric).is_ok());

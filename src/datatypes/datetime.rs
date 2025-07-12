@@ -79,7 +79,7 @@ impl SmppDateTime {
         let utc_offset = parse_two_digits(&bytes[13..15])?;
 
         // Validate ranges
-        if month < 1 || month > 12 {
+        if !(1..=12).contains(&month) {
             return Err(DateTimeError::InvalidRange {
                 field: "month".to_string(),
                 value: month as u32,
@@ -87,7 +87,7 @@ impl SmppDateTime {
                 max: 12,
             });
         }
-        if day < 1 || day > 31 {
+        if !(1..=31).contains(&day) {
             return Err(DateTimeError::InvalidRange {
                 field: "day".to_string(),
                 value: day as u32,
@@ -181,8 +181,7 @@ impl SmppDateTime {
         }
 
         let datetime_str = format!(
-            "{:02}{:02}{:02}{:02}{:02}{:02}{}{:02}{}",
-            year, month, day, hour, minute, second, tenth, utc_offset_hours, utc_sign
+            "{year:02}{month:02}{day:02}{hour:02}{minute:02}{second:02}{tenth}{utc_offset_hours:02}{utc_sign}"
         );
 
         Self::new(&datetime_str)
@@ -204,11 +203,7 @@ impl SmppDateTime {
 
     /// Returns the datetime as bytes
     pub fn as_bytes(&self) -> &[u8] {
-        if self.is_empty {
-            &[]
-        } else {
-            &self.data
-        }
+        if self.is_empty { &[] } else { &self.data }
     }
 
     /// Returns the underlying byte array (full 16 bytes)
@@ -218,11 +213,7 @@ impl SmppDateTime {
 
     /// Returns the length of the datetime string (0 for immediate, 16 for set time)
     pub fn len(&self) -> usize {
-        if self.is_empty {
-            0
-        } else {
-            16
-        }
+        if self.is_empty { 0 } else { 16 }
     }
 
     /// Returns true if this is an immediate delivery time
@@ -367,8 +358,7 @@ impl fmt::Display for DateTimeError {
             DateTimeError::InvalidLength { expected, actual } => {
                 write!(
                     f,
-                    "Invalid datetime length: {} chars (expected {})",
-                    actual, expected
+                    "Invalid datetime length: {actual} chars (expected {expected})"
                 )
             }
             DateTimeError::InvalidCharacter {
@@ -378,8 +368,7 @@ impl fmt::Display for DateTimeError {
             } => {
                 write!(
                     f,
-                    "Invalid character '{}' at position {} (expected {})",
-                    character, position, expected
+                    "Invalid character '{character}' at position {position} (expected {expected})"
                 )
             }
             DateTimeError::InvalidRange {
@@ -388,11 +377,7 @@ impl fmt::Display for DateTimeError {
                 min,
                 max,
             } => {
-                write!(
-                    f,
-                    "Invalid {} value: {} (must be {}-{})",
-                    field, value, min, max
-                )
+                write!(f, "Invalid {field} value: {value} (must be {min}-{max})")
             }
         }
     }
@@ -418,7 +403,7 @@ impl fmt::Display for SmppDateTime {
             write!(f, "immediate")
         } else {
             match self.as_str() {
-                Ok(s) => write!(f, "{}", s),
+                Ok(s) => write!(f, "{s}"),
                 Err(_) => write!(f, "<invalid UTF-8>"),
             }
         }
@@ -431,7 +416,7 @@ impl fmt::Debug for SmppDateTime {
             write!(f, "SmppDateTime::immediate()")
         } else {
             match self.as_str() {
-                Ok(s) => write!(f, "SmppDateTime(\"{}\")", s),
+                Ok(s) => write!(f, "SmppDateTime(\"{s}\")"),
                 Err(_) => write!(f, "SmppDateTime({:?})", self.as_bytes()),
             }
         }
@@ -448,13 +433,13 @@ impl AsRef<[u8]> for SmppDateTime {
 // Comparison implementations
 impl PartialEq<str> for SmppDateTime {
     fn eq(&self, other: &str) -> bool {
-        self.as_str().map_or(false, |s| s == other)
+        self.as_str() == Ok(other)
     }
 }
 
 impl PartialEq<&str> for SmppDateTime {
     fn eq(&self, other: &&str) -> bool {
-        self.as_str().map_or(false, |s| s == *other)
+        self.as_str() == Ok(*other)
     }
 }
 

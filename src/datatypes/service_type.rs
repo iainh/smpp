@@ -7,9 +7,10 @@ use std::str;
 
 /// A strongly-typed SMPP service type that enforces protocol-specific validation
 /// Service types indicate the SMS Application service associated with the message
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ServiceType {
     /// Default service type (empty string)
+    #[default]
     Default,
     /// Cellular Messaging Teleservice (CMT)
     Cmt,
@@ -62,8 +63,8 @@ impl ServiceType {
                     });
                 }
 
-                let fixed_string = FixedString::from_str(service)
-                    .map_err(|e| ServiceTypeError::FixedStringError(e))?;
+                let fixed_string =
+                    FixedString::from_str(service).map_err(ServiceTypeError::FixedStringError)?;
 
                 Ok(ServiceType::Custom(fixed_string))
             }
@@ -187,15 +188,14 @@ impl fmt::Display for ServiceTypeError {
             } => {
                 write!(
                     f,
-                    "Service type too long: {} chars (max {})",
-                    actual_len, max_len
+                    "Service type too long: {actual_len} chars (max {max_len})"
                 )
             }
             ServiceTypeError::InvalidFormat { reason } => {
-                write!(f, "Invalid service type format: {}", reason)
+                write!(f, "Invalid service type format: {reason}")
             }
             ServiceTypeError::FixedStringError(e) => {
-                write!(f, "FixedString error: {}", e)
+                write!(f, "FixedString error: {e}")
             }
         }
     }
@@ -210,12 +210,7 @@ impl std::error::Error for ServiceTypeError {
     }
 }
 
-// Default implementation
-impl Default for ServiceType {
-    fn default() -> Self {
-        ServiceType::Default
-    }
-}
+// Default implementation is now derived
 
 // Display implementation
 impl fmt::Display for ServiceType {
@@ -235,7 +230,7 @@ impl fmt::Debug for ServiceType {
             ServiceType::Wap => write!(f, "ServiceType::Wap"),
             ServiceType::Wen => write!(f, "ServiceType::Wen"),
             ServiceType::Chat => write!(f, "ServiceType::Chat"),
-            ServiceType::Custom(fs) => write!(f, "ServiceType::Custom(\"{}\")", fs),
+            ServiceType::Custom(fs) => write!(f, "ServiceType::Custom(\"{fs}\")"),
         }
     }
 }

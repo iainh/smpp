@@ -2,7 +2,7 @@
 name = "smpp"
 version = "0.2.0"
 authors = ["Iain H"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bytes = "1.5"
