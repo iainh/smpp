@@ -1,3 +1,4 @@
+pub mod client;
 pub mod connection;
 pub mod datatypes;
 pub mod frame;
@@ -6,6 +7,12 @@ pub mod frame;
 mod tests;
 
 pub use frame::*;
+
+// Re-export the main client API for easy access
+pub use client::{
+    BindCredentials, ClientBuilder, SmppClient, SmppConnection, SmppError, SmppResult,
+    SmppTransmitter, SmsMessage,
+};
 
 /// Error returned by most functions.
 ///
