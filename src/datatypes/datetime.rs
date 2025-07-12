@@ -14,6 +14,20 @@ pub struct SmppDateTime {
     is_empty: bool, // Track if this represents "immediate" (empty) time
 }
 
+/// Date and time components for constructing SmppDateTime
+#[derive(Debug, Clone, Copy)]
+pub struct DateTimeComponents {
+    pub year: u8,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+    pub tenth: u8,
+    pub utc_offset_hours: u8,
+    pub utc_sign: char,
+}
+
 impl SmppDateTime {
     /// Creates a new SmppDateTime with full format validation
     pub fn new(datetime_str: &str) -> Result<Self, DateTimeError> {
@@ -161,27 +175,26 @@ impl SmppDateTime {
     }
 
     /// Creates a SmppDateTime with specified components
-    pub fn from_components(
-        year: u8,
-        month: u8,
-        day: u8,
-        hour: u8,
-        minute: u8,
-        second: u8,
-        tenth: u8,
-        utc_offset_hours: u8,
-        utc_sign: char,
-    ) -> Result<Self, DateTimeError> {
-        if utc_sign != '+' && utc_sign != '-' && utc_sign != 'R' {
+    pub fn from_components(components: DateTimeComponents) -> Result<Self, DateTimeError> {
+        if components.utc_sign != '+' && components.utc_sign != '-' && components.utc_sign != 'R' {
             return Err(DateTimeError::InvalidCharacter {
                 position: 15,
-                character: utc_sign,
+                character: components.utc_sign,
                 expected: "+, -, or R".to_string(),
             });
         }
 
         let datetime_str = format!(
-            "{year:02}{month:02}{day:02}{hour:02}{minute:02}{second:02}{tenth}{utc_offset_hours:02}{utc_sign}"
+            "{:02}{:02}{:02}{:02}{:02}{:02}{}{:02}{}",
+            components.year,
+            components.month,
+            components.day,
+            components.hour,
+            components.minute,
+            components.second,
+            components.tenth,
+            components.utc_offset_hours,
+            components.utc_sign
         );
 
         Self::new(&datetime_str)
@@ -537,7 +550,18 @@ mod tests {
 
     #[test]
     fn test_smpp_datetime_from_components() {
-        let dt = SmppDateTime::from_components(24, 7, 12, 12, 30, 45, 5, 0, '+').unwrap();
+        let dt = SmppDateTime::from_components(DateTimeComponents {
+            year: 24,
+            month: 7,
+            day: 12,
+            hour: 12,
+            minute: 30,
+            second: 45,
+            tenth: 5,
+            utc_offset_hours: 0,
+            utc_sign: '+',
+        })
+        .unwrap();
         assert_eq!(dt.as_str().unwrap(), "240712123045500+");
         assert_eq!(dt.year(), Some(24));
         assert_eq!(dt.month(), Some(7));
