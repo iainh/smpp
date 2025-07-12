@@ -1,14 +1,14 @@
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
-    CommandId, CommandStatus, ToBytes, TypeOfNumber, ServiceType, SourceAddr, DestinationAddr,
-    ScheduleDeliveryTime, ValidityPeriod, ShortMessage, MessageId, EsmClass, DataCoding,
+    CommandId, CommandStatus, DataCoding, DestinationAddr, EsmClass, MessageId,
+    ScheduleDeliveryTime, ServiceType, ShortMessage, SourceAddr, ToBytes, TypeOfNumber,
+    ValidityPeriod,
 };
 use bytes::{BufMut, Bytes, BytesMut};
 
-
-/// This operation is used by the SMSC to deliver a short message to an ESME. 
-/// The deliver_sm PDU is used to deliver both mobile originated messages and 
+/// This operation is used by the SMSC to deliver a short message to an ESME.
+/// The deliver_sm PDU is used to deliver both mobile originated messages and
 /// delivery receipts from the SMSC to the ESME.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeliverSm {
@@ -76,7 +76,7 @@ pub struct DeliverSm {
     pub sm_default_msg_id: u8,
 
     /// 4.3.17 sm_length: Length in octets of the short_message user data parameter.
-    ///        Range: 0 to 254 octets. If sm_length is 0, then the short_message 
+    ///        Range: 0 to 254 octets. If sm_length is 0, then the short_message
     ///        field is not present.
     pub sm_length: u8,
 
@@ -319,7 +319,8 @@ impl DeliverSmBuilder {
     }
 
     pub fn destination_addr(mut self, addr: &str) -> Self {
-        self.destination_addr = DestinationAddr::new(addr, TypeOfNumber::Unknown).unwrap_or_default();
+        self.destination_addr =
+            DestinationAddr::new(addr, TypeOfNumber::Unknown).unwrap_or_default();
         self
     }
 
@@ -621,7 +622,8 @@ mod tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: 0,
@@ -690,7 +692,7 @@ mod tests {
     #[test]
     fn deliver_sm_delivery_receipt() {
         let receipt_message = "id:1234567890 sub:001 dlvrd:001 submit date:2201011200 done date:2201011205 stat:DELIVRD err:000 text:Hello";
-        
+
         let deliver_sm = DeliverSm::builder()
             .source_addr("1234567890")
             .destination_addr("0987654321")
@@ -740,7 +742,8 @@ mod tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: 0,

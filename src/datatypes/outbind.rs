@@ -18,7 +18,7 @@
 //! Once the SMPP session is established the characteristics of the session are
 //! that of a normal SMPP receiver session.
 
-use crate::datatypes::{CommandId, ToBytes, SystemId, Password};
+use crate::datatypes::{CommandId, Password, SystemId, ToBytes};
 use bytes::{BufMut, Bytes, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,14 +57,14 @@ impl ToBytes for Outbind {
     fn to_bytes(&self) -> Bytes {
         // Fixed arrays are always valid by construction
         self.validate().expect("Outbind validation failed");
-        
+
         let system_id = self.system_id.as_ref();
         let password = self.password.as_ref().map(|p| p.as_ref());
-        
+
         let length = 16 + system_id.len() + 1 + password.map_or(0, |p| p.len()) + 1;
-        
+
         let mut buffer = BytesMut::with_capacity(length);
-        
+
         buffer.put_u32(length as u32);
         buffer.put_u32(CommandId::Outbind as u32);
         // Command status is always 0 for outbind
@@ -138,14 +138,14 @@ mod tests {
         let long_system_id = "A".repeat(16); // Too long - max is 15
         let result = SystemId::from_str(&long_system_id);
         assert!(result.is_err());
-        
+
         // Valid SystemId should work in Outbind
         let outbind = Outbind {
             sequence_number: 1,
             system_id: SystemId::from_str("valid").unwrap(),
             password: Some(Password::from_str("pass").unwrap()),
         };
-        
+
         // Fixed arrays are always valid
         assert!(outbind.validate().is_ok());
     }
@@ -156,14 +156,14 @@ mod tests {
         let long_password = "A".repeat(9); // Too long - max is 8
         let result = Password::from_str(&long_password);
         assert!(result.is_err());
-        
+
         // Valid Password should work in Outbind
         let outbind = Outbind {
             sequence_number: 1,
             system_id: SystemId::from_str("TEST").unwrap(),
             password: Some(Password::from_str("validpw").unwrap()),
         };
-        
+
         // Fixed arrays are always valid
         assert!(outbind.validate().is_ok());
     }
@@ -173,7 +173,7 @@ mod tests {
         // Test that maximum valid lengths work correctly
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: SystemId::from_str(&"A".repeat(15)).unwrap(),     // Max allowed
+            system_id: SystemId::from_str(&"A".repeat(15)).unwrap(), // Max allowed
             password: Some(Password::from_str(&"B".repeat(8)).unwrap()), // Max allowed
         };
 

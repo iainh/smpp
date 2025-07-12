@@ -14,7 +14,10 @@ impl<const N: usize> FixedString<N> {
     /// Creates a new FixedString from a byte slice, padding with nulls if needed
     pub fn new(s: &[u8]) -> Result<Self, FixedStringError> {
         if s.len() >= N {
-            return Err(FixedStringError::TooLong { max_len: N - 1, actual_len: s.len() });
+            return Err(FixedStringError::TooLong {
+                max_len: N - 1,
+                actual_len: s.len(),
+            });
         }
 
         let mut data = [0u8; N];
@@ -143,7 +146,10 @@ pub enum FixedStringError {
 impl fmt::Display for FixedStringError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FixedStringError::TooLong { max_len, actual_len } => {
+            FixedStringError::TooLong {
+                max_len,
+                actual_len,
+            } => {
                 write!(f, "String too long: {} bytes (max {})", actual_len, max_len)
             }
         }
@@ -155,11 +161,11 @@ impl std::error::Error for FixedStringError {}
 // SMPP-specific type aliases for common field sizes
 // Note: ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, and ValidityPeriod
 // are now strongly-typed in their own modules
-pub type SystemId = FixedString<16>;          // 15 chars + null terminator
-pub type Password = FixedString<9>;           // 8 chars + null terminator  
-pub type SystemType = FixedString<13>;        // 12 chars + null terminator
-pub type AddressRange = FixedString<41>;      // 40 chars + null terminator
-pub type MessageId = FixedString<66>;         // 65 chars + null terminator
+pub type SystemId = FixedString<16>; // 15 chars + null terminator
+pub type Password = FixedString<9>; // 8 chars + null terminator
+pub type SystemType = FixedString<13>; // 12 chars + null terminator
+pub type AddressRange = FixedString<41>; // 40 chars + null terminator
+pub type MessageId = FixedString<66>; // 65 chars + null terminator
 
 /// A length-prefixed message (not null-terminated)
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -172,7 +178,10 @@ impl ShortMessage {
     /// Creates a new ShortMessage from a byte slice
     pub fn new(data: &[u8]) -> Result<Self, FixedStringError> {
         if data.len() > 254 {
-            return Err(FixedStringError::TooLong { max_len: 254, actual_len: data.len() });
+            return Err(FixedStringError::TooLong {
+                max_len: 254,
+                actual_len: data.len(),
+            });
         }
 
         let mut msg_data = [0u8; 254];

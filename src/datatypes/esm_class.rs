@@ -112,23 +112,27 @@ impl EsmClass {
     /// Converts to the raw u8 value for wire protocol
     pub fn to_byte(&self) -> u8 {
         let mode_bits = (self.message_mode as u8) << 2; // Bits 3-2: Message Mode
-        let type_bits = self.message_type.to_bits();    // Bits 1-0: Message Type
-        let feature_bits = self.features.to_bits();     // Bits 7-4: Features
-        
+        let type_bits = self.message_type.to_bits(); // Bits 1-0: Message Type
+        let feature_bits = self.features.to_bits(); // Bits 7-4: Features
+
         mode_bits | type_bits | feature_bits
     }
 
     /// Creates an ESM class from a raw u8 value
     pub fn from_byte(value: u8) -> Result<Self, EsmClassError> {
         let mode_bits = (value >> 2) & 0x03; // Bits 3-2: Message Mode
-        let type_bits = value & 0x03;        // Bits 1-0: Message Type
-        let feature_bits = value & 0xF0;     // Bits 7-4: Feature bits
+        let type_bits = value & 0x03; // Bits 1-0: Message Type
+        let feature_bits = value & 0xF0; // Bits 7-4: Feature bits
 
         let message_mode = MessageMode::from_bits(mode_bits)
             .ok_or(EsmClassError::InvalidMessageMode(mode_bits))?;
-        
-        let message_type = MessageType::from_bits(type_bits, message_mode)
-            .ok_or(EsmClassError::InvalidMessageType { mode: message_mode, type_bits })?;
+
+        let message_type = MessageType::from_bits(type_bits, message_mode).ok_or(
+            EsmClassError::InvalidMessageType {
+                mode: message_mode,
+                type_bits,
+            },
+        )?;
 
         let features = EsmFeatures::from_bits(feature_bits);
 
@@ -146,9 +150,9 @@ impl EsmClass {
             (MessageMode::Datagram, MessageType::Default) => Ok(()),
             (MessageMode::Forward, MessageType::Default) => Ok(()),
             (MessageMode::StoreAndForward, MessageType::StoreAndForward(_)) => Ok(()),
-            _ => Err(EsmClassError::InvalidCombination { 
-                mode: self.message_mode, 
-                message_type: self.message_type 
+            _ => Err(EsmClassError::InvalidCombination {
+                mode: self.message_mode,
+                message_type: self.message_type,
             }),
         }
     }
@@ -267,9 +271,15 @@ impl EsmFeatures {
     /// Converts features to bit representation
     fn to_bits(&self) -> u8 {
         let mut bits = 0u8;
-        if self.udhi { bits |= 0x40; }                    // Bit 6
-        if self.reply_path { bits |= 0x20; }              // Bit 5
-        if self.status_report_request { bits |= 0x10; }   // Bit 4
+        if self.udhi {
+            bits |= 0x40;
+        } // Bit 6
+        if self.reply_path {
+            bits |= 0x20;
+        } // Bit 5
+        if self.status_report_request {
+            bits |= 0x10;
+        } // Bit 4
         bits
     }
 
@@ -297,7 +307,10 @@ pub enum EsmClassError {
     /// Invalid message type for the given mode
     InvalidMessageType { mode: MessageMode, type_bits: u8 },
     /// Invalid combination of mode and message type
-    InvalidCombination { mode: MessageMode, message_type: MessageType },
+    InvalidCombination {
+        mode: MessageMode,
+        message_type: MessageType,
+    },
 }
 
 impl fmt::Display for EsmClassError {
@@ -307,10 +320,18 @@ impl fmt::Display for EsmClassError {
                 write!(f, "Invalid message mode bits: 0x{:02X}", bits)
             }
             EsmClassError::InvalidMessageType { mode, type_bits } => {
-                write!(f, "Invalid message type bits 0x{:02X} for mode {:?}", type_bits, mode)
+                write!(
+                    f,
+                    "Invalid message type bits 0x{:02X} for mode {:?}",
+                    type_bits, mode
+                )
             }
             EsmClassError::InvalidCombination { mode, message_type } => {
-                write!(f, "Invalid combination: mode {:?} with message type {:?}", mode, message_type)
+                write!(
+                    f,
+                    "Invalid combination: mode {:?} with message type {:?}",
+                    mode, message_type
+                )
             }
         }
     }
@@ -328,7 +349,11 @@ impl Default for EsmClass {
 // Display implementation
 impl fmt::Display for EsmClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EsmClass(mode: {:?}, type: {:?}", self.message_mode, self.message_type)?;
+        write!(
+            f,
+            "EsmClass(mode: {:?}, type: {:?}",
+            self.message_mode, self.message_type
+        )?;
         if self.features != EsmFeatures::default() {
             write!(f, ", features: {:?}", self.features)?;
         }
@@ -379,8 +404,11 @@ mod tests {
     fn test_esm_class_store_and_forward() {
         let esm = EsmClass::store_and_forward(StoreAndForwardType::DeliveryAck);
         assert_eq!(esm.message_mode(), MessageMode::StoreAndForward);
-        assert_eq!(esm.message_type(), MessageType::StoreAndForward(StoreAndForwardType::DeliveryAck));
-        
+        assert_eq!(
+            esm.message_type(),
+            MessageType::StoreAndForward(StoreAndForwardType::DeliveryAck)
+        );
+
         // Mode = 0b11 (bits 7-2), Type = 0b01 (bits 1-0)
         let expected_byte = (0b11 << 2) | 0b01;
         assert_eq!(esm.to_byte(), expected_byte);
@@ -391,7 +419,7 @@ mod tests {
         let esm = EsmClass::datagram();
         assert_eq!(esm.message_mode(), MessageMode::Datagram);
         assert_eq!(esm.message_type(), MessageType::Default);
-        
+
         // Mode = 0b01 (bits 7-2), Type = 0b00 (bits 1-0)
         let expected_byte = 0b01 << 2;
         assert_eq!(esm.to_byte(), expected_byte);
@@ -403,11 +431,11 @@ mod tests {
             .with_udhi()
             .with_reply_path()
             .with_status_report_request();
-        
+
         assert!(esm.has_udhi());
         assert!(esm.has_reply_path());
         assert!(esm.has_status_report_request());
-        
+
         // UDHI (bit 6) + Reply Path (bit 5) + Status Report (bit 4)
         let expected_features = 0x40 | 0x20 | 0x10;
         assert_eq!(esm.to_byte(), expected_features);
@@ -434,10 +462,10 @@ mod tests {
         let original = EsmClass::store_and_forward(StoreAndForwardType::BothAck)
             .with_udhi()
             .with_reply_path();
-        
+
         let byte_value = original.to_byte();
         let reconstructed = EsmClass::from_byte(byte_value).unwrap();
-        
+
         assert_eq!(original, reconstructed);
     }
 
@@ -472,16 +500,31 @@ mod tests {
         assert_eq!(MessageMode::from_bits(0b00), Some(MessageMode::Default));
         assert_eq!(MessageMode::from_bits(0b01), Some(MessageMode::Datagram));
         assert_eq!(MessageMode::from_bits(0b10), Some(MessageMode::Forward));
-        assert_eq!(MessageMode::from_bits(0b11), Some(MessageMode::StoreAndForward));
+        assert_eq!(
+            MessageMode::from_bits(0b11),
+            Some(MessageMode::StoreAndForward)
+        );
         assert_eq!(MessageMode::from_bits(0b100), None); // Invalid
     }
 
     #[test]
     fn test_store_and_forward_type_conversion() {
-        assert_eq!(StoreAndForwardType::from_bits(0b00), Some(StoreAndForwardType::Default));
-        assert_eq!(StoreAndForwardType::from_bits(0b01), Some(StoreAndForwardType::DeliveryAck));
-        assert_eq!(StoreAndForwardType::from_bits(0b10), Some(StoreAndForwardType::UserAck));
-        assert_eq!(StoreAndForwardType::from_bits(0b11), Some(StoreAndForwardType::BothAck));
+        assert_eq!(
+            StoreAndForwardType::from_bits(0b00),
+            Some(StoreAndForwardType::Default)
+        );
+        assert_eq!(
+            StoreAndForwardType::from_bits(0b01),
+            Some(StoreAndForwardType::DeliveryAck)
+        );
+        assert_eq!(
+            StoreAndForwardType::from_bits(0b10),
+            Some(StoreAndForwardType::UserAck)
+        );
+        assert_eq!(
+            StoreAndForwardType::from_bits(0b11),
+            Some(StoreAndForwardType::BothAck)
+        );
         assert_eq!(StoreAndForwardType::from_bits(0b100), None); // Invalid
     }
 
@@ -492,19 +535,18 @@ mod tests {
             reply_path: false,
             status_report_request: true,
         };
-        
+
         let bits = features.to_bits();
         assert_eq!(bits, 0x40 | 0x10); // Bit 6 + bit 4
-        
+
         let reconstructed = EsmFeatures::from_bits(bits);
         assert_eq!(features, reconstructed);
     }
 
     #[test]
     fn test_esm_class_display() {
-        let esm = EsmClass::store_and_forward(StoreAndForwardType::DeliveryAck)
-            .with_udhi();
-        
+        let esm = EsmClass::store_and_forward(StoreAndForwardType::DeliveryAck).with_udhi();
+
         let display_str = format!("{}", esm);
         assert!(display_str.contains("StoreAndForward"));
         assert!(display_str.contains("DeliveryAck"));
@@ -515,7 +557,7 @@ mod tests {
         let esm = EsmClass::datagram().with_udhi();
         let byte_val: u8 = esm.into();
         let reconstructed = EsmClass::from(byte_val);
-        
+
         assert_eq!(esm, reconstructed);
     }
 }

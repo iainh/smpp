@@ -114,29 +114,28 @@ impl DataCoding {
 
     /// Returns true if this encoding uses 7-bit character encoding
     pub fn is_7bit(&self) -> bool {
-        matches!(self, 
-            DataCoding::SmscDefault | 
-            DataCoding::Ascii |
-            DataCoding::Gsm7BitWithClass(_)
+        matches!(
+            self,
+            DataCoding::SmscDefault | DataCoding::Ascii | DataCoding::Gsm7BitWithClass(_)
         )
     }
 
     /// Returns true if this encoding uses 8-bit character encoding
     pub fn is_8bit(&self) -> bool {
-        matches!(self, 
-            DataCoding::Binary | 
-            DataCoding::Latin1 |
-            DataCoding::Cyrillic |
-            DataCoding::LatinHebrew
+        matches!(
+            self,
+            DataCoding::Binary
+                | DataCoding::Latin1
+                | DataCoding::Cyrillic
+                | DataCoding::LatinHebrew
         )
     }
 
     /// Returns true if this encoding uses 16-bit (Unicode) character encoding
     pub fn is_16bit(&self) -> bool {
-        matches!(self, 
-            DataCoding::Ucs2 | 
-            DataCoding::Ucs2WithClass(_) |
-            DataCoding::Jis
+        matches!(
+            self,
+            DataCoding::Ucs2 | DataCoding::Ucs2WithClass(_) | DataCoding::Jis
         )
     }
 
@@ -147,10 +146,7 @@ impl DataCoding {
 
     /// Returns true if this encoding supports Unicode characters
     pub fn is_unicode(&self) -> bool {
-        matches!(self, 
-            DataCoding::Ucs2 | 
-            DataCoding::Ucs2WithClass(_)
-        )
+        matches!(self, DataCoding::Ucs2 | DataCoding::Ucs2WithClass(_))
     }
 
     /// Returns the message class if this coding scheme includes one
@@ -187,7 +183,10 @@ impl DataCoding {
     pub fn max_single_sms_length(&self) -> usize {
         match self {
             DataCoding::SmscDefault | DataCoding::Ascii | DataCoding::Gsm7BitWithClass(_) => 160,
-            DataCoding::Binary | DataCoding::Latin1 | DataCoding::Cyrillic | DataCoding::LatinHebrew => 140,
+            DataCoding::Binary
+            | DataCoding::Latin1
+            | DataCoding::Cyrillic
+            | DataCoding::LatinHebrew => 140,
             DataCoding::Ucs2 | DataCoding::Ucs2WithClass(_) | DataCoding::Jis => 70,
             DataCoding::Custom(_) => 140, // Default to 8-bit assumption
         }
@@ -199,18 +198,18 @@ impl DataCoding {
             DataCoding::SmscDefault | DataCoding::Gsm7BitWithClass(_) => {
                 // GSM 7-bit basic character set validation
                 if text.chars().any(|c| !is_gsm_7bit_char(c)) {
-                    return Err(DataCodingError::IncompatibleCharacters { 
+                    return Err(DataCodingError::IncompatibleCharacters {
                         encoding: *self,
-                        text: text.to_string()
+                        text: text.to_string(),
                     });
                 }
             }
             DataCoding::Ascii => {
                 // ASCII validation (0-127)
                 if text.chars().any(|c| c as u32 > 127) {
-                    return Err(DataCodingError::IncompatibleCharacters { 
+                    return Err(DataCodingError::IncompatibleCharacters {
                         encoding: *self,
-                        text: text.to_string()
+                        text: text.to_string(),
                     });
                 }
             }
@@ -262,10 +261,18 @@ impl fmt::Display for DataCodingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DataCodingError::IncompatibleCharacters { encoding, text } => {
-                write!(f, "Text contains characters incompatible with {:?}: {}", encoding, text)
+                write!(
+                    f,
+                    "Text contains characters incompatible with {:?}: {}",
+                    encoding, text
+                )
             }
             DataCodingError::TextNotAllowed { encoding } => {
-                write!(f, "Text validation not supported for binary encoding: {:?}", encoding)
+                write!(
+                    f,
+                    "Text validation not supported for binary encoding: {:?}",
+                    encoding
+                )
             }
         }
     }
@@ -280,14 +287,18 @@ fn is_gsm_7bit_char(c: char) -> bool {
     match c {
         // Basic Latin subset that's safe in GSM 7-bit
         'A'..='Z' | 'a'..='z' | '0'..='9' => true,
-        ' ' | '!' | '"' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | '-' | '.' | '/' => true,
+        ' ' | '!' | '"' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | '-'
+        | '.' | '/' => true,
         ':' | ';' | '<' | '=' | '>' | '?' | '@' => true,
         '[' | '\\' | ']' | '^' | '_' | '`' => true,
         '{' | '|' | '}' | '~' => true,
         '\n' | '\r' => true,
         // Some extended characters that are in GSM 7-bit
-        '£' | '¤' | '¥' | '§' | '¿' | 'Ä' | 'Å' | 'Æ' | 'Ç' | 'É' | 'Ñ' | 'Ö' | 'Ø' | 'Ü' | 'ß' => true,
-        'à' | 'ä' | 'å' | 'æ' | 'è' | 'é' | 'ì' | 'í' | 'ñ' | 'ò' | 'ó' | 'ö' | 'ø' | 'ù' | 'ú' | 'ü' | 'ÿ' => true,
+        '£' | '¤' | '¥' | '§' | '¿' | 'Ä' | 'Å' | 'Æ' | 'Ç' | 'É' | 'Ñ' | 'Ö' | 'Ø' | 'Ü' | 'ß' => {
+            true
+        }
+        'à' | 'ä' | 'å' | 'æ' | 'è' | 'é' | 'ì' | 'í' | 'ñ' | 'ò' | 'ó' | 'ö' | 'ø' | 'ù' | 'ú'
+        | 'ü' | 'ÿ' => true,
         _ => false,
     }
 }
@@ -314,7 +325,12 @@ impl fmt::Debug for DataCoding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DataCoding::Custom(value) => write!(f, "DataCoding::Custom(0x{:02X})", value),
-            _ => write!(f, "DataCoding::{} (0x{:02X})", self.charset_name().replace(" ", "").replace("-", ""), self.to_byte()),
+            _ => write!(
+                f,
+                "DataCoding::{} (0x{:02X})",
+                self.charset_name().replace(" ", "").replace("-", ""),
+                self.to_byte()
+            ),
         }
     }
 }
@@ -361,8 +377,11 @@ mod tests {
         assert_eq!(DataCoding::from_byte(0x00), DataCoding::SmscDefault);
         assert_eq!(DataCoding::from_byte(0x01), DataCoding::Ascii);
         assert_eq!(DataCoding::from_byte(0x08), DataCoding::Ucs2);
-        assert_eq!(DataCoding::from_byte(0xF0), DataCoding::Gsm7BitWithClass(MessageClass::Flash));
-        
+        assert_eq!(
+            DataCoding::from_byte(0xF0),
+            DataCoding::Gsm7BitWithClass(MessageClass::Flash)
+        );
+
         // Custom/unknown values
         let custom = DataCoding::from_byte(0xFF);
         assert_eq!(custom, DataCoding::Custom(0xFF));
@@ -405,10 +424,10 @@ mod tests {
     #[test]
     fn test_text_validation_ascii() {
         let ascii = DataCoding::Ascii;
-        
+
         // Valid ASCII text
         assert!(ascii.validate_text("Hello World 123").is_ok());
-        
+
         // Invalid ASCII (non-ASCII characters)
         assert!(ascii.validate_text("Hello 世界").is_err());
     }
@@ -416,11 +435,11 @@ mod tests {
     #[test]
     fn test_text_validation_gsm7bit() {
         let gsm7 = DataCoding::SmscDefault;
-        
+
         // Valid GSM 7-bit text
         assert!(gsm7.validate_text("Hello World").is_ok());
         assert!(gsm7.validate_text("Test £ @ message").is_ok());
-        
+
         // Invalid GSM 7-bit (emoji)
         assert!(gsm7.validate_text("Hello 😀").is_err());
     }
@@ -428,7 +447,7 @@ mod tests {
     #[test]
     fn test_text_validation_binary() {
         let binary = DataCoding::Binary;
-        
+
         // Text validation not allowed for binary
         assert!(binary.validate_text("any text").is_err());
     }
@@ -436,7 +455,7 @@ mod tests {
     #[test]
     fn test_text_validation_unicode() {
         let ucs2 = DataCoding::Ucs2;
-        
+
         // Unicode should accept all text (in real implementation would check for UCS-2 compatibility)
         assert!(ucs2.validate_text("Hello 世界 🌍").is_ok());
         assert!(ucs2.validate_text("مرحبا").is_ok());
@@ -444,10 +463,19 @@ mod tests {
 
     #[test]
     fn test_message_class_descriptions() {
-        assert_eq!(MessageClass::Flash.description(), "Flash SMS (immediate display)");
+        assert_eq!(
+            MessageClass::Flash.description(),
+            "Flash SMS (immediate display)"
+        );
         assert_eq!(MessageClass::SimSpecific.description(), "SIM card storage");
-        assert_eq!(MessageClass::MobileEquipment.description(), "Mobile Equipment specific");
-        assert_eq!(MessageClass::TerminalEquipment.description(), "Terminal Equipment specific");
+        assert_eq!(
+            MessageClass::MobileEquipment.description(),
+            "Mobile Equipment specific"
+        );
+        assert_eq!(
+            MessageClass::TerminalEquipment.description(),
+            "Terminal Equipment specific"
+        );
     }
 
     #[test]
@@ -455,9 +483,12 @@ mod tests {
         assert_eq!(format!("{}", DataCoding::SmscDefault), "GSM 7-bit Default");
         assert_eq!(format!("{}", DataCoding::Ascii), "ASCII/IA5");
         assert_eq!(format!("{}", DataCoding::Ucs2), "UCS-2");
-        
+
         let flash_gsm = DataCoding::Gsm7BitWithClass(MessageClass::Flash);
-        assert_eq!(format!("{}", flash_gsm), "GSM 7-bit Default (Flash SMS (immediate display))");
+        assert_eq!(
+            format!("{}", flash_gsm),
+            "GSM 7-bit Default (Flash SMS (immediate display))"
+        );
     }
 
     #[test]
@@ -487,13 +518,13 @@ mod tests {
         assert!(is_gsm_7bit_char('9'));
         assert!(is_gsm_7bit_char(' '));
         assert!(is_gsm_7bit_char('@'));
-        
+
         // Test GSM 7-bit extended characters
         assert!(is_gsm_7bit_char('£'));
         // Note: € is in GSM 7-bit extended table but not in our simplified implementation
-        // assert!(is_gsm_7bit_char('€')); 
+        // assert!(is_gsm_7bit_char('€'));
         assert!(is_gsm_7bit_char('Ñ'));
-        
+
         // Test invalid characters
         assert!(!is_gsm_7bit_char('😀')); // Emoji
         assert!(!is_gsm_7bit_char('世')); // Chinese character

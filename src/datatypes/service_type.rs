@@ -48,22 +48,23 @@ impl ServiceType {
             _ => {
                 // Validate as custom service type
                 if service.len() > 5 {
-                    return Err(ServiceTypeError::TooLong { 
-                        max_len: 5, 
-                        actual_len: service.len() 
+                    return Err(ServiceTypeError::TooLong {
+                        max_len: 5,
+                        actual_len: service.len(),
                     });
                 }
 
                 // Service types should be alphanumeric and uppercase
                 if !service.chars().all(|c| c.is_ascii_alphanumeric()) {
-                    return Err(ServiceTypeError::InvalidFormat { 
-                        reason: "Service type must contain only alphanumeric characters".to_string() 
+                    return Err(ServiceTypeError::InvalidFormat {
+                        reason: "Service type must contain only alphanumeric characters"
+                            .to_string(),
                     });
                 }
 
                 let fixed_string = FixedString::from_str(service)
                     .map_err(|e| ServiceTypeError::FixedStringError(e))?;
-                
+
                 Ok(ServiceType::Custom(fixed_string))
             }
         }
@@ -94,7 +95,7 @@ impl ServiceType {
         if service.is_empty() {
             return Ok(ServiceType::Default);
         }
-        
+
         Self::new(service)
     }
 
@@ -103,15 +104,13 @@ impl ServiceType {
         match self {
             ServiceType::Default => "",
             ServiceType::Cmt => "CMT",
-            ServiceType::Cpt => "CPT", 
+            ServiceType::Cpt => "CPT",
             ServiceType::Vmn => "VMN",
             ServiceType::Vma => "VMA",
             ServiceType::Wap => "WAP",
             ServiceType::Wen => "WEN",
             ServiceType::Chat => "CHAT",
-            ServiceType::Custom(fixed_string) => {
-                fixed_string.as_str().unwrap_or("")
-            }
+            ServiceType::Custom(fixed_string) => fixed_string.as_str().unwrap_or(""),
         }
     }
 
@@ -182,8 +181,15 @@ pub enum ServiceTypeError {
 impl fmt::Display for ServiceTypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ServiceTypeError::TooLong { max_len, actual_len } => {
-                write!(f, "Service type too long: {} chars (max {})", actual_len, max_len)
+            ServiceTypeError::TooLong {
+                max_len,
+                actual_len,
+            } => {
+                write!(
+                    f,
+                    "Service type too long: {} chars (max {})",
+                    actual_len, max_len
+                )
             }
             ServiceTypeError::InvalidFormat { reason } => {
                 write!(f, "Invalid service type format: {}", reason)
@@ -350,7 +356,10 @@ mod tests {
 
         // Invalid characters
         let result = ServiceType::custom("TEST@");
-        assert!(matches!(result, Err(ServiceTypeError::InvalidFormat { .. })));
+        assert!(matches!(
+            result,
+            Err(ServiceTypeError::InvalidFormat { .. })
+        ));
     }
 
     #[test]

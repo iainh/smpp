@@ -1,12 +1,12 @@
 use crate::datatypes::{CommandId, CommandStatus, ToBytes};
-use bytes::{BufMut, BytesMut, Bytes};
+use bytes::{BufMut, Bytes, BytesMut};
 
-/// GenericNack is used to acknowledge the receipt of a PDU when the receiving 
-/// entity cannot process the PDU due to errors such as invalid command_id, 
+/// GenericNack is used to acknowledge the receipt of a PDU when the receiving
+/// entity cannot process the PDU due to errors such as invalid command_id,
 /// invalid command_status, or other format errors.
-/// 
-/// The generic_nack PDU has no message body and only contains the standard 
-/// SMPP header. It is typically sent in response to a malformed PDU where 
+///
+/// The generic_nack PDU has no message body and only contains the standard
+/// SMPP header. It is typically sent in response to a malformed PDU where
 /// the command_id cannot be determined or the PDU cannot be parsed correctly.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GenericNack {

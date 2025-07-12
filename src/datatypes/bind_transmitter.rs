@@ -2,10 +2,9 @@ use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
-    CommandId, CommandStatus, ToBytes, TypeOfNumber, SystemId, Password, SystemType, AddressRange,
+    AddressRange, CommandId, CommandStatus, Password, SystemId, SystemType, ToBytes, TypeOfNumber,
 };
 use bytes::{BufMut, Bytes, BytesMut};
-
 
 /// BindTransmitter is used to bind a transmitter ESME to the SMSC.
 #[derive(Clone, Debug, PartialEq)]
@@ -545,7 +544,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(bind_transmitter.system_id.as_str().unwrap(), "TEST");
-        assert_eq!(bind_transmitter.password.as_ref().map(|p| p.as_str().unwrap()), Some("secret"));
+        assert_eq!(
+            bind_transmitter
+                .password
+                .as_ref()
+                .map(|p| p.as_str().unwrap()),
+            Some("secret")
+        );
         assert_eq!(bind_transmitter.system_type.as_str().unwrap(), "VMS");
         assert_eq!(bind_transmitter.address_range.as_str().unwrap(), "1234");
         assert_eq!(
@@ -571,9 +576,9 @@ mod tests {
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: SystemId::from("A".repeat(15).as_str()),     // Max allowed
+            system_id: SystemId::from("A".repeat(15).as_str()), // Max allowed
             password: Some(Password::from("B".repeat(8).as_str())), // Max allowed
-            system_type: SystemType::from("C".repeat(12).as_str()),   // Max allowed
+            system_type: SystemType::from("C".repeat(12).as_str()), // Max allowed
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
             addr_npi: NumericPlanIndicator::Isdn,

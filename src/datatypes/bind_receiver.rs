@@ -2,10 +2,9 @@ use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
-    CommandId, CommandStatus, ToBytes, TypeOfNumber, SystemId, Password, SystemType, AddressRange,
+    AddressRange, CommandId, CommandStatus, Password, SystemId, SystemType, ToBytes, TypeOfNumber,
 };
 use bytes::{BufMut, Bytes, BytesMut};
-
 
 /// BindReceiver is used to bind a receiver ESME to the SMSC.
 #[derive(Clone, Debug, PartialEq)]
@@ -318,7 +317,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(bind_receiver.system_id.as_str().unwrap(), "TEST");
-        assert_eq!(bind_receiver.password.as_ref().map(|p| p.as_str().unwrap()), Some("secret"));
+        assert_eq!(
+            bind_receiver.password.as_ref().map(|p| p.as_str().unwrap()),
+            Some("secret")
+        );
         assert_eq!(bind_receiver.system_type.as_str().unwrap(), "VMS");
         assert_eq!(bind_receiver.address_range.as_str().unwrap(), "1234");
         assert_eq!(bind_receiver.interface_version, InterfaceVersion::SmppV34);

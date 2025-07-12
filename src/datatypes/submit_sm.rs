@@ -2,9 +2,9 @@ use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::priority_flag::PriorityFlag;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
-    CommandId, CommandStatus, ToBytes, TypeOfNumber, ServiceType, SourceAddr, DestinationAddr,
-    ScheduleDeliveryTime, ValidityPeriod, MessageId, ShortMessage, EsmClass, DataCoding,
-    AddressError, ServiceTypeError, DateTimeError, EsmClassError, DataCodingError,
+    AddressError, CommandId, CommandStatus, DataCoding, DataCodingError, DateTimeError,
+    DestinationAddr, EsmClass, EsmClassError, MessageId, ScheduleDeliveryTime, ServiceType,
+    ServiceTypeError, ShortMessage, SourceAddr, ToBytes, TypeOfNumber, ValidityPeriod,
 };
 use bytes::{BufMut, Bytes, BytesMut};
 
@@ -265,11 +265,13 @@ impl SubmitSm {
         }
 
         // Validate source address format against its Type of Number
-        self.source_addr.validate_for_ton(self.source_addr_ton)
+        self.source_addr
+            .validate_for_ton(self.source_addr_ton)
             .map_err(SubmitSmValidationError::SourceAddressError)?;
 
         // Validate destination address format against its Type of Number
-        self.destination_addr.validate_for_ton(self.dest_addr_ton)
+        self.destination_addr
+            .validate_for_ton(self.dest_addr_ton)
             .map_err(SubmitSmValidationError::DestinationAddressError)?;
 
         // Validate ESM class structure (mode/type combinations)
@@ -278,7 +280,8 @@ impl SubmitSm {
         // Validate message text compatibility with data coding scheme
         if !self.short_message.is_empty() {
             if let Ok(message_text) = self.short_message.as_str() {
-                self.data_coding.validate_text(message_text)
+                self.data_coding
+                    .validate_text(message_text)
                     .map_err(|_| SubmitSmValidationError::MessageTextIncompatible)?;
             }
         }
@@ -422,7 +425,8 @@ impl SubmitSmBuilder {
     }
 
     pub fn destination_addr(mut self, addr: &str) -> Self {
-        self.destination_addr = DestinationAddr::new(addr, TypeOfNumber::Unknown).unwrap_or_default();
+        self.destination_addr =
+            DestinationAddr::new(addr, TypeOfNumber::Unknown).unwrap_or_default();
         self
     }
 
@@ -755,7 +759,7 @@ impl ToBytes for SubmitSmResponse {
     fn to_bytes(&self) -> Bytes {
         // Fixed arrays are always valid by construction
         let message_id = self.message_id.as_ref();
-        
+
         let length = 17 + message_id.len();
 
         let mut buffer = BytesMut::with_capacity(length);
@@ -790,7 +794,8 @@ mod tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
@@ -876,7 +881,8 @@ mod tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
@@ -999,7 +1005,8 @@ mod tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
@@ -1082,7 +1089,8 @@ mod tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,

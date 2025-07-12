@@ -16,50 +16,59 @@ impl<const N: usize> PhoneNumber<N> {
     /// Creates a new PhoneNumber with validation based on TON
     pub fn new(addr: &str, ton: TypeOfNumber) -> Result<Self, AddressError> {
         if addr.len() >= N {
-            return Err(AddressError::TooLong { max_len: N - 1, actual_len: addr.len() });
+            return Err(AddressError::TooLong {
+                max_len: N - 1,
+                actual_len: addr.len(),
+            });
         }
 
         // Validate format based on Type of Number
         match ton {
             TypeOfNumber::International => {
                 if !addr.chars().all(|c| c.is_ascii_digit() || c == '+') {
-                    return Err(AddressError::InvalidFormat { 
-                        ton, 
-                        reason: "International numbers must contain only digits and optional +".to_string() 
+                    return Err(AddressError::InvalidFormat {
+                        ton,
+                        reason: "International numbers must contain only digits and optional +"
+                            .to_string(),
                     });
                 }
             }
-            TypeOfNumber::National | TypeOfNumber::NetworkSpecific | TypeOfNumber::SubscriberNumber => {
+            TypeOfNumber::National
+            | TypeOfNumber::NetworkSpecific
+            | TypeOfNumber::SubscriberNumber => {
                 if !addr.chars().all(|c| c.is_ascii_digit()) {
-                    return Err(AddressError::InvalidFormat { 
-                        ton, 
-                        reason: "Numeric addresses must contain only digits".to_string() 
+                    return Err(AddressError::InvalidFormat {
+                        ton,
+                        reason: "Numeric addresses must contain only digits".to_string(),
                     });
                 }
             }
             TypeOfNumber::Alphanumeric => {
                 if !addr.chars().all(|c| c.is_ascii_alphanumeric()) {
-                    return Err(AddressError::InvalidFormat { 
-                        ton, 
-                        reason: "Alphanumeric addresses must contain only letters and digits".to_string() 
+                    return Err(AddressError::InvalidFormat {
+                        ton,
+                        reason: "Alphanumeric addresses must contain only letters and digits"
+                            .to_string(),
                     });
                 }
             }
             TypeOfNumber::Abbreviated => {
                 // Abbreviated numbers are typically short codes, allow alphanumeric
                 if !addr.chars().all(|c| c.is_ascii_alphanumeric()) {
-                    return Err(AddressError::InvalidFormat { 
-                        ton, 
-                        reason: "Abbreviated addresses must contain only letters and digits".to_string() 
+                    return Err(AddressError::InvalidFormat {
+                        ton,
+                        reason: "Abbreviated addresses must contain only letters and digits"
+                            .to_string(),
                     });
                 }
             }
             TypeOfNumber::Unknown => {
                 // For unknown TON, allow any printable ASCII characters
                 if !addr.chars().all(|c| c.is_ascii() && !c.is_control()) {
-                    return Err(AddressError::InvalidFormat { 
-                        ton, 
-                        reason: "Unknown type addresses must contain only printable ASCII".to_string() 
+                    return Err(AddressError::InvalidFormat {
+                        ton,
+                        reason: "Unknown type addresses must contain only printable ASCII"
+                            .to_string(),
                     });
                 }
             }
@@ -68,10 +77,13 @@ impl<const N: usize> PhoneNumber<N> {
         let mut data = [0u8; N];
         let addr_bytes = addr.as_bytes();
         data[..addr_bytes.len()].copy_from_slice(addr_bytes);
-        
+
         Ok(Self {
             data,
-            length: u8::try_from(addr_bytes.len()).map_err(|_| AddressError::TooLong { max_len: N - 1, actual_len: addr_bytes.len() })?,
+            length: u8::try_from(addr_bytes.len()).map_err(|_| AddressError::TooLong {
+                max_len: N - 1,
+                actual_len: addr_bytes.len(),
+            })?,
         })
     }
 
@@ -136,24 +148,31 @@ impl<const N: usize> AlphanumericAddress<N> {
     /// Creates a new AlphanumericAddress with strict alphanumeric validation
     pub fn new(addr: &str) -> Result<Self, AddressError> {
         if addr.len() >= N {
-            return Err(AddressError::TooLong { max_len: N - 1, actual_len: addr.len() });
+            return Err(AddressError::TooLong {
+                max_len: N - 1,
+                actual_len: addr.len(),
+            });
         }
 
         // Alphanumeric addresses must contain only letters, digits, and spaces
         if !addr.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ') {
-            return Err(AddressError::InvalidFormat { 
-                ton: TypeOfNumber::Alphanumeric, 
-                reason: "Alphanumeric addresses must contain only letters, digits, and spaces".to_string() 
+            return Err(AddressError::InvalidFormat {
+                ton: TypeOfNumber::Alphanumeric,
+                reason: "Alphanumeric addresses must contain only letters, digits, and spaces"
+                    .to_string(),
             });
         }
 
         let mut data = [0u8; N];
         let addr_bytes = addr.as_bytes();
         data[..addr_bytes.len()].copy_from_slice(addr_bytes);
-        
+
         Ok(Self {
             data,
-            length: u8::try_from(addr_bytes.len()).map_err(|_| AddressError::TooLong { max_len: N - 1, actual_len: addr_bytes.len() })?,
+            length: u8::try_from(addr_bytes.len()).map_err(|_| AddressError::TooLong {
+                max_len: N - 1,
+                actual_len: addr_bytes.len(),
+            })?,
         })
     }
 
@@ -203,7 +222,10 @@ pub enum AddressError {
 impl fmt::Display for AddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AddressError::TooLong { max_len, actual_len } => {
+            AddressError::TooLong {
+                max_len,
+                actual_len,
+            } => {
                 write!(f, "Address too long: {actual_len} bytes (max {max_len})")
             }
             AddressError::InvalidFormat { ton, reason } => {
@@ -219,8 +241,8 @@ impl fmt::Display for AddressError {
 impl std::error::Error for AddressError {}
 
 // SMPP-specific address type aliases
-pub type SourceAddr = PhoneNumber<21>;        // 20 chars + null terminator
-pub type DestinationAddr = PhoneNumber<21>;   // 20 chars + null terminator
+pub type SourceAddr = PhoneNumber<21>; // 20 chars + null terminator
+pub type DestinationAddr = PhoneNumber<21>; // 20 chars + null terminator
 
 // Default implementations
 impl<const N: usize> Default for PhoneNumber<N> {
@@ -369,11 +391,13 @@ mod tests {
     #[test]
     fn test_phone_number_validation_for_ton() {
         let phone = PhoneNumber::<15>::new("12345", TypeOfNumber::National).unwrap();
-        
+
         // Should validate for compatible TONs
         assert!(phone.validate_for_ton(TypeOfNumber::National).is_ok());
-        assert!(phone.validate_for_ton(TypeOfNumber::NetworkSpecific).is_ok());
-        
+        assert!(phone
+            .validate_for_ton(TypeOfNumber::NetworkSpecific)
+            .is_ok());
+
         // Should fail for incompatible TONs (alphanumeric with digits-only content is still valid)
         assert!(phone.validate_for_ton(TypeOfNumber::Alphanumeric).is_ok());
     }
@@ -384,7 +408,7 @@ mod tests {
         assert!(empty_phone.is_empty());
         assert_eq!(empty_phone.len(), 0);
         assert_eq!(empty_phone.as_str().unwrap(), "");
-        
+
         let empty_alpha = AlphanumericAddress::<15>::default();
         assert!(empty_alpha.is_empty());
         assert_eq!(empty_alpha.len(), 0);
@@ -395,7 +419,7 @@ mod tests {
     fn test_address_display() {
         let phone = PhoneNumber::<15>::national("1234567890").unwrap();
         assert_eq!(format!("{}", phone), "1234567890");
-        
+
         let alpha = AlphanumericAddress::<15>::new("SMS INFO").unwrap();
         assert_eq!(format!("{}", alpha), "SMS INFO");
     }
