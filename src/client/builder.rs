@@ -18,7 +18,7 @@ impl ClientBuilder {
     ///
     /// Establishes connection and binds as transmitter in a single operation.
     /// Returns a trait object that can be used for sending SMS messages.
-    pub async fn transmitter<T: ToSocketAddrs>(
+    pub async fn transmitter<T: ToSocketAddrs + Send>(
         addr: T,
         credentials: BindCredentials,
     ) -> SmppResult<impl SmppTransmitter> {
@@ -31,7 +31,7 @@ impl ClientBuilder {
     ///
     /// Establishes connection and binds with specified credentials.
     /// Use this when you need a client but don't know the specific type at compile time.
-    pub async fn client<T: ToSocketAddrs>(
+    pub async fn client<T: ToSocketAddrs + Send>(
         addr: T,
         credentials: BindCredentials,
     ) -> SmppResult<impl SmppClient> {
@@ -44,7 +44,7 @@ impl ClientBuilder {
     ///
     /// Just establishes the TCP connection. You must call bind() separately.
     /// Useful when you need to control the binding process manually.
-    pub async fn connection<T: ToSocketAddrs>(addr: T) -> SmppResult<impl SmppConnection> {
+    pub async fn connection<T: ToSocketAddrs + Send>(addr: T) -> SmppResult<impl SmppConnection> {
         DefaultClient::connect(addr).await
     }
 }
@@ -55,7 +55,7 @@ impl ClientBuilder {
     ///
     /// Creates a transmitter client with default settings.
     /// Equivalent to `transmitter(addr, BindCredentials::transmitter(system_id, password))`.
-    pub async fn quick_transmitter<T: ToSocketAddrs>(
+    pub async fn quick_transmitter<T: ToSocketAddrs + Send>(
         addr: T,
         system_id: impl Into<String>,
         password: impl Into<String>,
@@ -68,7 +68,7 @@ impl ClientBuilder {
     ///
     /// Creates a client bound as transmitter with default settings.
     /// Use this for simple SMS sending scenarios.
-    pub async fn quick_client<T: ToSocketAddrs>(
+    pub async fn quick_client<T: ToSocketAddrs + Send>(
         addr: T,
         system_id: impl Into<String>,
         password: impl Into<String>,
@@ -97,7 +97,7 @@ impl ClientOptions {
     /// Build a transmitter client with these options
     ///
     /// Future extension point for advanced connection configuration.
-    pub async fn build_transmitter<T: ToSocketAddrs>(
+    pub async fn build_transmitter<T: ToSocketAddrs + Send>(
         self,
         addr: T,
         credentials: BindCredentials,
@@ -108,7 +108,7 @@ impl ClientOptions {
     }
 
     /// Build a client with these options
-    pub async fn build_client<T: ToSocketAddrs>(
+    pub async fn build_client<T: ToSocketAddrs + Send>(
         self,
         addr: T,
         credentials: BindCredentials,

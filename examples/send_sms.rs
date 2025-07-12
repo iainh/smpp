@@ -41,7 +41,7 @@ struct CliArgs {
     from: String,
 }
 
-use tracing::{Level, error, warn, info};
+use tracing::{Level, error, info, warn};
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]

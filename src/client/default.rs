@@ -24,7 +24,7 @@ pub struct DefaultClient {
 }
 
 impl SmppConnection for DefaultClient {
-    async fn connect<T: ToSocketAddrs>(addr: T) -> SmppResult<Self> {
+    async fn connect<T: ToSocketAddrs + Send>(addr: T) -> SmppResult<Self> {
         let socket = TcpStream::connect(addr).await?;
         let connection = Connection::new(socket);
 

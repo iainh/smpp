@@ -4,6 +4,7 @@
 use crate::client::error::SmppResult;
 use crate::client::types::{BindCredentials, SmsMessage};
 use crate::datatypes::SubmitSm;
+use std::future::Future;
 use tokio::net::ToSocketAddrs;
 
 /// Base connection management for SMPP clients
@@ -15,7 +16,7 @@ pub trait SmppConnection {
     ///
     /// Creates a TCP connection to the specified address and initializes
     /// the SMPP protocol buffers for frame-based communication.
-    async fn connect<T: ToSocketAddrs>(addr: T) -> SmppResult<Self>
+    fn connect<T: ToSocketAddrs + Send>(addr: T) -> impl Future<Output = SmppResult<Self>> + Send
     where
         Self: Sized;
 
@@ -23,7 +24,7 @@ pub trait SmppConnection {
     ///
     /// Closes the TCP connection and cleans up any allocated resources.
     /// Should be called after unbind() for clean session termination.
-    async fn disconnect(&mut self) -> SmppResult<()>;
+    fn disconnect(&mut self) -> impl Future<Output = SmppResult<()>> + Send;
 
     /// Check if connection is active
     ///
@@ -40,19 +41,22 @@ pub trait SmppClient: SmppConnection {
     ///
     /// Authenticates with the SMSC using the provided credentials and
     /// establishes an SMPP session of the type specified in bind_type.
-    async fn bind(&mut self, credentials: &BindCredentials) -> SmppResult<()>;
+    fn bind(
+        &mut self,
+        credentials: &BindCredentials,
+    ) -> impl Future<Output = SmppResult<()>> + Send;
 
     /// Unbind from SMSC
     ///
     /// Terminates the SMPP session gracefully by sending an unbind PDU
     /// and waiting for the response. Connection should be disconnected after.
-    async fn unbind(&mut self) -> SmppResult<()>;
+    fn unbind(&mut self) -> impl Future<Output = SmppResult<()>> + Send;
 
     /// Send enquire_link to test connection
     ///
     /// Sends a keep-alive PDU to verify the connection is still active.
     /// Should be called periodically during long sessions.
-    async fn enquire_link(&mut self) -> SmppResult<()>;
+    fn enquire_link(&mut self) -> impl Future<Output = SmppResult<()>> + Send;
 
     /// Get next sequence number for PDU
     ///
@@ -71,13 +75,14 @@ pub trait SmppTransmitter: SmppClient {
     /// Sends an SMS message using the high-level SmsMessage type which
     /// provides sensible defaults for most PDU fields. Returns the message ID
     /// assigned by the SMSC.
-    async fn send_sms(&mut self, message: &SmsMessage) -> SmppResult<String>;
+    fn send_sms(&mut self, message: &SmsMessage)
+    -> impl Future<Output = SmppResult<String>> + Send;
 
     /// Send SMS using full SubmitSm PDU control
     ///
     /// Sends an SMS using a fully constructed SubmitSm PDU, giving complete
     /// control over all fields including optional TLV parameters.
-    async fn submit_sm(&mut self, submit: &SubmitSm) -> SmppResult<String>;
+    fn submit_sm(&mut self, submit: &SubmitSm) -> impl Future<Output = SmppResult<String>> + Send;
 }
 
 /// SMPP receiver client operations  
@@ -89,7 +94,9 @@ pub trait SmppReceiver: SmppClient {
     ///
     /// Blocks until a deliver_sm PDU is received from the SMSC.
     /// Used for receiving SMS messages or delivery receipts.
-    async fn receive_message(&mut self) -> SmppResult<crate::datatypes::DeliverSm>;
+    fn receive_message(
+        &mut self,
+    ) -> impl Future<Output = SmppResult<crate::datatypes::DeliverSm>> + Send;
 }
 
 /// SMPP transceiver client operations
