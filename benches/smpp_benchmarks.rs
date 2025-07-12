@@ -12,24 +12,24 @@ fn create_sample_submit_sm() -> SubmitSm {
     SubmitSm {
         command_status: CommandStatus::Ok,
         sequence_number: 1,
-        service_type: "".to_string(),
+        service_type: ServiceType::from(""),
         source_addr_ton: TypeOfNumber::Unknown,
         source_addr_npi: NumericPlanIndicator::Unknown,
-        source_addr: "12345".to_string(),
+        source_addr: SourceAddr::from("12345"),
         dest_addr_ton: TypeOfNumber::Unknown,
         dest_addr_npi: NumericPlanIndicator::Unknown,
-        destination_addr: "67890".to_string(),
+        destination_addr: DestinationAddr::from("67890"),
         esm_class: 0,
         protocol_id: 0,
         priority_flag: PriorityFlag::Level0,
-        schedule_delivery_time: "".to_string(),
-        validity_period: "".to_string(),
+        schedule_delivery_time: ScheduleDeliveryTime::from(""),
+        validity_period: ValidityPeriod::from(""),
         registered_delivery: 0,
         replace_if_present_flag: 0,
         data_coding: 0,
         sm_default_msg_id: 0,
         sm_length: 11,
-        short_message: "Hello World".to_string(),
+        short_message: ShortMessage::from("Hello World"),
         user_message_reference: None,
         source_port: None,
         source_addr_submit: None,
@@ -64,13 +64,13 @@ fn create_sample_bind_transmitter() -> BindTransmitter {
     BindTransmitter {
         command_status: CommandStatus::Ok,
         sequence_number: 1,
-        system_id: "test_system".to_string(),
-        password: Some("password".to_string()),
-        system_type: "".to_string(),
+        system_id: SystemId::from("test_system"),
+        password: Some(Password::from("password")),
+        system_type: SystemType::from(""),
         interface_version: InterfaceVersion::SmppV34,
         addr_ton: TypeOfNumber::Unknown,
         addr_npi: NumericPlanIndicator::Unknown,
-        address_range: "".to_string(),
+        address_range: AddressRange::from(""),
     }
 }
 
@@ -84,24 +84,24 @@ fn create_sample_deliver_sm() -> DeliverSm {
     DeliverSm {
         command_status: CommandStatus::Ok,
         sequence_number: 1,
-        service_type: "".to_string(),
+        service_type: ServiceType::from(""),
         source_addr_ton: TypeOfNumber::Unknown,
         source_addr_npi: NumericPlanIndicator::Unknown,
-        source_addr: "12345".to_string(),
+        source_addr: SourceAddr::from("12345"),
         dest_addr_ton: TypeOfNumber::Unknown,
         dest_addr_npi: NumericPlanIndicator::Unknown,
-        destination_addr: "67890".to_string(),
+        destination_addr: DestinationAddr::from("67890"),
         esm_class: 0,
         protocol_id: 0,
         priority_flag: 0,
-        schedule_delivery_time: "".to_string(),
-        validity_period: "".to_string(),
+        schedule_delivery_time: ScheduleDeliveryTime::from(""),
+        validity_period: ValidityPeriod::from(""),
         registered_delivery: 0,
         replace_if_present_flag: 0,
         data_coding: 0,
         sm_default_msg_id: 0,
         sm_length: 11,
-        short_message: "Hello World".to_string(),
+        short_message: ShortMessage::from("Hello World"),
         user_message_reference: None,
         source_port: None,
         destination_port: None,
@@ -279,7 +279,7 @@ fn bench_message_sizes(c: &mut Criterion) {
     for &size in &message_sizes {
         let message = "A".repeat(size);
         let mut submit_sm = create_sample_submit_sm();
-        submit_sm.short_message = message;
+        submit_sm.short_message = ShortMessage::from(message.as_str());
         submit_sm.sm_length = size as u8;
         
         let frame_bytes = create_frame_bytes(submit_sm);

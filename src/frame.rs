@@ -6,7 +6,9 @@ use crate::datatypes::{
     BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse, BindTransmitter,
     BindTransmitterResponse, CommandId, CommandStatus, DeliverSm, DeliverSmResponse, EnquireLink,
     EnquireLinkResponse, GenericNack, InterfaceVersion, NumericPlanIndicator, Outbind, PriorityFlag, 
-    SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse,
+    SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse, SystemId, Password, 
+    SystemType, AddressRange, ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, 
+    ValidityPeriod, MessageId, ShortMessage,
 };
 use bytes::Buf;
 use core::fmt;
@@ -89,17 +91,17 @@ impl Frame {
                 let pdu = BindTransmitter {
                     command_status,
                     sequence_number,
-                    system_id,
+                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
                     password: if password.is_empty() {
                         None
                     } else {
-                        Some(password)
+                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
                     },
-                    system_type,
+                    system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
                     interface_version,
                     addr_ton,
                     addr_npi,
-                    address_range,
+                    address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
                 };
                 Frame::BindTransmitter(pdu)
             }
@@ -114,7 +116,7 @@ impl Frame {
                 let pdu = BindTransmitterResponse {
                     command_status,
                     sequence_number,
-                    system_id,
+                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
                     sc_interface_version,
                 };
 
@@ -132,17 +134,17 @@ impl Frame {
                 let pdu = BindReceiver {
                     command_status,
                     sequence_number,
-                    system_id,
+                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
                     password: if password.is_empty() {
                         None
                     } else {
-                        Some(password)
+                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
                     },
-                    system_type,
+                    system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
                     interface_version,
                     addr_ton,
                     addr_npi,
-                    address_range,
+                    address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
                 };
                 Frame::BindReceiver(pdu)
             }
@@ -157,7 +159,7 @@ impl Frame {
                 let pdu = BindReceiverResponse {
                     command_status,
                     sequence_number,
-                    system_id,
+                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
                     sc_interface_version,
                 };
 
@@ -172,7 +174,8 @@ impl Frame {
                 Frame::EnquireLinkResponse(pdu)
             }
             CommandId::SubmitSmResp => {
-                let message_id = get_cstring_field(src, 65, "message_id")?;
+                let message_id = MessageId::from_parsed_string(get_cstring_field(src, 65, "message_id")?)
+                    .map_err(|e| Error::Other(format!("message_id field error: {e}").into()))?;
 
                 let pdu = SubmitSmResponse {
                     command_status,
@@ -184,18 +187,23 @@ impl Frame {
             }
             CommandId::SubmitSm => {
                 // Parse mandatory fields
-                let service_type = get_cstring_field(src, 6, "service_type")?;
+                let service_type = ServiceType::from_parsed_string(get_cstring_field(src, 6, "service_type")?)
+                    .map_err(|e| Error::Other(format!("service_type field error: {e}").into()))?;
                 let source_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
                 let source_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let source_addr = get_cstring_field(src, 21, "source_addr")?;
+                let source_addr = SourceAddr::from_parsed_string(get_cstring_field(src, 21, "source_addr")?)
+                    .map_err(|e| Error::Other(format!("source_addr field error: {e}").into()))?;
                 let dest_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
                 let dest_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-                let destination_addr = get_cstring_field(src, 21, "destination_addr")?;
+                let destination_addr = DestinationAddr::from_parsed_string(get_cstring_field(src, 21, "destination_addr")?)
+                    .map_err(|e| Error::Other(format!("destination_addr field error: {e}").into()))?;
                 let esm_class = get_u8(src)?;
                 let protocol_id = get_u8(src)?;
                 let priority_flag = PriorityFlag::try_from(get_u8(src)?)?;
-                let schedule_delivery_time = get_cstring_field(src, 17, "schedule_delivery_time")?;
-                let validity_period = get_cstring_field(src, 17, "validity_period")?;
+                let schedule_delivery_time = ScheduleDeliveryTime::from_parsed_string(get_cstring_field(src, 17, "schedule_delivery_time")?)
+                    .map_err(|e| Error::Other(format!("schedule_delivery_time field error: {e}").into()))?;
+                let validity_period = ValidityPeriod::from_parsed_string(get_cstring_field(src, 17, "validity_period")?)
+                    .map_err(|e| Error::Other(format!("validity_period field error: {e}").into()))?;
                 let registered_delivery = get_u8(src)?;
                 let replace_if_present_flag = get_u8(src)?;
                 let data_coding = get_u8(src)?;
@@ -217,11 +225,13 @@ impl Frame {
                 // Read short message based on sm_length
                 let short_message = if sm_length > 0 {
                     let message_bytes = src.copy_to_bytes(sm_length as usize);
-                    String::from_utf8(message_bytes.into()).map_err(|e| {
+                    let message_string = String::from_utf8(message_bytes.into()).map_err(|e| {
                         Error::Other(format!("Invalid UTF-8 in short_message: {e}").into())
-                    })?
+                    })?;
+                    ShortMessage::from_parsed_string(message_string)
+                        .map_err(|e| Error::Other(format!("short_message field error: {e}").into()))?
                 } else {
-                    String::new()
+                    ShortMessage::default()
                 };
 
                 // Parse optional TLV parameters
@@ -375,17 +385,17 @@ impl Frame {
                 let pdu = BindTransceiver {
                     command_status,
                     sequence_number,
-                    system_id,
+                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
                     password: if password.is_empty() {
                         None
                     } else {
-                        Some(password)
+                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
                     },
-                    system_type,
+                    system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
                     interface_version,
                     addr_ton,
                     addr_npi,
-                    address_range,
+                    address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
                 };
                 Frame::BindTransceiver(pdu)
             }
@@ -400,7 +410,7 @@ impl Frame {
                 let pdu = BindTransceiverResponse {
                     command_status,
                     sequence_number,
-                    system_id,
+                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
                     sc_interface_version,
                 };
 
@@ -504,24 +514,24 @@ impl Frame {
                 let pdu = DeliverSm {
                     command_status,
                     sequence_number,
-                    service_type,
+                    service_type: ServiceType::from_parsed_string(service_type).map_err(|e| Error::Other(Box::new(e)))?,
                     source_addr_ton,
                     source_addr_npi,
-                    source_addr,
+                    source_addr: SourceAddr::from_parsed_string(source_addr).map_err(|e| Error::Other(Box::new(e)))?,
                     dest_addr_ton,
                     dest_addr_npi,
-                    destination_addr,
+                    destination_addr: DestinationAddr::from_parsed_string(destination_addr).map_err(|e| Error::Other(Box::new(e)))?,
                     esm_class,
                     protocol_id,
                     priority_flag,
-                    schedule_delivery_time,
-                    validity_period,
+                    schedule_delivery_time: ScheduleDeliveryTime::from_parsed_string(schedule_delivery_time).map_err(|e| Error::Other(Box::new(e)))?,
+                    validity_period: ValidityPeriod::from_parsed_string(validity_period).map_err(|e| Error::Other(Box::new(e)))?,
                     registered_delivery,
                     replace_if_present_flag,
                     data_coding,
                     sm_default_msg_id,
                     sm_length,
-                    short_message,
+                    short_message: ShortMessage::from_parsed_string(short_message).map_err(|e| Error::Other(Box::new(e)))?,
                     user_message_reference,
                     source_port,
                     destination_port,
@@ -554,7 +564,7 @@ impl Frame {
                 let pdu = DeliverSmResponse {
                     command_status,
                     sequence_number,
-                    message_id,
+                    message_id: MessageId::from_parsed_string(message_id).map_err(|e| Error::Other(Box::new(e)))?,
                 };
 
                 Frame::DeliverSmResponse(pdu)
@@ -565,11 +575,11 @@ impl Frame {
 
                 let pdu = Outbind {
                     sequence_number,
-                    system_id,
+                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
                     password: if password.is_empty() {
                         None
                     } else {
-                        Some(password)
+                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
                     },
                 };
 
@@ -1082,7 +1092,7 @@ mod tests {
         if let Frame::BindTransmitter(bt) = frame {
             assert_eq!(bt.command_status, CommandStatus::Ok);
             assert_eq!(&bt.system_id, "SMPP3TEST");
-            assert_eq!(bt.password, Some("secret08".to_string()));
+            assert_eq!(bt.password.as_ref().map(|p| p.as_str().unwrap()), Some("secret08"));
             assert_eq!(&bt.system_type, "SUBMIT1");
             assert_eq!(bt.interface_version, InterfaceVersion::SmppV34);
             assert_eq!(bt.addr_ton, TypeOfNumber::International);
@@ -1396,17 +1406,17 @@ mod tests {
         let result = Frame::parse(&mut cursor).unwrap();
 
         if let Frame::BindTransmitter(bt) = result {
-            // Strings should not contain null terminators
-            assert_eq!(bt.system_id, "TEST");
-            assert_eq!(bt.password, Some("PASS".to_string()));
-            assert_eq!(bt.system_type, "TYPE");
-            assert_eq!(bt.address_range, "");
+            // Fixed arrays should parse correctly
+            assert_eq!(bt.system_id, SystemId::from("TEST"));
+            assert_eq!(bt.password, Some(Password::from("PASS")));
+            assert_eq!(bt.system_type, SystemType::from("TYPE"));
+            assert_eq!(bt.address_range, AddressRange::from(""));
 
-            // Verify no null bytes in strings
-            assert!(!bt.system_id.contains('\0'));
-            assert!(!bt.password.as_ref().unwrap().contains('\0'));
-            assert!(!bt.system_type.contains('\0'));
-            assert!(!bt.address_range.contains('\0'));
+            // Verify no null bytes in string content
+            assert!(!bt.system_id.as_str().unwrap().contains('\0'));
+            assert!(!bt.password.as_ref().unwrap().as_str().unwrap().contains('\0'));
+            assert!(!bt.system_type.as_str().unwrap().contains('\0'));
+            assert!(!bt.address_range.as_str().unwrap().contains('\0'));
         } else {
             panic!("Expected BindTransmitter frame");
         }
@@ -1452,10 +1462,10 @@ mod tests {
         assert!(result.is_ok());
 
         if let Frame::BindTransmitter(bt) = result.unwrap() {
-            assert_eq!(bt.system_id, system_id_max);
-            assert_eq!(bt.password, Some(password_max));
-            assert_eq!(bt.system_type, system_type_max);
-            assert_eq!(bt.address_range, address_range_max);
+            assert_eq!(bt.system_id, SystemId::from(system_id_max.as_str()));
+            assert_eq!(bt.password, Some(Password::from(password_max.as_str())));
+            assert_eq!(bt.system_type, SystemType::from(system_type_max.as_str()));
+            assert_eq!(bt.address_range, AddressRange::from(address_range_max.as_str()));
         }
     }
 
@@ -1516,7 +1526,7 @@ mod tests {
             assert_eq!(submit_sm.data_coding, 0);
             assert_eq!(submit_sm.sm_default_msg_id, 0);
             assert_eq!(submit_sm.sm_length, 11);
-            assert_eq!(submit_sm.short_message, "Hello World");
+            assert_eq!(submit_sm.short_message.as_str().unwrap(), "Hello World");
             assert!(submit_sm.user_message_reference.is_none());
             assert!(submit_sm.message_payload.is_none());
         } else {
@@ -1569,7 +1579,7 @@ mod tests {
         assert!(result.is_ok());
 
         if let Frame::SubmitSm(submit_sm) = result.unwrap() {
-            assert_eq!(submit_sm.short_message, "Test");
+            assert_eq!(submit_sm.short_message.as_str().unwrap(), "Test");
             assert_eq!(submit_sm.sm_length, 4);
             assert!(submit_sm.user_message_reference.is_some());
             assert!(submit_sm.source_port.is_some());
@@ -1626,7 +1636,7 @@ mod tests {
 
         if let Frame::SubmitSm(submit_sm) = result.unwrap() {
             assert_eq!(submit_sm.sm_length, 0);
-            assert_eq!(submit_sm.short_message, "");
+            assert_eq!(submit_sm.short_message.as_str().unwrap(), "");
         } else {
             panic!("Expected SubmitSm frame");
         }
@@ -1675,24 +1685,24 @@ mod tests {
         let original = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 42,
-            service_type: "SMS".to_string(),
+            service_type: ServiceType::from("SMS"),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 1,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 13,
-            short_message: "Hello, world!".to_string(),
+            short_message: ShortMessage::from("Hello, world!"),
             user_message_reference: None,
             source_port: None,
             source_addr_submit: None,

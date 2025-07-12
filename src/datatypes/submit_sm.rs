@@ -1,16 +1,14 @@
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::priority_flag::PriorityFlag;
 use crate::datatypes::tlv::Tlv;
-use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
+use crate::datatypes::{
+    CommandId, CommandStatus, ToBytes, TypeOfNumber, ServiceType, SourceAddr, DestinationAddr,
+    ScheduleDeliveryTime, ValidityPeriod, MessageId, ShortMessage,
+};
 use bytes::{BufMut, Bytes, BytesMut};
 
 // SMPP v3.4 specification field length limits (excluding null terminator)
-const MAX_SERVICE_TYPE_LENGTH: usize = 5;
-const MAX_SOURCE_ADDR_LENGTH: usize = 20;
-const MAX_DESTINATION_ADDR_LENGTH: usize = 20;
-const MAX_SCHEDULE_DELIVERY_TIME_LENGTH: usize = 16;
-const MAX_VALIDITY_PERIOD_LENGTH: usize = 16;
-const MAX_SHORT_MESSAGE_LENGTH: usize = 254;
+// MAX_SHORT_MESSAGE_LENGTH is now enforced by the ShortMessage type
 
 /// This operation is used by an ESME to submit a short message to the SMSC for onward transmission
 /// to a specified short message entity (SME). The submit_sm PDU does not support the transaction
@@ -28,7 +26,7 @@ pub struct SubmitSm {
     ///       allows the ESME to avail of enhanced messaging services such as "replace by
     ///       service_type" or to control the teleservice used on the air interface. Set to
     ///       NULL if not applicable. Max length: 5 octets (6 with null terminator).
-    pub service_type: String,
+    pub service_type: ServiceType,
 
     /// 4.1.2 source_addr_ton: Type of Number for source address. If not known, set to NULL.
     pub source_addr_ton: TypeOfNumber,
@@ -38,7 +36,7 @@ pub struct SubmitSm {
 
     /// 4.1.4 source_addr: Address of SME which originated this message. If not known, set to NULL.
     ///       Max length: 20 octets (21 with null terminator).
-    pub source_addr: String,
+    pub source_addr: SourceAddr,
 
     /// 4.1.5 dest_addr_ton: Type of Number for destination address.
     pub dest_addr_ton: TypeOfNumber,
@@ -49,7 +47,7 @@ pub struct SubmitSm {
     /// 4.1.7 destination_addr: Destination address of this short message. For mobile terminated
     ///       messages, this is the directory number of the recipient MS.
     ///       Max length: 20 octets (21 with null terminator).
-    pub destination_addr: String,
+    pub destination_addr: DestinationAddr,
 
     /// 4.1.8 esm_class: Indicates Message Mode and Message Type. The esm_class field is used to
     ///       indicate special message attributes associated with the short message.
@@ -67,12 +65,12 @@ pub struct SubmitSm {
     /// 4.1.11 schedule_delivery_time: The short message is to be scheduled by the SMSC for
     ///        delivery. Set to NULL for immediate delivery. Format: YYMMDDhhmmsstnnp
     ///        Max length: 16 octets (17 with null terminator).
-    pub schedule_delivery_time: String,
+    pub schedule_delivery_time: ScheduleDeliveryTime,
 
     /// 4.1.12 validity_period: The validity period of this message. Set to NULL to request the
     ///        SMSC default validity period. Format same as schedule_delivery_time.
     ///        Max length: 16 octets (17 with null terminator).
-    pub validity_period: String,
+    pub validity_period: ValidityPeriod,
 
     /// 4.1.13 registered_delivery: Indicator to signify if an SMSC delivery receipt, user/manual
     ///        acknowledgment and/or an intermediate notification is required.
@@ -116,7 +114,7 @@ pub struct SubmitSm {
     ///        Applications which need to send messages longer than 254 octets should use the
     ///        message_payload TLV. When the message_payload TLV is specified, the sm_length
     ///        field should be set to zero.
-    pub short_message: String,
+    pub short_message: ShortMessage,
 
     // Optional parameters (TLV format)
     /// User Message Reference TLV (0x0204): ESME assigned message reference number.
@@ -220,80 +218,28 @@ pub struct SubmitSm {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubmitSmValidationError {
-    #[error("service_type exceeds maximum length of {MAX_SERVICE_TYPE_LENGTH} characters ({} with null terminator): {actual}", MAX_SERVICE_TYPE_LENGTH + 1)]
-    ServiceTypeTooLong { actual: usize },
-
-    #[error("source_addr exceeds maximum length of {MAX_SOURCE_ADDR_LENGTH} characters ({} with null terminator): {actual}", MAX_SOURCE_ADDR_LENGTH + 1)]
-    SourceAddrTooLong { actual: usize },
-
-    #[error("destination_addr exceeds maximum length of {MAX_DESTINATION_ADDR_LENGTH} characters ({} with null terminator): {actual}", MAX_DESTINATION_ADDR_LENGTH + 1)]
-    DestinationAddrTooLong { actual: usize },
-
-    #[error("schedule_delivery_time exceeds maximum length of {MAX_SCHEDULE_DELIVERY_TIME_LENGTH} characters ({} with null terminator): {actual}", MAX_SCHEDULE_DELIVERY_TIME_LENGTH + 1)]
-    ScheduleDeliveryTimeTooLong { actual: usize },
-
-    #[error("validity_period exceeds maximum length of {MAX_VALIDITY_PERIOD_LENGTH} characters ({} with null terminator): {actual}", MAX_VALIDITY_PERIOD_LENGTH + 1)]
-    ValidityPeriodTooLong { actual: usize },
-
     #[error("sm_length ({sm_length}) does not match short_message length ({message_length})")]
     SmLengthMismatch {
         sm_length: u8,
         message_length: usize,
     },
 
-    #[error("short_message exceeds maximum length of {MAX_SHORT_MESSAGE_LENGTH} bytes (use message_payload TLV for longer messages): {actual}")]
-    ShortMessageTooLong { actual: usize },
-
     #[error("Cannot use both short_message and message_payload - they are mutually exclusive")]
     MutualExclusivityViolation,
+
+    #[error("Fixed array fields are always valid - this error should not occur")]
+    FixedArrayError,
 }
 
 impl SubmitSm {
     /// Validates the SubmitSm PDU according to SMPP v3.4 specification
+    /// Fixed array fields are always valid by construction
     pub fn validate(&self) -> Result<(), SubmitSmValidationError> {
-        // Validate field length constraints
-        if self.service_type.len() > MAX_SERVICE_TYPE_LENGTH {
-            return Err(SubmitSmValidationError::ServiceTypeTooLong {
-                actual: self.service_type.len(),
-            });
-        }
-
-        if self.source_addr.len() > MAX_SOURCE_ADDR_LENGTH {
-            return Err(SubmitSmValidationError::SourceAddrTooLong {
-                actual: self.source_addr.len(),
-            });
-        }
-
-        if self.destination_addr.len() > MAX_DESTINATION_ADDR_LENGTH {
-            return Err(SubmitSmValidationError::DestinationAddrTooLong {
-                actual: self.destination_addr.len(),
-            });
-        }
-
-        if self.schedule_delivery_time.len() > MAX_SCHEDULE_DELIVERY_TIME_LENGTH {
-            return Err(SubmitSmValidationError::ScheduleDeliveryTimeTooLong {
-                actual: self.schedule_delivery_time.len(),
-            });
-        }
-
-        if self.validity_period.len() > MAX_VALIDITY_PERIOD_LENGTH {
-            return Err(SubmitSmValidationError::ValidityPeriodTooLong {
-                actual: self.validity_period.len(),
-            });
-        }
-
         // Validate sm_length matches actual short_message length
-        if self.sm_length as usize != self.short_message.len() {
+        if self.sm_length as usize != self.short_message.len() as usize {
             return Err(SubmitSmValidationError::SmLengthMismatch {
                 sm_length: self.sm_length,
-                message_length: self.short_message.len(),
-            });
-        }
-
-        // Validate short message length constraints
-        if self.short_message.len() > MAX_SHORT_MESSAGE_LENGTH {
-            return Err(SubmitSmValidationError::ShortMessageTooLong {
-                actual: self.short_message.len(),
+                message_length: self.short_message.len() as usize,
             });
         }
 
@@ -315,23 +261,23 @@ impl SubmitSm {
 pub struct SubmitSmBuilder {
     command_status: CommandStatus,
     sequence_number: u32,
-    service_type: String,
+    service_type: ServiceType,
     source_addr_ton: TypeOfNumber,
     source_addr_npi: NumericPlanIndicator,
-    source_addr: String,
+    source_addr: SourceAddr,
     dest_addr_ton: TypeOfNumber,
     dest_addr_npi: NumericPlanIndicator,
-    destination_addr: String,
+    destination_addr: DestinationAddr,
     esm_class: u8,
     protocol_id: u8,
     priority_flag: PriorityFlag,
-    schedule_delivery_time: String,
-    validity_period: String,
+    schedule_delivery_time: ScheduleDeliveryTime,
+    validity_period: ValidityPeriod,
     registered_delivery: u8,
     replace_if_present_flag: u8,
     data_coding: u8,
     sm_default_msg_id: u8,
-    short_message: String,
+    short_message: ShortMessage,
     // Optional TLVs
     user_message_reference: Option<Tlv>,
     source_port: Option<Tlv>,
@@ -374,23 +320,23 @@ impl SubmitSmBuilder {
         Self {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: String::new(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::Unknown,
             source_addr_npi: NumericPlanIndicator::Unknown,
-            source_addr: String::new(),
+            source_addr: SourceAddr::default(),
             dest_addr_ton: TypeOfNumber::Unknown,
             dest_addr_npi: NumericPlanIndicator::Unknown,
-            destination_addr: String::new(),
+            destination_addr: DestinationAddr::default(),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: String::new(),
-            validity_period: String::new(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
-            short_message: String::new(),
+            short_message: ShortMessage::default(),
             sm_length: 0,
             user_message_reference: None,
             source_port: None,
@@ -427,18 +373,18 @@ impl SubmitSmBuilder {
         self
     }
 
-    pub fn service_type(mut self, service_type: impl Into<String>) -> Self {
-        self.service_type = service_type.into();
+    pub fn service_type(mut self, service_type: &str) -> Self {
+        self.service_type = ServiceType::from(service_type);
         self
     }
 
-    pub fn source_addr(mut self, addr: impl Into<String>) -> Self {
-        self.source_addr = addr.into();
+    pub fn source_addr(mut self, addr: &str) -> Self {
+        self.source_addr = SourceAddr::from(addr);
         self
     }
 
-    pub fn destination_addr(mut self, addr: impl Into<String>) -> Self {
-        self.destination_addr = addr.into();
+    pub fn destination_addr(mut self, addr: &str) -> Self {
+        self.destination_addr = DestinationAddr::from(addr);
         self
     }
 
@@ -462,8 +408,8 @@ impl SubmitSmBuilder {
         self
     }
 
-    pub fn short_message(mut self, message: impl Into<String>) -> Self {
-        self.short_message = message.into();
+    pub fn short_message(mut self, message: &str) -> Self {
+        self.short_message = ShortMessage::from(message);
         self
     }
 
@@ -495,7 +441,7 @@ impl SubmitSmBuilder {
     /// Build the SubmitSm, performing validation and calculating sm_length automatically
     pub fn build(mut self) -> Result<SubmitSm, SubmitSmValidationError> {
         // Auto-calculate sm_length from short_message
-        self.sm_length = self.short_message.len() as u8;
+        self.sm_length = self.short_message.len();
 
         let submit_sm = SubmitSm {
             command_status: self.command_status,
@@ -571,12 +517,12 @@ pub struct SubmitSmResponse {
     ///       used in subsequent operations to refer to the message. The message identifier is
     ///       a C-Octet String variable length field up to 65 octets. The format of the
     ///       message_id is vendor specific but must be unique within the SMSC.
-    pub message_id: String,
+    pub message_id: MessageId,
 }
 
 impl ToBytes for SubmitSm {
     fn to_bytes(&self) -> Bytes {
-        // Validate field constraints per SMPP v3.4 specification
+        // Fixed arrays are always valid by construction
         self.validate().expect("SubmitSm validation failed");
 
         let mut buffer = BytesMut::with_capacity(1024);
@@ -589,29 +535,29 @@ impl ToBytes for SubmitSm {
         buffer.put_u32(self.sequence_number);
 
         // Mandatory parameters
-        buffer.put(self.service_type.as_bytes());
+        buffer.put(self.service_type.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.source_addr_ton as u8);
         buffer.put_u8(self.source_addr_npi as u8);
 
-        buffer.put(self.source_addr.as_bytes());
+        buffer.put(self.source_addr.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.dest_addr_ton as u8);
         buffer.put_u8(self.dest_addr_npi as u8);
 
-        buffer.put(self.destination_addr.as_bytes());
+        buffer.put(self.destination_addr.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.esm_class);
         buffer.put_u8(self.protocol_id);
         buffer.put_u8(self.priority_flag as u8);
 
-        buffer.put(self.schedule_delivery_time.as_bytes());
+        buffer.put(self.schedule_delivery_time.as_ref());
         buffer.put_u8(b'\0');
 
-        buffer.put(self.validity_period.as_bytes());
+        buffer.put(self.validity_period.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.registered_delivery);
@@ -749,7 +695,10 @@ impl ToBytes for SubmitSm {
 
 impl ToBytes for SubmitSmResponse {
     fn to_bytes(&self) -> Bytes {
-        let length = 17 + self.message_id.len();
+        // Fixed arrays are always valid by construction
+        let message_id = self.message_id.as_ref();
+        
+        let length = 17 + message_id.len();
 
         let mut buffer = BytesMut::with_capacity(length);
 
@@ -760,7 +709,7 @@ impl ToBytes for SubmitSmResponse {
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
 
-        buffer.put(self.message_id.as_bytes());
+        buffer.put(message_id);
         buffer.put_u8(b'\0');
 
         buffer.freeze()
@@ -777,24 +726,24 @@ mod tests {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 11,
-            short_message: "Hello World".to_string(),
+            short_message: ShortMessage::from("Hello World"),
             // All optional parameters set to None
             user_message_reference: None,
             source_port: None,
@@ -863,24 +812,24 @@ mod tests {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 11,
-            short_message: "Hello World".to_string(),
+            short_message: ShortMessage::from("Hello World"),
             user_message_reference: Some(user_msg_ref_tlv),
             source_port: Some(source_port_tlv),
             source_addr_submit: None,
@@ -929,7 +878,7 @@ mod tests {
         let submit_sm_response = SubmitSmResponse {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            message_id: "msg123456789".to_string(),
+            message_id: MessageId::from("msg123456789"),
         };
 
         let bytes = submit_sm_response.to_bytes();
@@ -953,7 +902,7 @@ mod tests {
         let submit_sm_response = SubmitSmResponse {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            message_id: "".to_string(),
+            message_id: MessageId::default(),
         };
 
         let bytes = submit_sm_response.to_bytes();
@@ -968,7 +917,7 @@ mod tests {
         let submit_sm_response = SubmitSmResponse {
             command_status: CommandStatus::InvalidSourceAddress,
             sequence_number: 1,
-            message_id: "".to_string(),
+            message_id: MessageId::default(),
         };
 
         let bytes = submit_sm_response.to_bytes();
@@ -986,24 +935,24 @@ mod tests {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 5, // Wrong length - should be 11
-            short_message: "Hello World".to_string(),
+            short_message: ShortMessage::from("Hello World"),
             user_message_reference: None,
             source_port: None,
             source_addr_submit: None,
@@ -1037,172 +986,28 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "ServiceTypeTooLong")]
+    #[should_panic(expected = "String too long for FixedString")]
     fn submit_sm_validation_service_type_too_long() {
-        let submit_sm = SubmitSm {
-            command_status: CommandStatus::Ok,
-            sequence_number: 1,
-            service_type: "TOOLONG".to_string(), // 7 chars, max is 5
-            source_addr_ton: TypeOfNumber::International,
-            source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
-            dest_addr_ton: TypeOfNumber::International,
-            dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
-            esm_class: 0,
-            protocol_id: 0,
-            priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
-            registered_delivery: 0,
-            replace_if_present_flag: 0,
-            data_coding: 0,
-            sm_default_msg_id: 0,
-            sm_length: 0,
-            short_message: "".to_string(),
-            user_message_reference: None,
-            source_port: None,
-            source_addr_submit: None,
-            destination_port: None,
-            dest_addr_submit: None,
-            sar_msg_ref_num: None,
-            sar_total_segments: None,
-            sar_segment_seqnum: None,
-            more_messages_to_send: None,
-            payload_type: None,
-            message_payload: None,
-            privacy_indicator: None,
-            callback_num: None,
-            callback_num_pres_ind: None,
-            callback_num_atag: None,
-            source_subaddress: None,
-            dest_subaddress: None,
-            display_time: None,
-            sms_signal: None,
-            ms_validity: None,
-            ms_msg_wait_facilities: None,
-            number_of_messages: None,
-            alert_on_msg_delivery: None,
-            language_indicator: None,
-            its_reply_type: None,
-            its_session_info: None,
-            ussd_service_op: None,
-        };
-
-        let _ = submit_sm.to_bytes(); // Should panic
+        // With fixed arrays, the string length is validated at construction time
+        // "TOOLONG" is 7 chars, max for ServiceType is 5
+        let _service_type = ServiceType::from("TOOLONG");
     }
 
     #[test]
-    #[should_panic(expected = "SourceAddrTooLong")]
+    #[should_panic(expected = "String too long for FixedString")]
     fn submit_sm_validation_source_addr_too_long() {
-        let submit_sm = SubmitSm {
-            command_status: CommandStatus::Ok,
-            sequence_number: 1,
-            service_type: "".to_string(),
-            source_addr_ton: TypeOfNumber::International,
-            source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "A".repeat(21), // 21 chars, max is 20
-            dest_addr_ton: TypeOfNumber::International,
-            dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
-            esm_class: 0,
-            protocol_id: 0,
-            priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
-            registered_delivery: 0,
-            replace_if_present_flag: 0,
-            data_coding: 0,
-            sm_default_msg_id: 0,
-            sm_length: 0,
-            short_message: "".to_string(),
-            user_message_reference: None,
-            source_port: None,
-            source_addr_submit: None,
-            destination_port: None,
-            dest_addr_submit: None,
-            sar_msg_ref_num: None,
-            sar_total_segments: None,
-            sar_segment_seqnum: None,
-            more_messages_to_send: None,
-            payload_type: None,
-            message_payload: None,
-            privacy_indicator: None,
-            callback_num: None,
-            callback_num_pres_ind: None,
-            callback_num_atag: None,
-            source_subaddress: None,
-            dest_subaddress: None,
-            display_time: None,
-            sms_signal: None,
-            ms_validity: None,
-            ms_msg_wait_facilities: None,
-            number_of_messages: None,
-            alert_on_msg_delivery: None,
-            language_indicator: None,
-            its_reply_type: None,
-            its_session_info: None,
-            ussd_service_op: None,
-        };
-
-        let _ = submit_sm.to_bytes(); // Should panic
+        // With fixed arrays, the string length is validated at construction time
+        // 21 chars, max for SourceAddr is 20
+        let _source_addr = SourceAddr::from("A".repeat(21).as_str());
     }
 
     #[test]
-    #[should_panic(expected = "ShortMessageTooLong")]
+    #[should_panic(expected = "Message too long for ShortMessage")]
     fn submit_sm_validation_short_message_too_long() {
-        let long_message = "A".repeat(255); // 255 chars, max is 254
-        let submit_sm = SubmitSm {
-            command_status: CommandStatus::Ok,
-            sequence_number: 1,
-            service_type: "".to_string(),
-            source_addr_ton: TypeOfNumber::International,
-            source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
-            dest_addr_ton: TypeOfNumber::International,
-            dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
-            esm_class: 0,
-            protocol_id: 0,
-            priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
-            registered_delivery: 0,
-            replace_if_present_flag: 0,
-            data_coding: 0,
-            sm_default_msg_id: 0,
-            sm_length: 255,
-            short_message: long_message,
-            user_message_reference: None,
-            source_port: None,
-            source_addr_submit: None,
-            destination_port: None,
-            dest_addr_submit: None,
-            sar_msg_ref_num: None,
-            sar_total_segments: None,
-            sar_segment_seqnum: None,
-            more_messages_to_send: None,
-            payload_type: None,
-            message_payload: None,
-            privacy_indicator: None,
-            callback_num: None,
-            callback_num_pres_ind: None,
-            callback_num_atag: None,
-            source_subaddress: None,
-            dest_subaddress: None,
-            display_time: None,
-            sms_signal: None,
-            ms_validity: None,
-            ms_msg_wait_facilities: None,
-            number_of_messages: None,
-            alert_on_msg_delivery: None,
-            language_indicator: None,
-            its_reply_type: None,
-            its_session_info: None,
-            ussd_service_op: None,
-        };
-
-        let _ = submit_sm.to_bytes(); // Should panic
+        // With fixed arrays, the string length is validated at construction time
+        // 255 chars, max for ShortMessage is 254
+        let long_message = "A".repeat(255);
+        let _short_message = ShortMessage::from(long_message.as_str());
     }
 
     #[test]
@@ -1213,24 +1018,24 @@ mod tests {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 5,
-            short_message: "Hello".to_string(), // Has short message
+            short_message: ShortMessage::from("Hello"), // Has short message
             user_message_reference: None,
             source_port: None,
             source_addr_submit: None,

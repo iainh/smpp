@@ -51,13 +51,13 @@ mod integration_tests {
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: "A".repeat(15), // Max 15 chars (16 with null terminator)
-            password: Some("B".repeat(8)), // Max 8 chars (9 with null terminator)
-            system_type: "C".repeat(12), // Max 12 chars (13 with null terminator)
+            system_id: SystemId::from("A".repeat(15).as_str()), // Max 15 chars (16 with null terminator)
+            password: Some(Password::from("B".repeat(8).as_str())), // Max 8 chars (9 with null terminator)
+            system_type: SystemType::from("C".repeat(12).as_str()), // Max 12 chars (13 with null terminator)
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
             addr_npi: NumericPlanIndicator::Isdn,
-            address_range: "D".repeat(40), // Max 40 chars (41 with null terminator)
+            address_range: AddressRange::from("D".repeat(40).as_str()), // Max 40 chars (41 with null terminator)
         };
 
         let bytes = bind_transmitter.to_bytes();
@@ -76,24 +76,24 @@ mod integration_tests {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 0,
-            short_message: "".to_string(),
+            short_message: ShortMessage::default(),
             // All optional parameters set to None
             user_message_reference: None,
             source_port: None,
@@ -142,24 +142,24 @@ mod integration_tests {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 5,                             // Says 5 bytes
-            short_message: "Hello World".to_string(), // But has 11 bytes
+            short_message: ShortMessage::from("Hello World"), // But has 11 bytes
             // All optional parameters set to None
             user_message_reference: None,
             source_port: None,
@@ -216,7 +216,7 @@ mod integration_tests {
             let response = SubmitSmResponse {
                 command_status: status,
                 sequence_number: 1,
-                message_id: "test".to_string(),
+                message_id: MessageId::from("test"),
             };
             let bytes = response.to_bytes();
             assert!(bytes.len() > 16);
@@ -235,13 +235,13 @@ mod integration_tests {
             let bt = BindTransmitter {
                 command_status: CommandStatus::Ok,
                 sequence_number: 1,
-                system_id: "TEST".to_string(),
-                password: Some("pass".to_string()),
-                system_type: "TEST".to_string(),
+                system_id: SystemId::from("TEST"),
+                password: Some(Password::from("pass")),
+                system_type: SystemType::from("TEST"),
                 interface_version: InterfaceVersion::SmppV34,
                 addr_ton: ton,
                 addr_npi: NumericPlanIndicator::Isdn,
-                address_range: "".to_string(),
+                address_range: AddressRange::from(""),
             };
             let bytes = bt.to_bytes();
             assert!(bytes.len() > 16);
@@ -263,13 +263,13 @@ mod integration_tests {
             let bt = BindTransmitter {
                 command_status: CommandStatus::Ok,
                 sequence_number: 1,
-                system_id: "TEST".to_string(),
-                password: Some("pass".to_string()),
-                system_type: "TEST".to_string(),
+                system_id: SystemId::from("TEST"),
+                password: Some(Password::from("pass")),
+                system_type: SystemType::from("TEST"),
                 interface_version: InterfaceVersion::SmppV34,
                 addr_ton: TypeOfNumber::International,
                 addr_npi: npi,
-                address_range: "".to_string(),
+                address_range: AddressRange::from(""),
             };
             let bytes = bt.to_bytes();
             assert!(bytes.len() > 16);
@@ -296,13 +296,13 @@ mod integration_tests {
             let bt = BindTransmitter {
                 command_status: CommandStatus::Ok,
                 sequence_number: 1,
-                system_id: "TEST".to_string(),
-                password: Some("pass".to_string()),
-                system_type: "TEST".to_string(),
+                system_id: SystemId::from("TEST"),
+                password: Some(Password::from("pass")),
+                system_type: SystemType::from("TEST"),
                 interface_version: version,
                 addr_ton: TypeOfNumber::International,
                 addr_npi: NumericPlanIndicator::Isdn,
-                address_range: "".to_string(),
+                address_range: AddressRange::from(""),
             };
             let bytes = bt.to_bytes();
             assert!(bytes.len() > 16);
@@ -314,24 +314,24 @@ mod integration_tests {
         SubmitSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 11,
-            short_message: "Hello World".to_string(),
+            short_message: ShortMessage::from("Hello World"),
             // All optional parameters set to None
             user_message_reference: None,
             source_port: None,
@@ -369,13 +369,13 @@ mod integration_tests {
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: "SMPP测试".to_string(), // Contains Chinese characters (8 bytes)
-            password: Some("密码".to_string()), // Contains Chinese characters (6 bytes)
-            system_type: "テスト".to_string(), // Contains Japanese characters (9 bytes)
+            system_id: SystemId::from("SMPP测试"), // Contains Chinese characters (8 bytes)
+            password: Some(Password::from("密码")), // Contains Chinese characters (6 bytes)
+            system_type: SystemType::from("テスト"), // Contains Japanese characters (9 bytes)
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
             addr_npi: NumericPlanIndicator::Isdn,
-            address_range: "".to_string(),
+            address_range: AddressRange::from(""),
         };
 
         let bytes = bind_transmitter.to_bytes();
@@ -396,7 +396,7 @@ mod integration_tests {
             let response = SubmitSmResponse {
                 command_status: CommandStatus::Ok,
                 sequence_number: seq_num,
-                message_id: "test".to_string(),
+                message_id: MessageId::from("test"),
             };
 
             let bytes = response.to_bytes();

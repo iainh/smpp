@@ -5,6 +5,7 @@ mod command_id;
 mod command_status;
 mod deliver_sm;
 mod enquire_link;
+mod fixed_string;
 mod generic_nack;
 mod interface_version;
 mod numeric_plan_indicator;
@@ -17,6 +18,11 @@ mod unbind;
 
 pub(crate) use command_id::CommandId;
 pub use command_status::CommandStatus;
+pub use fixed_string::{
+    FixedString, FixedStringError, SystemId, Password, SystemType, AddressRange,
+    ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, ValidityPeriod,
+    MessageId, ShortMessage,
+};
 pub use interface_version::InterfaceVersion;
 pub use numeric_plan_indicator::NumericPlanIndicator;
 pub use priority_flag::PriorityFlag;

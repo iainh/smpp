@@ -1,8 +1,8 @@
 pub(crate) use argh::FromArgs;
 use smpp::connection::Connection;
 use smpp::datatypes::SubmitSm;
-use smpp::datatypes::{BindTransmitter, NumericPlanIndicator, TypeOfNumber, Unbind};
-use smpp::datatypes::{CommandStatus, InterfaceVersion, PriorityFlag};
+use smpp::datatypes::{BindTransmitter, NumericPlanIndicator, TypeOfNumber, Unbind, SystemId, Password, SystemType, AddressRange};
+use smpp::datatypes::{CommandStatus, InterfaceVersion, PriorityFlag, ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime, ValidityPeriod, ShortMessage};
 use smpp::Frame;
 use std::error::Error;
 use tokio::net::{TcpStream, ToSocketAddrs};
@@ -35,13 +35,13 @@ impl Client {
         let bind_transmitter = BindTransmitter {
             command_status: CommandStatus::Ok, // Will be set to 0 in to_bytes() for requests
             sequence_number: self.sequence_number,
-            system_id: system_id.to_owned(),
-            password: Some(password.to_owned()),
-            system_type: String::new(),
+            system_id: SystemId::from(system_id),
+            password: Some(Password::from(password)),
+            system_type: SystemType::default(),
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::Unknown,
             addr_npi: NumericPlanIndicator::Unknown,
-            address_range: String::new(),
+            address_range: AddressRange::default(),
         };
 
         println!("-> {bind_transmitter:?}");
@@ -93,24 +93,24 @@ impl Client {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok, // Will be set to 0 in to_bytes() for requests
             sequence_number: self.sequence_number,
-            service_type: String::new(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::Unknown,
             source_addr_npi: NumericPlanIndicator::Unknown,
-            source_addr: from.to_owned(),
+            source_addr: SourceAddr::from(from),
             dest_addr_ton: TypeOfNumber::Unknown,
             dest_addr_npi: NumericPlanIndicator::Unknown,
-            destination_addr: to.to_owned(),
+            destination_addr: DestinationAddr::from(to),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
-            schedule_delivery_time: String::new(),
-            validity_period: String::new(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: message.len() as u8,
-            short_message: message.to_owned(),
+            short_message: ShortMessage::from(message),
             user_message_reference: None,
             source_port: None,
             source_addr_submit: None,
@@ -157,7 +157,7 @@ impl Client {
                     .into());
                 }
                 println!("Message submitted successfully");
-                Ok(response.message_id)
+                Ok(response.message_id.to_string())
             }
             Ok(Some(other)) => Err(format!("Expected SubmitSmResponse, got {other:?}").into()),
             Ok(None) => Err("Connection closed during submit".into()),

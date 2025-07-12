@@ -1,13 +1,11 @@
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
-use crate::datatypes::{CommandId, CommandStatus, ToBytes, TypeOfNumber};
+use crate::datatypes::{
+    CommandId, CommandStatus, ToBytes, TypeOfNumber, ServiceType, SourceAddr, DestinationAddr,
+    ScheduleDeliveryTime, ValidityPeriod, ShortMessage, MessageId,
+};
 use bytes::{BufMut, Bytes, BytesMut};
 
-// SMPP v3.4 specification field length limits (excluding null terminator)
-const MAX_SERVICE_TYPE_LENGTH: usize = 5;
-const MAX_SOURCE_ADDR_LENGTH: usize = 20;
-const MAX_DESTINATION_ADDR_LENGTH: usize = 20;
-const MAX_SHORT_MESSAGE_LENGTH: usize = 254;
 
 /// This operation is used by the SMSC to deliver a short message to an ESME. 
 /// The deliver_sm PDU is used to deliver both mobile originated messages and 
@@ -23,7 +21,7 @@ pub struct DeliverSm {
     /// 4.3.1 service_type: The service_type parameter can be used to indicate the SMS
     ///       Application service associated with the message. Set to NULL if not applicable.
     ///       Max length: 5 octets (6 with null terminator).
-    pub service_type: String,
+    pub service_type: ServiceType,
 
     /// 4.3.2 source_addr_ton: Type of Number for source address.
     pub source_addr_ton: TypeOfNumber,
@@ -33,7 +31,7 @@ pub struct DeliverSm {
 
     /// 4.3.4 source_addr: Address of SME which originated this message.
     ///       Max length: 20 octets (21 with null terminator).
-    pub source_addr: String,
+    pub source_addr: SourceAddr,
 
     /// 4.3.5 dest_addr_ton: Type of Number for destination address.
     pub dest_addr_ton: TypeOfNumber,
@@ -43,7 +41,7 @@ pub struct DeliverSm {
 
     /// 4.3.7 destination_addr: Destination address of this short message.
     ///       Max length: 20 octets (21 with null terminator).
-    pub destination_addr: String,
+    pub destination_addr: DestinationAddr,
 
     /// 4.3.8 esm_class: Indicates Message Mode and Message Type. Used to indicate
     ///       special message attributes associated with the short message.
@@ -59,10 +57,10 @@ pub struct DeliverSm {
     pub priority_flag: u8,
 
     /// 4.3.11 schedule_delivery_time: Not used for deliver_sm. Set to NULL.
-    pub schedule_delivery_time: String,
+    pub schedule_delivery_time: ScheduleDeliveryTime,
 
     /// 4.3.12 validity_period: Not used for deliver_sm. Set to NULL.
-    pub validity_period: String,
+    pub validity_period: ValidityPeriod,
 
     /// 4.3.13 registered_delivery: Indicator to signify if a delivery receipt or
     ///        acknowledgment is required.
@@ -89,7 +87,7 @@ pub struct DeliverSm {
 
     /// 4.3.18 short_message: Up to 254 octets of short message user data.
     ///        For delivery receipts, this field contains the delivery receipt data.
-    pub short_message: String,
+    pub short_message: ShortMessage,
 
     // Optional parameters (TLV format)
     /// User Message Reference TLV (0x0204): ESME assigned message reference number.
@@ -173,23 +171,11 @@ pub struct DeliverSm {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DeliverSmValidationError {
-    #[error("service_type exceeds maximum length of {MAX_SERVICE_TYPE_LENGTH} characters ({} with null terminator): {actual}", MAX_SERVICE_TYPE_LENGTH + 1)]
-    ServiceTypeTooLong { actual: usize },
-
-    #[error("source_addr exceeds maximum length of {MAX_SOURCE_ADDR_LENGTH} characters ({} with null terminator): {actual}", MAX_SOURCE_ADDR_LENGTH + 1)]
-    SourceAddrTooLong { actual: usize },
-
-    #[error("destination_addr exceeds maximum length of {MAX_DESTINATION_ADDR_LENGTH} characters ({} with null terminator): {actual}", MAX_DESTINATION_ADDR_LENGTH + 1)]
-    DestinationAddrTooLong { actual: usize },
-
     #[error("sm_length ({sm_length}) does not match short_message length ({message_length})")]
     SmLengthMismatch {
         sm_length: u8,
         message_length: usize,
     },
-
-    #[error("short_message exceeds maximum length of {MAX_SHORT_MESSAGE_LENGTH} bytes (use message_payload TLV for longer messages): {actual}")]
-    ShortMessageTooLong { actual: usize },
 
     #[error("Cannot use both short_message and message_payload - they are mutually exclusive")]
     MutualExclusivityViolation,
@@ -197,38 +183,13 @@ pub enum DeliverSmValidationError {
 
 impl DeliverSm {
     /// Validates the DeliverSm PDU according to SMPP v3.4 specification
+    /// Fixed array fields are always valid by construction
     pub fn validate(&self) -> Result<(), DeliverSmValidationError> {
-        // Validate field length constraints
-        if self.service_type.len() > MAX_SERVICE_TYPE_LENGTH {
-            return Err(DeliverSmValidationError::ServiceTypeTooLong {
-                actual: self.service_type.len(),
-            });
-        }
-
-        if self.source_addr.len() > MAX_SOURCE_ADDR_LENGTH {
-            return Err(DeliverSmValidationError::SourceAddrTooLong {
-                actual: self.source_addr.len(),
-            });
-        }
-
-        if self.destination_addr.len() > MAX_DESTINATION_ADDR_LENGTH {
-            return Err(DeliverSmValidationError::DestinationAddrTooLong {
-                actual: self.destination_addr.len(),
-            });
-        }
-
         // Validate sm_length matches actual short_message length
-        if self.sm_length as usize != self.short_message.len() {
+        if self.sm_length as usize != self.short_message.len() as usize {
             return Err(DeliverSmValidationError::SmLengthMismatch {
                 sm_length: self.sm_length,
-                message_length: self.short_message.len(),
-            });
-        }
-
-        // Validate short message length constraints
-        if self.short_message.len() > MAX_SHORT_MESSAGE_LENGTH {
-            return Err(DeliverSmValidationError::ShortMessageTooLong {
-                actual: self.short_message.len(),
+                message_length: self.short_message.len() as usize,
             });
         }
 
@@ -250,23 +211,23 @@ impl DeliverSm {
 pub struct DeliverSmBuilder {
     command_status: CommandStatus,
     sequence_number: u32,
-    service_type: String,
+    service_type: ServiceType,
     source_addr_ton: TypeOfNumber,
     source_addr_npi: NumericPlanIndicator,
-    source_addr: String,
+    source_addr: SourceAddr,
     dest_addr_ton: TypeOfNumber,
     dest_addr_npi: NumericPlanIndicator,
-    destination_addr: String,
+    destination_addr: DestinationAddr,
     esm_class: u8,
     protocol_id: u8,
     priority_flag: u8,
-    schedule_delivery_time: String,
-    validity_period: String,
+    schedule_delivery_time: ScheduleDeliveryTime,
+    validity_period: ValidityPeriod,
     registered_delivery: u8,
     replace_if_present_flag: u8,
     data_coding: u8,
     sm_default_msg_id: u8,
-    short_message: String,
+    short_message: ShortMessage,
     // Optional TLVs
     user_message_reference: Option<Tlv>,
     source_port: Option<Tlv>,
@@ -304,23 +265,23 @@ impl DeliverSmBuilder {
         Self {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: String::new(),
+            service_type: ServiceType::default(),
             source_addr_ton: TypeOfNumber::Unknown,
             source_addr_npi: NumericPlanIndicator::Unknown,
-            source_addr: String::new(),
+            source_addr: SourceAddr::default(),
             dest_addr_ton: TypeOfNumber::Unknown,
             dest_addr_npi: NumericPlanIndicator::Unknown,
-            destination_addr: String::new(),
+            destination_addr: DestinationAddr::default(),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: 0,
-            schedule_delivery_time: String::new(),
-            validity_period: String::new(),
+            schedule_delivery_time: ScheduleDeliveryTime::default(),
+            validity_period: ValidityPeriod::default(),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
-            short_message: String::new(),
+            short_message: ShortMessage::default(),
             sm_length: 0,
             user_message_reference: None,
             source_port: None,
@@ -352,18 +313,18 @@ impl DeliverSmBuilder {
         self
     }
 
-    pub fn service_type(mut self, service_type: impl Into<String>) -> Self {
-        self.service_type = service_type.into();
+    pub fn service_type(mut self, service_type: &str) -> Self {
+        self.service_type = ServiceType::from(service_type);
         self
     }
 
-    pub fn source_addr(mut self, addr: impl Into<String>) -> Self {
-        self.source_addr = addr.into();
+    pub fn source_addr(mut self, addr: &str) -> Self {
+        self.source_addr = SourceAddr::from(addr);
         self
     }
 
-    pub fn destination_addr(mut self, addr: impl Into<String>) -> Self {
-        self.destination_addr = addr.into();
+    pub fn destination_addr(mut self, addr: &str) -> Self {
+        self.destination_addr = DestinationAddr::from(addr);
         self
     }
 
@@ -387,8 +348,8 @@ impl DeliverSmBuilder {
         self
     }
 
-    pub fn short_message(mut self, message: impl Into<String>) -> Self {
-        self.short_message = message.into();
+    pub fn short_message(mut self, message: &str) -> Self {
+        self.short_message = ShortMessage::from(message);
         self
     }
 
@@ -483,7 +444,7 @@ pub struct DeliverSmResponse {
 
     // Body
     /// 4.4.1 message_id: Set to NULL. Not used for deliver_sm_resp.
-    pub message_id: String,
+    pub message_id: MessageId,
 }
 
 impl ToBytes for DeliverSm {
@@ -501,29 +462,29 @@ impl ToBytes for DeliverSm {
         buffer.put_u32(self.sequence_number);
 
         // Mandatory parameters
-        buffer.put(self.service_type.as_bytes());
+        buffer.put(self.service_type.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.source_addr_ton as u8);
         buffer.put_u8(self.source_addr_npi as u8);
 
-        buffer.put(self.source_addr.as_bytes());
+        buffer.put(self.source_addr.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.dest_addr_ton as u8);
         buffer.put_u8(self.dest_addr_npi as u8);
 
-        buffer.put(self.destination_addr.as_bytes());
+        buffer.put(self.destination_addr.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.esm_class);
         buffer.put_u8(self.protocol_id);
         buffer.put_u8(self.priority_flag);
 
-        buffer.put(self.schedule_delivery_time.as_bytes());
+        buffer.put(self.schedule_delivery_time.as_ref());
         buffer.put_u8(b'\0');
 
-        buffer.put(self.validity_period.as_bytes());
+        buffer.put(self.validity_period.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.put_u8(self.registered_delivery);
@@ -634,7 +595,7 @@ impl ToBytes for DeliverSm {
 
 impl ToBytes for DeliverSmResponse {
     fn to_bytes(&self) -> Bytes {
-        let length = 17 + self.message_id.len();
+        let length = 17 + self.message_id.as_ref().len();
 
         let mut buffer = BytesMut::with_capacity(length);
 
@@ -643,7 +604,7 @@ impl ToBytes for DeliverSmResponse {
         buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
 
-        buffer.put(self.message_id.as_bytes());
+        buffer.put(self.message_id.as_ref());
         buffer.put_u8(b'\0');
 
         buffer.freeze()
@@ -659,24 +620,24 @@ mod tests {
         let deliver_sm = DeliverSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::from(""),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: 0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::from(""),
+            validity_period: ValidityPeriod::from(""),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 11,
-            short_message: "Hello World".to_string(),
+            short_message: ShortMessage::from("Hello World"),
             user_message_reference: None,
             source_port: None,
             destination_port: None,
@@ -727,7 +688,7 @@ mod tests {
 
         assert_eq!(deliver_sm.source_addr, "1234567890");
         assert_eq!(deliver_sm.destination_addr, "0987654321");
-        assert_eq!(deliver_sm.short_message, "Test message");
+        assert_eq!(deliver_sm.short_message.as_str().unwrap(), "Test message");
         assert_eq!(deliver_sm.sm_length, 12); // Length of "Test message"
     }
 
@@ -744,7 +705,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(deliver_sm.esm_class, 0x04);
-        assert_eq!(deliver_sm.short_message, receipt_message);
+        assert_eq!(deliver_sm.short_message.as_str().unwrap(), receipt_message);
         assert_eq!(deliver_sm.sm_length, receipt_message.len() as u8);
     }
 
@@ -753,7 +714,7 @@ mod tests {
         let deliver_sm_response = DeliverSmResponse {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            message_id: "".to_string(), // Usually NULL for deliver_sm_resp
+            message_id: MessageId::from(""), // Usually NULL for deliver_sm_resp
         };
 
         let bytes = deliver_sm_response.to_bytes();
@@ -778,24 +739,24 @@ mod tests {
         let deliver_sm = DeliverSm {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            service_type: "".to_string(),
+            service_type: ServiceType::from(""),
             source_addr_ton: TypeOfNumber::International,
             source_addr_npi: NumericPlanIndicator::Isdn,
-            source_addr: "1234567890".to_string(),
+            source_addr: SourceAddr::from("1234567890"),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: "0987654321".to_string(),
+            destination_addr: DestinationAddr::from("0987654321"),
             esm_class: 0,
             protocol_id: 0,
             priority_flag: 0,
-            schedule_delivery_time: "".to_string(),
-            validity_period: "".to_string(),
+            schedule_delivery_time: ScheduleDeliveryTime::from(""),
+            validity_period: ValidityPeriod::from(""),
             registered_delivery: 0,
             replace_if_present_flag: 0,
             data_coding: 0,
             sm_default_msg_id: 0,
             sm_length: 5, // Wrong length - should be 11
-            short_message: "Hello World".to_string(),
+            short_message: ShortMessage::from("Hello World"),
             user_message_reference: None,
             source_port: None,
             destination_port: None,

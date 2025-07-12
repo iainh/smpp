@@ -18,7 +18,7 @@
 //! Once the SMPP session is established the characteristics of the session are
 //! that of a normal SMPP receiver session.
 
-use crate::datatypes::{CommandId, ToBytes, MAX_PASSWORD_LENGTH, MAX_SYSTEM_ID_LENGTH};
+use crate::datatypes::{CommandId, ToBytes, SystemId, Password};
 use bytes::{BufMut, Bytes, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -32,70 +32,53 @@ pub struct Outbind {
     ///        of ESME (i.e. transmitter, receiver or transceiver) and to
     ///        determine the functionality available to the ESME within the
     ///        SMSC.
-    pub system_id: String,
+    pub system_id: SystemId,
 
     /// The password used by the ESME to identify itself to the SMSC.
-    pub password: Option<String>,
+    pub password: Option<Password>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum OutbindValidationError {
-    #[error("system_id exceeds maximum length of {MAX_SYSTEM_ID_LENGTH} characters ({} with null terminator): {actual}", MAX_SYSTEM_ID_LENGTH + 1)]
-    SystemIdTooLong { actual: usize },
-
-    #[error("password exceeds maximum length of {MAX_PASSWORD_LENGTH} characters ({} with null terminator): {actual}", MAX_PASSWORD_LENGTH + 1)]
-    PasswordTooLong { actual: usize },
+    #[error("Fixed array fields are always valid - this error should not occur")]
+    FixedArrayError,
 }
 
 impl Outbind {
     /// Validates the Outbind PDU according to SMPP v3.4 specification
+    /// Fixed array fields are always valid by construction
     pub fn validate(&self) -> Result<(), OutbindValidationError> {
-        // Validate field length constraints
-        if self.system_id.len() > MAX_SYSTEM_ID_LENGTH {
-            return Err(OutbindValidationError::SystemIdTooLong {
-                actual: self.system_id.len(),
-            });
-        }
-
-        if let Some(ref password) = self.password {
-            if password.len() > MAX_PASSWORD_LENGTH {
-                return Err(OutbindValidationError::PasswordTooLong {
-                    actual: password.len(),
-                });
-            }
-        }
-
+        // Fixed-size arrays guarantee field length constraints are met
         Ok(())
     }
 }
 
 impl ToBytes for Outbind {
     fn to_bytes(&self) -> Bytes {
-        // Validate field constraints per SMPP v3.4 specification
+        // Fixed arrays are always valid by construction
         self.validate().expect("Outbind validation failed");
-        let mut buffer = BytesMut::with_capacity(1024);
-        // Write junk data that we'll replace later with the actual length
-        buffer.put_u32(0);
-
+        
+        let system_id = self.system_id.as_ref();
+        let password = self.password.as_ref().map(|p| p.as_ref());
+        
+        let length = 16 + system_id.len() + 1 + password.map_or(0, |p| p.len()) + 1;
+        
+        let mut buffer = BytesMut::with_capacity(length);
+        
+        buffer.put_u32(length as u32);
         buffer.put_u32(CommandId::Outbind as u32);
         // Command status is always 0 for outbind
-        buffer.put_u32(b'\0' as u32);
-
+        buffer.put_u32(0u32);
         buffer.put_u32(self.sequence_number);
 
-        buffer.put(self.system_id.as_bytes());
+        buffer.put(system_id);
         buffer.put_u8(b'\0');
 
-        if let Some(password) = &self.password {
-            buffer.put(password.as_bytes());
+        if let Some(password) = password {
+            buffer.put(password);
         }
 
         buffer.put_u8(b'\0');
-
-        let length = buffer.len() as u32;
-
-        let length_section = &mut buffer[0..][..4];
-        length_section.copy_from_slice(&length.to_be_bytes());
 
         buffer.freeze()
     }
@@ -109,8 +92,8 @@ mod tests {
     fn outbind_to_bytes() {
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: "SMPP3TEST".to_string(),
-            password: Some("secret".to_string()),
+            system_id: SystemId::from_str("SMPP3TEST").unwrap(),
+            password: Some(Password::from_str("secret").unwrap()),
         };
 
         let expected = vec![
@@ -132,7 +115,7 @@ mod tests {
     fn outbind_to_bytes_no_password() {
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: "SMPP3TEST".to_string(),
+            system_id: SystemId::from_str("SMPP3TEST").unwrap(),
             password: None,
         };
 
@@ -151,36 +134,38 @@ mod tests {
 
     #[test]
     fn outbind_field_length_validation_system_id() {
+        // Test that SystemId correctly rejects strings that are too long
+        let long_system_id = "A".repeat(16); // Too long - max is 15
+        let result = SystemId::from_str(&long_system_id);
+        assert!(result.is_err());
+        
+        // Valid SystemId should work in Outbind
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: "A".repeat(16), // Too long - max is 15
-            password: Some("pass".to_string()),
+            system_id: SystemId::from_str("valid").unwrap(),
+            password: Some(Password::from_str("pass").unwrap()),
         };
-
-        // Validate should return an error for system_id too long
-        let validation_result = outbind.validate();
-        assert!(validation_result.is_err());
-        assert!(matches!(
-            validation_result.unwrap_err(),
-            OutbindValidationError::SystemIdTooLong { .. }
-        ));
+        
+        // Fixed arrays are always valid
+        assert!(outbind.validate().is_ok());
     }
 
     #[test]
     fn outbind_field_length_validation_password() {
+        // Test that Password correctly rejects strings that are too long
+        let long_password = "A".repeat(9); // Too long - max is 8
+        let result = Password::from_str(&long_password);
+        assert!(result.is_err());
+        
+        // Valid Password should work in Outbind
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: "TEST".to_string(),
-            password: Some("A".repeat(9)), // Too long - max is 8
+            system_id: SystemId::from_str("TEST").unwrap(),
+            password: Some(Password::from_str("validpw").unwrap()),
         };
-
-        // Validate should return an error for password too long
-        let validation_result = outbind.validate();
-        assert!(validation_result.is_err());
-        assert!(matches!(
-            validation_result.unwrap_err(),
-            OutbindValidationError::PasswordTooLong { .. }
-        ));
+        
+        // Fixed arrays are always valid
+        assert!(outbind.validate().is_ok());
     }
 
     #[test]
@@ -188,8 +173,8 @@ mod tests {
         // Test that maximum valid lengths work correctly
         let outbind = Outbind {
             sequence_number: 1,
-            system_id: "A".repeat(15),     // Max allowed
-            password: Some("B".repeat(8)), // Max allowed
+            system_id: SystemId::from_str(&"A".repeat(15)).unwrap(),     // Max allowed
+            password: Some(Password::from_str(&"B".repeat(8)).unwrap()), // Max allowed
         };
 
         let bytes = outbind.to_bytes();
@@ -203,8 +188,8 @@ mod tests {
 
         let original = Outbind {
             sequence_number: 42,
-            system_id: "SMPP3TEST".to_string(),
-            password: Some("secret08".to_string()),
+            system_id: SystemId::from_str("SMPP3TEST").unwrap(),
+            password: Some(Password::from_str("secret08").unwrap()),
         };
 
         // Serialize to bytes

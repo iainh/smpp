@@ -2,14 +2,10 @@ use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
-    CommandId, CommandStatus, ToBytes, TypeOfNumber, MAX_PASSWORD_LENGTH, MAX_SYSTEM_ID_LENGTH,
+    CommandId, CommandStatus, ToBytes, TypeOfNumber, SystemId, Password, SystemType, AddressRange,
 };
 use bytes::{BufMut, Bytes, BytesMut};
 
-// SMPP v3.4 specification field length limits (excluding null terminator)
-// PDU-specific constants
-const MAX_SYSTEM_TYPE_LENGTH: usize = 12;
-const MAX_ADDRESS_RANGE_LENGTH: usize = 40;
 
 /// BindReceiver is used to bind a receiver ESME to the SMSC.
 #[derive(Clone, Debug, PartialEq)]
@@ -28,20 +24,20 @@ pub struct BindReceiver {
     ///       Terminated messages originated by this ESME. The system_id may
     ///       also be used as an originating address for Mobile Originated
     ///        messages sent to this ESME.
-    pub system_id: String,
+    pub system_id: SystemId,
 
     /// 5.2.2 password: This is the password for authentication. It is a fixed
     ///       length string of 9 characters. If fewer than 9 characters are
     ///       supplied, it must be null padded. If no password is required by
     ///       the SMSC, a NULL (i.e. zero) password should be supplied.
-    pub password: Option<String>,
+    pub password: Option<Password>,
 
     /// 5.2.3 system_type: This is used to categorize the type of ESME that is
     ///       binding to the SMSC. Examples include "VMS" (voice mail system)
     ///       and "OTA" (over-the-air activation system). (See section 5.2.7
     ///       for a list of suggested values.) The system_type is specified as
     ///       a fixed length alphanumeric field of up to 13 characters.
-    pub system_type: String,
+    pub system_type: SystemType,
 
     /// 5.2.4 interface_version: Interface version level supported by the SMSC.
     pub interface_version: InterfaceVersion,
@@ -56,54 +52,20 @@ pub struct BindReceiver {
 
     /// 5.2.7 address_range: This is used to specify a range of SME addresses
     ///       serviced by the ESME. A single address may also be specified.
-    pub address_range: String,
+    pub address_range: AddressRange,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum BindReceiverValidationError {
-    #[error("system_id exceeds maximum length of {MAX_SYSTEM_ID_LENGTH} characters ({} with null terminator): {actual}", MAX_SYSTEM_ID_LENGTH + 1)]
-    SystemIdTooLong { actual: usize },
-
-    #[error("password exceeds maximum length of {MAX_PASSWORD_LENGTH} characters ({} with null terminator): {actual}", MAX_PASSWORD_LENGTH + 1)]
-    PasswordTooLong { actual: usize },
-
-    #[error("system_type exceeds maximum length of {MAX_SYSTEM_TYPE_LENGTH} characters ({} with null terminator): {actual}", MAX_SYSTEM_TYPE_LENGTH + 1)]
-    SystemTypeTooLong { actual: usize },
-
-    #[error("address_range exceeds maximum length of {MAX_ADDRESS_RANGE_LENGTH} characters ({} with null terminator): {actual}", MAX_ADDRESS_RANGE_LENGTH + 1)]
-    AddressRangeTooLong { actual: usize },
+    #[error("Fixed array fields are always valid - this error should not occur")]
+    FixedArrayError,
 }
 
 impl BindReceiver {
     /// Validates the BindReceiver PDU according to SMPP v3.4 specification
+    /// Fixed array fields are always valid by construction
     pub fn validate(&self) -> Result<(), BindReceiverValidationError> {
-        // Validate field length constraints
-        if self.system_id.len() > MAX_SYSTEM_ID_LENGTH {
-            return Err(BindReceiverValidationError::SystemIdTooLong {
-                actual: self.system_id.len(),
-            });
-        }
-
-        if let Some(ref password) = self.password {
-            if password.len() > MAX_PASSWORD_LENGTH {
-                return Err(BindReceiverValidationError::PasswordTooLong {
-                    actual: password.len(),
-                });
-            }
-        }
-
-        if self.system_type.len() > MAX_SYSTEM_TYPE_LENGTH {
-            return Err(BindReceiverValidationError::SystemTypeTooLong {
-                actual: self.system_type.len(),
-            });
-        }
-
-        if self.address_range.len() > MAX_ADDRESS_RANGE_LENGTH {
-            return Err(BindReceiverValidationError::AddressRangeTooLong {
-                actual: self.address_range.len(),
-            });
-        }
-
+        // Fixed-size arrays guarantee field length constraints are met
         Ok(())
     }
 
@@ -117,13 +79,13 @@ impl BindReceiver {
 pub struct BindReceiverBuilder {
     command_status: CommandStatus,
     sequence_number: u32,
-    system_id: String,
-    password: Option<String>,
-    system_type: String,
+    system_id: SystemId,
+    password: Option<Password>,
+    system_type: SystemType,
     interface_version: InterfaceVersion,
     addr_ton: TypeOfNumber,
     addr_npi: NumericPlanIndicator,
-    address_range: String,
+    address_range: AddressRange,
 }
 
 impl Default for BindReceiverBuilder {
@@ -137,13 +99,13 @@ impl BindReceiverBuilder {
         Self {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: String::new(),
+            system_id: SystemId::default(),
             password: None,
-            system_type: String::new(),
+            system_type: SystemType::default(),
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::Unknown,
             addr_npi: NumericPlanIndicator::Unknown,
-            address_range: String::new(),
+            address_range: AddressRange::default(),
         }
     }
 
@@ -152,18 +114,18 @@ impl BindReceiverBuilder {
         self
     }
 
-    pub fn system_id(mut self, system_id: impl Into<String>) -> Self {
-        self.system_id = system_id.into();
+    pub fn system_id(mut self, system_id: &str) -> Self {
+        self.system_id = SystemId::from(system_id);
         self
     }
 
-    pub fn password(mut self, password: impl Into<String>) -> Self {
-        self.password = Some(password.into());
+    pub fn password(mut self, password: &str) -> Self {
+        self.password = Some(Password::from(password));
         self
     }
 
-    pub fn system_type(mut self, system_type: impl Into<String>) -> Self {
-        self.system_type = system_type.into();
+    pub fn system_type(mut self, system_type: &str) -> Self {
+        self.system_type = SystemType::from(system_type);
         self
     }
 
@@ -182,8 +144,8 @@ impl BindReceiverBuilder {
         self
     }
 
-    pub fn address_range(mut self, range: impl Into<String>) -> Self {
-        self.address_range = range.into();
+    pub fn address_range(mut self, range: &str) -> Self {
+        self.address_range = AddressRange::from(range);
         self
     }
 
@@ -214,19 +176,19 @@ pub struct BindReceiverResponse {
     pub command_status: CommandStatus,
     pub sequence_number: u32,
     // body
-    pub system_id: String,
+    pub system_id: SystemId,
     pub sc_interface_version: Option<Tlv>,
 }
 
 impl ToBytes for BindReceiver {
     fn to_bytes(&self) -> Bytes {
-        // Validate field constraints per SMPP v3.4 specification
+        // Fixed arrays are always valid by construction
         self.validate().expect("BindReceiver validation failed");
 
-        let system_id = self.system_id.as_bytes();
-        let password = self.password.as_ref().map(|p| p.as_bytes());
-        let system_type = self.system_type.as_bytes();
-        let address_range = self.address_range.as_bytes();
+        let system_id = self.system_id.as_ref();
+        let password = self.password.as_ref().map(|p| p.as_ref());
+        let system_type = self.system_type.as_ref();
+        let address_range = self.address_range.as_ref();
 
         let length = 23
             + system_id.len()
@@ -266,12 +228,8 @@ impl ToBytes for BindReceiver {
 
 impl ToBytes for BindReceiverResponse {
     fn to_bytes(&self) -> Bytes {
-        // Validate field length according to SMPP v3.4 specification
-        if self.system_id.len() > 15 {
-            panic!("system_id exceeds maximum length of 15 characters (16 with null terminator)");
-        }
-
-        let system_id = self.system_id.as_bytes();
+        // Fixed arrays are always valid by construction
+        let system_id = self.system_id.as_ref();
 
         // Calculate length: header (16) + system_id + null terminator + optional TLV
         let mut length = 16 + system_id.len() + 1;
@@ -309,13 +267,13 @@ mod tests {
         let bind_receiver = BindReceiver {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: "SMPP3TEST".to_string(),
-            password: Some("secret08".to_string()),
-            system_type: "SUBMIT1".to_string(),
+            system_id: SystemId::from("SMPP3TEST"),
+            password: Some(Password::from("secret08")),
+            system_type: SystemType::from("SUBMIT1"),
             interface_version: InterfaceVersion::SmppV34,
             addr_ton: TypeOfNumber::International,
             addr_npi: NumericPlanIndicator::Isdn,
-            address_range: "".to_string(),
+            address_range: AddressRange::from(""),
         };
 
         let br_bytes = bind_receiver.to_bytes();
@@ -342,24 +300,11 @@ mod tests {
 
     #[test]
     fn bind_receiver_validation() {
-        let bind_receiver = BindReceiver {
-            command_status: CommandStatus::Ok,
-            sequence_number: 1,
-            system_id: "A".repeat(16), // Too long - max is 15
-            password: Some("pass".to_string()),
-            system_type: "TYPE".to_string(),
-            interface_version: InterfaceVersion::SmppV34,
-            addr_ton: TypeOfNumber::International,
-            addr_npi: NumericPlanIndicator::Isdn,
-            address_range: "".to_string(),
-        };
-
-        let validation_result = bind_receiver.validate();
-        assert!(validation_result.is_err());
-        assert!(matches!(
-            validation_result.unwrap_err(),
-            BindReceiverValidationError::SystemIdTooLong { .. }
-        ));
+        // With fixed arrays, the string length is validated at construction time
+        let result = std::panic::catch_unwind(|| {
+            SystemId::from("A".repeat(16).as_str()) // Too long - max is 15
+        });
+        assert!(result.is_err()); // Should panic on creation
     }
 
     #[test]
@@ -372,10 +317,10 @@ mod tests {
             .build()
             .unwrap();
 
-        assert_eq!(bind_receiver.system_id, "TEST");
-        assert_eq!(bind_receiver.password, Some("secret".to_string()));
-        assert_eq!(bind_receiver.system_type, "VMS");
-        assert_eq!(bind_receiver.address_range, "1234");
+        assert_eq!(bind_receiver.system_id.as_str().unwrap(), "TEST");
+        assert_eq!(bind_receiver.password.as_ref().map(|p| p.as_str().unwrap()), Some("secret"));
+        assert_eq!(bind_receiver.system_type.as_str().unwrap(), "VMS");
+        assert_eq!(bind_receiver.address_range.as_str().unwrap(), "1234");
         assert_eq!(bind_receiver.interface_version, InterfaceVersion::SmppV34);
     }
 
@@ -384,7 +329,7 @@ mod tests {
         let bind_receiver_response = BindReceiverResponse {
             command_status: CommandStatus::Ok,
             sequence_number: 1,
-            system_id: "SMPP3TEST".to_string(),
+            system_id: SystemId::from("SMPP3TEST"),
             sc_interface_version: None,
         };
 
