@@ -1,3 +1,6 @@
+// ABOUTME: Provides TCP connection management for SMPP v3.4 protocol communication
+// ABOUTME: Implements frame-based I/O with buffering for optimal network performance
+
 use crate::datatypes::ToBytes;
 use crate::frame::{self, Frame};
 use bytes::{Buf, BytesMut};
@@ -5,18 +8,62 @@ use std::io::{self, Cursor};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 
-/// Send and receive `Frame` values from a remote peer.
+/// SMPP v3.4 Connection Management
 ///
-/// When implementing networking protocols, a message on that protocol is
-/// often composed of several smaller messages known as frames. The purpose of
-/// `Connection` is to read and write frames on the underlying `TcpStream`.
+/// Handles frame-based communication over TCP for SMPP protocol sessions.
+/// This implements the transport layer for SMPP v3.4 as defined in Section 2.1
+/// of the specification.
 ///
-/// To read frames, the `Connection` uses an internal buffer, which is filled
-/// up until there are enough bytes to create a full frame. Once this happens,
-/// the `Connection` creates the frame and returns it to the caller.
+/// ## SMPP v3.4 Session States (Section 2.1)
 ///
-/// When sending frames, the frame is first encoded into the write buffer.
-/// The contents of the write buffer are then written to the socket.
+/// An SMPP session progresses through the following states:
+///
+/// ```text
+/// CLOSED → OPEN → BOUND_TX/BOUND_RX/BOUND_TRX → UNBOUND → CLOSED
+/// ```
+///
+/// ### State Descriptions
+/// - **CLOSED**: No TCP connection exists
+/// - **OPEN**: TCP connection established but no SMPP bind completed  
+/// - **BOUND_TX**: Successfully bound as transmitter (can send submit_sm)
+/// - **BOUND_RX**: Successfully bound as receiver (can receive deliver_sm)
+/// - **BOUND_TRX**: Successfully bound as transceiver (both TX and RX capabilities)
+/// - **UNBOUND**: Unbind initiated, session terminating
+///
+/// ## Valid PDU Sequences by State (Section 2.1.1)
+///
+/// ### OPEN State (after TCP connect, before bind)
+/// - **Allowed**: bind_transmitter, bind_receiver, bind_transceiver, outbind
+/// - **Responses**: bind_*_resp, generic_nack
+///
+/// ### BOUND_TX State  
+/// - **Allowed**: submit_sm, query_sm, cancel_sm, replace_sm, enquire_link, unbind
+/// - **Responses**: submit_sm_resp, query_sm_resp, cancel_sm_resp, replace_sm_resp, enquire_link_resp, unbind_resp, generic_nack
+///
+/// ### BOUND_RX State
+/// - **Allowed**: enquire_link, unbind  
+/// - **Received**: deliver_sm, alert_notification
+/// - **Responses**: deliver_sm_resp, enquire_link_resp, unbind_resp, generic_nack
+///
+/// ### BOUND_TRX State
+/// - **Allowed**: All TX and RX operations combined
+///
+/// ## Connection Lifecycle
+/// 1. TCP connection established (CLOSED → OPEN)
+/// 2. Bind operation performed (OPEN → BOUND_*)  
+/// 3. Message exchange in bound state
+/// 4. Unbind operation (BOUND_* → UNBOUND)
+/// 5. TCP connection closed (UNBOUND → CLOSED)
+///
+/// ## Implementation Notes
+/// This `Connection` struct handles the transport layer (frame I/O) but does not
+/// track session state. Higher-level client code must manage the protocol state
+/// machine and ensure PDUs are sent in the correct sequence per specification.
+///
+/// ## References  
+/// - SMPP v3.4 Specification Section 2.1 (Session States)
+/// - SMPP v3.4 Specification Section 2.1.1 (Session State Diagram)
+/// - SMPP v3.4 Specification Section 2.2 (Protocol Data Units)
 #[derive(Debug)]
 pub struct Connection {
     // The `TcpStream`. It is decorated with a `BufWriter`, which provides write

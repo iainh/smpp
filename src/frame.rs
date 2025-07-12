@@ -1,15 +1,33 @@
+//! SMPP v3.4 Protocol Frame Implementation
+//!
 //! Provides a type representing an SMPP protocol frame as well as utilities for
-//! parsing frames from a byte array.
+//! parsing frames from a byte array. This module implements the PDU (Protocol Data Unit)
+//! format as defined in SMPP v3.4 Specification Section 2.2.
+//!
+//! ## SMPP v3.4 PDU Structure (Section 2.2.1)
+//!
+//! All SMPP PDUs follow the same basic structure:
+//! ```text
+//! +----------------+----------------+----------------+----------------+
+//! | command_length (4 octets)       | command_id (4 octets)           |
+//! +----------------+----------------+----------------+----------------+
+//! | command_status (4 octets)       | sequence_number (4 octets)      |
+//! +----------------+----------------+----------------+----------------+
+//! | PDU Body (variable length, 0-N octets)                            |
+//! +-------------------------------------------------------------------+
+//! ```
+//!
+//! The mandatory 16-octet header is followed by an optional body containing
+//! PDU-specific mandatory and optional parameters.
 
 use crate::datatypes::tags;
 use crate::datatypes::{
-    BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse, BindTransmitter,
-    BindTransmitterResponse, CommandId, CommandStatus, DeliverSm, DeliverSmResponse, EnquireLink,
-    EnquireLinkResponse, GenericNack, InterfaceVersion, NumericPlanIndicator, Outbind, PriorityFlag, 
-    SubmitSm, SubmitSmResponse, Tlv, TypeOfNumber, Unbind, UnbindResponse, SystemId, Password, 
-    SystemType, AddressRange, ServiceType, SourceAddr, DestinationAddr, ScheduleDeliveryTime,
-    EsmClass, DataCoding, 
-    ValidityPeriod, MessageId, ShortMessage,
+    AddressRange, BindReceiver, BindReceiverResponse, BindTransceiver, BindTransceiverResponse,
+    BindTransmitter, BindTransmitterResponse, CommandId, CommandStatus, DataCoding, DeliverSm,
+    DeliverSmResponse, DestinationAddr, EnquireLink, EnquireLinkResponse, EsmClass, GenericNack,
+    InterfaceVersion, MessageId, NumericPlanIndicator, Outbind, Password, PriorityFlag,
+    ScheduleDeliveryTime, ServiceType, ShortMessage, SourceAddr, SubmitSm, SubmitSmResponse,
+    SystemId, SystemType, Tlv, TypeOfNumber, Unbind, UnbindResponse, ValidityPeriod,
 };
 use bytes::Buf;
 use core::fmt;
@@ -20,23 +38,43 @@ use std::mem::size_of;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
+/// SMPP v3.4 Protocol Data Unit (PDU) Frame
+///
+/// Represents all supported SMPP PDU types as defined in Section 4 of the SMPP v3.4 specification.
+/// Each variant corresponds to a specific command_id value and PDU structure.
 #[derive(Clone, Debug)]
 pub enum Frame {
+    /// bind_receiver PDU (Section 4.1.1, Command ID: 0x00000001)
     BindReceiver(BindReceiver),
+    /// bind_receiver_resp PDU (Section 4.1.2, Command ID: 0x80000001)
     BindReceiverResponse(BindReceiverResponse),
+    /// bind_transceiver PDU (Section 4.2.5, Command ID: 0x00000009)
     BindTransceiver(BindTransceiver),
+    /// bind_transceiver_resp PDU (Section 4.2.6, Command ID: 0x80000009)
     BindTransceiverResponse(BindTransceiverResponse),
+    /// bind_transmitter PDU (Section 4.1.1, Command ID: 0x00000002)
     BindTransmitter(BindTransmitter),
+    /// bind_transmitter_resp PDU (Section 4.1.2, Command ID: 0x80000002)
     BindTransmitterResponse(BindTransmitterResponse),
+    /// deliver_sm PDU (Section 4.6.1, Command ID: 0x00000005)
     DeliverSm(Box<DeliverSm>),
+    /// deliver_sm_resp PDU (Section 4.6.2, Command ID: 0x80000005)
     DeliverSmResponse(DeliverSmResponse),
+    /// enquire_link PDU (Section 4.11.1, Command ID: 0x00000015)
     EnquireLink(EnquireLink),
+    /// enquire_link_resp PDU (Section 4.11.2, Command ID: 0x80000015)
     EnquireLinkResponse(EnquireLinkResponse),
+    /// generic_nack PDU (Section 4.3.1, Command ID: 0x80000000)
     GenericNack(GenericNack),
+    /// outbind PDU (Section 4.1.4, Command ID: 0x0000000B)
     Outbind(Outbind),
+    /// submit_sm PDU (Section 4.4.1, Command ID: 0x00000004)
     SubmitSm(Box<SubmitSm>),
+    /// submit_sm_resp PDU (Section 4.4.2, Command ID: 0x80000004)
     SubmitSmResponse(SubmitSmResponse),
+    /// unbind PDU (Section 4.2.1, Command ID: 0x00000006)
     Unbind(Unbind),
+    /// unbind_resp PDU (Section 4.2.2, Command ID: 0x80000006)
     UnbindResponse(UnbindResponse),
 }
 
@@ -50,49 +88,75 @@ pub enum Error {
 }
 
 impl Frame {
-    /// Checks if an entire message can be decoded from `src`. If it can be, return the
-    /// command_length that can be used to allocate the buffer for parsing.
+    /// Validates PDU header and checks if complete frame is available for parsing.
+    ///
+    /// Implements the frame checking logic per SMPP v3.4 Section 2.2.1. All SMPP PDUs
+    /// must have a minimum 16-octet header containing command_length, command_id,
+    /// command_status, and sequence_number fields.
+    ///
+    /// ## SMPP v3.4 Compliance
+    /// - Validates command_length field is within acceptable bounds
+    /// - Ensures complete PDU is available in the buffer before parsing
+    /// - Follows Section 2.2.1 PDU format requirements
+    ///
+    /// Returns the command_length value if a complete PDU is available.
     #[tracing::instrument]
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<usize, Error> {
-        // The length of the PDU including the command_length.
+        // Read command_length field (first 4 octets of PDU per Section 2.2.1)
         let command_length = peek_u32(src)? as usize;
 
-        // PDUs have a the same header structure consisting of the following
-        // fields:
-        //  - command_length (4 octets)
-        //  - command_type (4 octets)
-        //  - command_status (4 octets)
-        //  - sequence_number (4 octets)
-        // for a total of 16 octets
-        (command_length <= src.remaining() && command_length > 16)
+        // Validate PDU structure per SMPP v3.4 Section 2.2.1:
+        // All PDUs have the same 16-octet header structure:
+        //  - command_length (4 octets)   - Total PDU length including this field
+        //  - command_id (4 octets)       - PDU type identifier
+        //  - command_status (4 octets)   - Error code (0 for requests)
+        //  - sequence_number (4 octets)  - PDU sequence number
+        // Minimum valid PDU is 16 octets (header only, e.g., enquire_link)
+        (command_length <= src.remaining() && command_length >= 16)
             .then_some(command_length)
             .ok_or(Error::Incomplete)
     }
 }
 
-/// Parse the common 16-byte SMPP header from all PDUs
+/// Parse the mandatory 16-octet SMPP header from all PDUs (Section 2.2.1)
+///
+/// Extracts the common header fields present in every SMPP PDU:
+/// - command_length: Already validated by Frame::check()
+/// - command_id: Identifies the PDU type (see Table 4-1 in specification)
+/// - command_status: Error code for responses, must be 0 for requests (Section 5.1.3)
+/// - sequence_number: Used to correlate requests with responses (Section 2.7.4)
+///
+/// ## SMPP v3.4 Reference
+/// Per Section 2.2.1, all PDUs start with this identical 16-octet header structure.
 #[tracing::instrument]
 fn parse_header(src: &mut Cursor<&[u8]>) -> Result<(CommandId, CommandStatus, u32), Error> {
-    let _command_length = get_u32(src)?;
-    let command_id = CommandId::try_from(get_u32(src)?)?;
-    let command_status = CommandStatus::try_from(get_u32(src)?)?;
-    let sequence_number = get_u32(src)?;
-    
+    let _command_length = get_u32(src)?; // Already validated in Frame::check()
+    let command_id = CommandId::try_from(get_u32(src)?)?; // PDU type per Table 4-1
+    let command_status = CommandStatus::try_from(get_u32(src)?)?; // Error code per Section 5.1.3
+    let sequence_number = get_u32(src)?; // Sequence number per Section 2.7.4
+
     Ok((command_id, command_status, sequence_number))
 }
 
-/// Common fields shared by all bind PDU types (BindTransmitter, BindReceiver, BindTransceiver)
+/// Common fields shared by all bind PDU types per SMPP v3.4 Section 4.1
+///
+/// All bind operations (bind_transmitter, bind_receiver, bind_transceiver) share
+/// the same body structure as defined in Table 4-1 of the specification.
 struct BindFields {
-    system_id: SystemId,
-    password: Option<Password>,
-    system_type: SystemType,
-    interface_version: InterfaceVersion,
-    addr_ton: TypeOfNumber,
-    addr_npi: NumericPlanIndicator,
-    address_range: AddressRange,
+    system_id: SystemId,        // System identifier (16 octets max per Table 4-1)
+    password: Option<Password>, // Authentication password (9 octets max per Table 4-1)
+    system_type: SystemType,    // System type identifier (13 octets max per Table 4-1)
+    interface_version: InterfaceVersion, // SMPP version (1 octet, should be 0x34 for v3.4)
+    addr_ton: TypeOfNumber,     // Type of Number for ESME address
+    addr_npi: NumericPlanIndicator, // Numbering Plan Indicator for ESME address
+    address_range: AddressRange, // ESME address range (41 octets max per Table 4-1)
 }
 
-/// Parse the common fields for bind PDUs (BindTransmitter, BindReceiver, BindTransceiver)
+/// Parse the common body fields for bind PDUs per SMPP v3.4 Section 4.1
+///
+/// Extracts the mandatory parameters present in all bind operations:
+/// bind_transmitter (Section 4.1.1), bind_receiver (Section 4.1.1),
+/// and bind_transceiver (Section 4.2.5).
 #[tracing::instrument]
 fn parse_bind_fields(src: &mut Cursor<&[u8]>) -> Result<BindFields, Error> {
     let system_id = get_cstring_field(src, 16, "system_id")?;
@@ -104,25 +168,32 @@ fn parse_bind_fields(src: &mut Cursor<&[u8]>) -> Result<BindFields, Error> {
     let address_range = get_cstring_field(src, 41, "address_range")?;
 
     Ok(BindFields {
-        system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
+        system_id: SystemId::from_parsed_string(system_id)
+            .map_err(|e| Error::Other(Box::new(e)))?,
         password: if password.is_empty() {
             None
         } else {
             Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
         },
-        system_type: SystemType::from_parsed_string(system_type).map_err(|e| Error::Other(Box::new(e)))?,
+        system_type: SystemType::from_parsed_string(system_type)
+            .map_err(|e| Error::Other(Box::new(e)))?,
         interface_version,
         addr_ton,
         addr_npi,
-        address_range: AddressRange::from_parsed_string(address_range).map_err(|e| Error::Other(Box::new(e)))?,
+        address_range: AddressRange::from_parsed_string(address_range)
+            .map_err(|e| Error::Other(Box::new(e)))?,
     })
 }
 
 /// Parse a BindTransmitter PDU
 #[tracing::instrument]
-fn parse_bind_transmitter(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+fn parse_bind_transmitter(
+    command_status: CommandStatus,
+    sequence_number: u32,
+    src: &mut Cursor<&[u8]>,
+) -> Result<Frame, Error> {
     let fields = parse_bind_fields(src)?;
-    
+
     let pdu = BindTransmitter {
         command_status,
         sequence_number,
@@ -134,15 +205,19 @@ fn parse_bind_transmitter(command_status: CommandStatus, sequence_number: u32, s
         addr_npi: fields.addr_npi,
         address_range: fields.address_range,
     };
-    
+
     Ok(Frame::BindTransmitter(pdu))
 }
 
 /// Parse a BindReceiver PDU
 #[tracing::instrument]
-fn parse_bind_receiver(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+fn parse_bind_receiver(
+    command_status: CommandStatus,
+    sequence_number: u32,
+    src: &mut Cursor<&[u8]>,
+) -> Result<Frame, Error> {
     let fields = parse_bind_fields(src)?;
-    
+
     let pdu = BindReceiver {
         command_status,
         sequence_number,
@@ -154,15 +229,19 @@ fn parse_bind_receiver(command_status: CommandStatus, sequence_number: u32, src:
         addr_npi: fields.addr_npi,
         address_range: fields.address_range,
     };
-    
+
     Ok(Frame::BindReceiver(pdu))
 }
 
 /// Parse a BindTransceiver PDU
 #[tracing::instrument]
-fn parse_bind_transceiver(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+fn parse_bind_transceiver(
+    command_status: CommandStatus,
+    sequence_number: u32,
+    src: &mut Cursor<&[u8]>,
+) -> Result<Frame, Error> {
     let fields = parse_bind_fields(src)?;
-    
+
     let pdu = BindTransceiver {
         command_status,
         sequence_number,
@@ -174,10 +253,9 @@ fn parse_bind_transceiver(command_status: CommandStatus, sequence_number: u32, s
         addr_npi: fields.addr_npi,
         address_range: fields.address_range,
     };
-    
+
     Ok(Frame::BindTransceiver(pdu))
 }
-
 
 /// TLV fields for SubmitSm PDU
 struct SubmitSmTlvs {
@@ -212,7 +290,10 @@ struct SubmitSmTlvs {
 
 /// Parse TLV parameters for SubmitSm PDU
 #[tracing::instrument]
-fn parse_submit_sm_tlvs(src: &mut Cursor<&[u8]>, short_message: &ShortMessage) -> Result<SubmitSmTlvs, Error> {
+fn parse_submit_sm_tlvs(
+    src: &mut Cursor<&[u8]>,
+    short_message: &ShortMessage,
+) -> Result<SubmitSmTlvs, Error> {
     let mut user_message_reference = None;
     let mut source_port = None;
     let mut source_addr_submit = None;
@@ -315,29 +396,54 @@ fn parse_submit_sm_tlvs(src: &mut Cursor<&[u8]>, short_message: &ShortMessage) -
     })
 }
 
-/// Parse a SubmitSm PDU  
+/// Parse a submit_sm PDU per SMPP v3.4 Section 4.4.1
+///
+/// The submit_sm operation is used by an ESME to submit a short message to the SMSC
+/// for onward transmission to a specified short message entity (SME).
+///
+/// ## PDU Structure (Section 4.4.1)
+/// Mandatory Parameters:
+/// - service_type, source_addr_ton, source_addr_npi, source_addr
+/// - dest_addr_ton, dest_addr_npi, destination_addr
+/// - esm_class, protocol_id, priority_flag
+/// - schedule_delivery_time, validity_period
+/// - registered_delivery, replace_if_present_flag
+/// - data_coding, sm_default_msg_id, sm_length, short_message
+///
+/// Optional Parameters (TLV format per Section 5.3):
+/// - Various TLV parameters for enhanced messaging features
 #[tracing::instrument]
-fn parse_submit_sm(command_status: CommandStatus, sequence_number: u32, src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
+fn parse_submit_sm(
+    command_status: CommandStatus,
+    sequence_number: u32,
+    src: &mut Cursor<&[u8]>,
+) -> Result<Frame, Error> {
     // Parse mandatory fields
     let service_type = ServiceType::from_parsed_string(get_cstring_field(src, 6, "service_type")?)
         .map_err(|e| Error::Other(format!("service_type field error: {e}").into()))?;
-    
+
     let source_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
     let source_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
     let source_addr = SourceAddr::from_parsed_string(get_cstring_field(src, 21, "source_addr")?)
         .map_err(|e| Error::Other(format!("source_addr field error: {e}").into()))?;
     let dest_addr_ton = TypeOfNumber::try_from(get_u8(src)?)?;
     let dest_addr_npi = NumericPlanIndicator::try_from(get_u8(src)?)?;
-    let destination_addr = DestinationAddr::from_parsed_string(get_cstring_field(src, 21, "destination_addr")?)
-        .map_err(|e| Error::Other(format!("destination_addr field error: {e}").into()))?;
-    
+    let destination_addr =
+        DestinationAddr::from_parsed_string(get_cstring_field(src, 21, "destination_addr")?)
+            .map_err(|e| Error::Other(format!("destination_addr field error: {e}").into()))?;
+
     let esm_class = get_u8(src)?;
     let protocol_id = get_u8(src)?;
     let priority_flag = PriorityFlag::try_from(get_u8(src)?)?;
-    let schedule_delivery_time = ScheduleDeliveryTime::from_parsed_string(get_cstring_field(src, 17, "schedule_delivery_time")?)
-        .map_err(|e| Error::Other(format!("schedule_delivery_time field error: {e}").into()))?;
-    let validity_period = ValidityPeriod::from_parsed_string(get_cstring_field(src, 17, "validity_period")?)
-        .map_err(|e| Error::Other(format!("validity_period field error: {e}").into()))?;
+    let schedule_delivery_time = ScheduleDeliveryTime::from_parsed_string(get_cstring_field(
+        src,
+        17,
+        "schedule_delivery_time",
+    )?)
+    .map_err(|e| Error::Other(format!("schedule_delivery_time field error: {e}").into()))?;
+    let validity_period =
+        ValidityPeriod::from_parsed_string(get_cstring_field(src, 17, "validity_period")?)
+            .map_err(|e| Error::Other(format!("validity_period field error: {e}").into()))?;
     let registered_delivery = get_u8(src)?;
     let replace_if_present_flag = get_u8(src)?;
     let data_coding = get_u8(src)?;
@@ -359,9 +465,8 @@ fn parse_submit_sm(command_status: CommandStatus, sequence_number: u32, src: &mu
     // Read short message based on sm_length
     let short_message = if sm_length > 0 {
         let message_bytes = src.copy_to_bytes(sm_length as usize);
-        let message_string = String::from_utf8(message_bytes.into()).map_err(|e| {
-            Error::Other(format!("Invalid UTF-8 in short_message: {e}").into())
-        })?;
+        let message_string = String::from_utf8(message_bytes.into())
+            .map_err(|e| Error::Other(format!("Invalid UTF-8 in short_message: {e}").into()))?;
         ShortMessage::from_parsed_string(message_string)
             .map_err(|e| Error::Other(format!("short_message field error: {e}").into()))?
     } else {
@@ -433,7 +538,9 @@ impl Frame {
 
         // Based on the command_id, parse the body
         let command = match command_id {
-            CommandId::BindTransmitter => parse_bind_transmitter(command_status, sequence_number, src)?,
+            CommandId::BindTransmitter => {
+                parse_bind_transmitter(command_status, sequence_number, src)?
+            }
             CommandId::BindTransmitterResp => {
                 let system_id = get_cstring_field(src, 16, "system_id")?;
 
@@ -445,7 +552,8 @@ impl Frame {
                 let pdu = BindTransmitterResponse {
                     command_status,
                     sequence_number,
-                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
+                    system_id: SystemId::from_parsed_string(system_id)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     sc_interface_version,
                 };
 
@@ -463,7 +571,8 @@ impl Frame {
                 let pdu = BindReceiverResponse {
                     command_status,
                     sequence_number,
-                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
+                    system_id: SystemId::from_parsed_string(system_id)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     sc_interface_version,
                 };
 
@@ -478,8 +587,9 @@ impl Frame {
                 Frame::EnquireLinkResponse(pdu)
             }
             CommandId::SubmitSmResp => {
-                let message_id = MessageId::from_parsed_string(get_cstring_field(src, 65, "message_id")?)
-                    .map_err(|e| Error::Other(format!("message_id field error: {e}").into()))?;
+                let message_id =
+                    MessageId::from_parsed_string(get_cstring_field(src, 65, "message_id")?)
+                        .map_err(|e| Error::Other(format!("message_id field error: {e}").into()))?;
 
                 let pdu = SubmitSmResponse {
                     command_status,
@@ -504,7 +614,9 @@ impl Frame {
                 };
                 Frame::UnbindResponse(pdu)
             }
-            CommandId::BindTransceiver => parse_bind_transceiver(command_status, sequence_number, src)?,
+            CommandId::BindTransceiver => {
+                parse_bind_transceiver(command_status, sequence_number, src)?
+            }
             CommandId::BindTransceiverResp => {
                 let system_id = get_cstring_field(src, 16, "system_id")?;
 
@@ -516,7 +628,8 @@ impl Frame {
                 let pdu = BindTransceiverResponse {
                     command_status,
                     sequence_number,
-                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
+                    system_id: SystemId::from_parsed_string(system_id)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     sc_interface_version,
                 };
 
@@ -604,7 +717,9 @@ impl Frame {
                         tags::NETWORK_ERROR_CODE => network_error_code = Some(tlv),
                         tags::MESSAGE_PAYLOAD => message_payload = Some(tlv),
                         tags::DELIVERY_FAILURE_REASON => delivery_failure_reason = Some(tlv),
-                        tags::ADDITIONAL_STATUS_INFO_TEXT => additional_status_info_text = Some(tlv),
+                        tags::ADDITIONAL_STATUS_INFO_TEXT => {
+                            additional_status_info_text = Some(tlv)
+                        }
                         tags::DPF_RESULT => dpf_result = Some(tlv),
                         tags::SET_DPF => set_dpf = Some(tlv),
                         tags::MS_AVAILABILITY_STATUS => ms_availability_status = Some(tlv),
@@ -620,24 +735,32 @@ impl Frame {
                 let pdu = DeliverSm {
                     command_status,
                     sequence_number,
-                    service_type: ServiceType::from_parsed_string(service_type).map_err(|e| Error::Other(Box::new(e)))?,
+                    service_type: ServiceType::from_parsed_string(service_type)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     source_addr_ton,
                     source_addr_npi,
-                    source_addr: SourceAddr::from_parsed_string(source_addr).map_err(|e| Error::Other(Box::new(e)))?,
+                    source_addr: SourceAddr::from_parsed_string(source_addr)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     dest_addr_ton,
                     dest_addr_npi,
-                    destination_addr: DestinationAddr::from_parsed_string(destination_addr).map_err(|e| Error::Other(Box::new(e)))?,
+                    destination_addr: DestinationAddr::from_parsed_string(destination_addr)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     esm_class: EsmClass::from(esm_class),
                     protocol_id,
                     priority_flag,
-                    schedule_delivery_time: ScheduleDeliveryTime::from_parsed_string(schedule_delivery_time).map_err(|e| Error::Other(Box::new(e)))?,
-                    validity_period: ValidityPeriod::from_parsed_string(validity_period).map_err(|e| Error::Other(Box::new(e)))?,
+                    schedule_delivery_time: ScheduleDeliveryTime::from_parsed_string(
+                        schedule_delivery_time,
+                    )
+                    .map_err(|e| Error::Other(Box::new(e)))?,
+                    validity_period: ValidityPeriod::from_parsed_string(validity_period)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     registered_delivery,
                     replace_if_present_flag,
                     data_coding: DataCoding::from(data_coding),
                     sm_default_msg_id,
                     sm_length,
-                    short_message: ShortMessage::from_parsed_string(short_message).map_err(|e| Error::Other(Box::new(e)))?,
+                    short_message: ShortMessage::from_parsed_string(short_message)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     user_message_reference,
                     source_port,
                     destination_port,
@@ -670,7 +793,8 @@ impl Frame {
                 let pdu = DeliverSmResponse {
                     command_status,
                     sequence_number,
-                    message_id: MessageId::from_parsed_string(message_id).map_err(|e| Error::Other(Box::new(e)))?,
+                    message_id: MessageId::from_parsed_string(message_id)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                 };
 
                 Frame::DeliverSmResponse(pdu)
@@ -681,11 +805,15 @@ impl Frame {
 
                 let pdu = Outbind {
                     sequence_number,
-                    system_id: SystemId::from_parsed_string(system_id).map_err(|e| Error::Other(Box::new(e)))?,
+                    system_id: SystemId::from_parsed_string(system_id)
+                        .map_err(|e| Error::Other(Box::new(e)))?,
                     password: if password.is_empty() {
                         None
                     } else {
-                        Some(Password::from_parsed_string(password).map_err(|e| Error::Other(Box::new(e)))?)
+                        Some(
+                            Password::from_parsed_string(password)
+                                .map_err(|e| Error::Other(Box::new(e)))?,
+                        )
                     },
                 };
 
@@ -718,7 +846,6 @@ impl Frame {
     //     format!("unexpected frame: {}", self).into()
     // }
 }
-
 
 /// Peek a u8 from the buffer
 #[cfg(test)]
@@ -912,7 +1039,11 @@ impl fmt::Display for Frame {
                 write!(fmt, "Outbind {:?}", msg.sequence_number)
             }
             Frame::GenericNack(msg) => {
-                write!(fmt, "Generic NACK {:?} (seq: {})", msg.command_status, msg.sequence_number)
+                write!(
+                    fmt,
+                    "Generic NACK {:?} (seq: {})",
+                    msg.command_status, msg.sequence_number
+                )
             }
         }
     }
@@ -1192,7 +1323,10 @@ mod tests {
         if let Frame::BindTransmitter(bt) = frame {
             assert_eq!(bt.command_status, CommandStatus::Ok);
             assert_eq!(&bt.system_id, "SMPP3TEST");
-            assert_eq!(bt.password.as_ref().map(|p| p.as_str().unwrap()), Some("secret08"));
+            assert_eq!(
+                bt.password.as_ref().map(|p| p.as_str().unwrap()),
+                Some("secret08")
+            );
             assert_eq!(&bt.system_type, "SUBMIT1");
             assert_eq!(bt.interface_version, InterfaceVersion::SmppV34);
             assert_eq!(bt.addr_ton, TypeOfNumber::International);
@@ -1514,7 +1648,13 @@ mod tests {
 
             // Verify no null bytes in string content
             assert!(!bt.system_id.as_str().unwrap().contains('\0'));
-            assert!(!bt.password.as_ref().unwrap().as_str().unwrap().contains('\0'));
+            assert!(!bt
+                .password
+                .as_ref()
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains('\0'));
             assert!(!bt.system_type.as_str().unwrap().contains('\0'));
             assert!(!bt.address_range.as_str().unwrap().contains('\0'));
         } else {
@@ -1565,7 +1705,10 @@ mod tests {
             assert_eq!(bt.system_id, SystemId::from(system_id_max.as_str()));
             assert_eq!(bt.password, Some(Password::from(password_max.as_str())));
             assert_eq!(bt.system_type, SystemType::from(system_type_max.as_str()));
-            assert_eq!(bt.address_range, AddressRange::from(address_range_max.as_str()));
+            assert_eq!(
+                bt.address_range,
+                AddressRange::from(address_range_max.as_str())
+            );
         }
     }
 
@@ -1791,7 +1934,8 @@ mod tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
