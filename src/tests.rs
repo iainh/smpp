@@ -82,7 +82,8 @@ mod integration_tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
@@ -148,7 +149,8 @@ mod integration_tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,
@@ -158,7 +160,7 @@ mod integration_tests {
             replace_if_present_flag: 0,
             data_coding: DataCoding::default(),
             sm_default_msg_id: 0,
-            sm_length: 5,                             // Says 5 bytes
+            sm_length: 5,                                     // Says 5 bytes
             short_message: ShortMessage::from("Hello World"), // But has 11 bytes
             // All optional parameters set to None
             user_message_reference: None,
@@ -320,7 +322,8 @@ mod integration_tests {
             source_addr: SourceAddr::new("1234567890", TypeOfNumber::International).unwrap(),
             dest_addr_ton: TypeOfNumber::International,
             dest_addr_npi: NumericPlanIndicator::Isdn,
-            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International).unwrap(),
+            destination_addr: DestinationAddr::new("0987654321", TypeOfNumber::International)
+                .unwrap(),
             esm_class: EsmClass::default(),
             protocol_id: 0,
             priority_flag: PriorityFlag::Level0,

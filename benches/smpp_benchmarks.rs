@@ -1,10 +1,10 @@
 // ABOUTME: Comprehensive benchmark suite for SMPP library performance testing
 // ABOUTME: Measures frame parsing, serialization, and memory allocation patterns
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use bytes::BytesMut;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use smpp::datatypes::*;
 use smpp::frame::Frame;
-use bytes::BytesMut;
 use std::io::Cursor;
 use std::time::Duration;
 
@@ -75,9 +75,7 @@ fn create_sample_bind_transmitter() -> BindTransmitter {
 }
 
 fn create_sample_enquire_link() -> EnquireLink {
-    EnquireLink {
-        sequence_number: 1,
-    }
+    EnquireLink { sequence_number: 1 }
 }
 
 fn create_sample_deliver_sm() -> DeliverSm {
@@ -135,120 +133,110 @@ fn create_frame_bytes(pdu: impl ToBytes) -> Vec<u8> {
 fn bench_frame_check(c: &mut Criterion) {
     let submit_sm = create_sample_submit_sm();
     let frame_bytes = create_frame_bytes(submit_sm);
-    
+
     let mut group = c.benchmark_group("frame_check");
     group.measurement_time(Duration::from_secs(10));
-    
+
     group.bench_function("submit_sm", |b| {
         b.iter(|| {
             let mut cursor = Cursor::new(black_box(frame_bytes.as_slice()));
             Frame::check(&mut cursor)
         })
     });
-    
+
     let enquire_link = create_sample_enquire_link();
     let enquire_frame_bytes = create_frame_bytes(enquire_link);
-    
+
     group.bench_function("enquire_link", |b| {
         b.iter(|| {
             let mut cursor = Cursor::new(black_box(enquire_frame_bytes.as_slice()));
             Frame::check(&mut cursor)
         })
     });
-    
+
     group.finish();
 }
 
 fn bench_frame_parse(c: &mut Criterion) {
     let mut group = c.benchmark_group("frame_parse");
     group.measurement_time(Duration::from_secs(10));
-    
+
     // SubmitSm parsing (complex PDU with TLVs)
     let submit_sm = create_sample_submit_sm();
     let submit_frame_bytes = create_frame_bytes(submit_sm);
-    
+
     group.bench_function("submit_sm", |b| {
         b.iter(|| {
             let mut cursor = Cursor::new(black_box(submit_frame_bytes.as_slice()));
             Frame::parse(&mut cursor).unwrap()
         })
     });
-    
+
     // DeliverSm parsing (complex PDU with TLVs)
     let deliver_sm = create_sample_deliver_sm();
     let deliver_frame_bytes = create_frame_bytes(deliver_sm);
-    
+
     group.bench_function("deliver_sm", |b| {
         b.iter(|| {
             let mut cursor = Cursor::new(black_box(deliver_frame_bytes.as_slice()));
             Frame::parse(&mut cursor).unwrap()
         })
     });
-    
+
     // BindTransmitter parsing (medium complexity)
     let bind_tx = create_sample_bind_transmitter();
     let bind_frame_bytes = create_frame_bytes(bind_tx);
-    
+
     group.bench_function("bind_transmitter", |b| {
         b.iter(|| {
             let mut cursor = Cursor::new(black_box(bind_frame_bytes.as_slice()));
             Frame::parse(&mut cursor).unwrap()
         })
     });
-    
+
     // EnquireLink parsing (simple PDU)
     let enquire_link = create_sample_enquire_link();
     let enquire_frame_bytes = create_frame_bytes(enquire_link);
-    
+
     group.bench_function("enquire_link", |b| {
         b.iter(|| {
             let mut cursor = Cursor::new(black_box(enquire_frame_bytes.as_slice()));
             Frame::parse(&mut cursor).unwrap()
         })
     });
-    
+
     group.finish();
 }
 
 fn bench_serialization(c: &mut Criterion) {
     let mut group = c.benchmark_group("serialization");
     group.measurement_time(Duration::from_secs(10));
-    
+
     let submit_sm = create_sample_submit_sm();
-    group.bench_function("submit_sm", |b| {
-        b.iter(|| {
-            black_box(&submit_sm).to_bytes()
-        })
-    });
-    
+    group.bench_function("submit_sm", |b| b.iter(|| black_box(&submit_sm).to_bytes()));
+
     let deliver_sm = create_sample_deliver_sm();
     group.bench_function("deliver_sm", |b| {
-        b.iter(|| {
-            black_box(&deliver_sm).to_bytes()
-        })
+        b.iter(|| black_box(&deliver_sm).to_bytes())
     });
-    
+
     let bind_tx = create_sample_bind_transmitter();
     group.bench_function("bind_transmitter", |b| {
-        b.iter(|| {
-            black_box(&bind_tx).to_bytes()
-        })
+        b.iter(|| black_box(&bind_tx).to_bytes())
     });
-    
+
     let enquire_link = create_sample_enquire_link();
     group.bench_function("enquire_link", |b| {
-        b.iter(|| {
-            black_box(&enquire_link).to_bytes()
-        })
+        b.iter(|| black_box(&enquire_link).to_bytes())
     });
-    
+
     group.finish();
 }
 
 fn bench_roundtrip(c: &mut Criterion) {
     let mut group = c.benchmark_group("roundtrip");
     group.measurement_time(Duration::from_secs(10));
-    
+
     group.bench_function("submit_sm", |b| {
         b.iter(|| {
             let submit_sm = create_sample_submit_sm();
@@ -257,7 +245,7 @@ fn bench_roundtrip(c: &mut Criterion) {
             Frame::parse(&mut cursor).unwrap()
         })
     });
-    
+
     group.bench_function("enquire_link", |b| {
         b.iter(|| {
             let enquire_link = create_sample_enquire_link();
@@ -266,24 +254,24 @@ fn bench_roundtrip(c: &mut Criterion) {
             Frame::parse(&mut cursor).unwrap()
         })
     });
-    
+
     group.finish();
 }
 
 fn bench_message_sizes(c: &mut Criterion) {
     let mut group = c.benchmark_group("message_sizes");
     group.measurement_time(Duration::from_secs(10));
-    
+
     let message_sizes = [10, 50, 100, 160, 254]; // Common SMS message sizes
-    
+
     for &size in &message_sizes {
         let message = "A".repeat(size);
         let mut submit_sm = create_sample_submit_sm();
         submit_sm.short_message = ShortMessage::from(message.as_str());
         submit_sm.sm_length = size as u8;
-        
+
         let frame_bytes = create_frame_bytes(submit_sm);
-        
+
         group.bench_with_input(
             BenchmarkId::new("submit_sm_parse", size),
             &frame_bytes,
@@ -295,14 +283,14 @@ fn bench_message_sizes(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_memory_allocation(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_allocation");
     group.measurement_time(Duration::from_secs(10));
-    
+
     // Measure allocation patterns for different operations
     group.bench_function("bytesmut_allocation", |b| {
         b.iter(|| {
@@ -311,19 +299,15 @@ fn bench_memory_allocation(c: &mut Criterion) {
             buf
         })
     });
-    
+
     group.bench_function("string_allocation", |b| {
-        b.iter(|| {
-            black_box("test_system".to_string())
-        })
+        b.iter(|| black_box("test_system".to_string()))
     });
-    
+
     group.bench_function("vec_allocation", |b| {
-        b.iter(|| {
-            black_box("Hello World".as_bytes().to_vec())
-        })
+        b.iter(|| black_box("Hello World".as_bytes().to_vec()))
     });
-    
+
     group.finish();
 }
 
