@@ -2,6 +2,7 @@
 // ABOUTME: Defines extensible interfaces for different SMPP client types and connection management
 
 use crate::client::error::SmppResult;
+use crate::client::keepalive::{KeepAliveConfig, KeepAliveStatus};
 use crate::client::types::{BindCredentials, SmsMessage};
 use crate::datatypes::SubmitSm;
 use std::future::Future;
@@ -57,6 +58,95 @@ pub trait SmppClient: SmppConnection {
     /// Sends a keep-alive PDU to verify the connection is still active.
     /// Should be called periodically during long sessions.
     fn enquire_link(&mut self) -> impl Future<Output = SmppResult<()>> + Send;
+
+    /// Start automatic keep-alive with specified configuration
+    ///
+    /// Initializes the keep-alive system to automatically monitor connection
+    /// health using periodic enquire_link PDUs. The client will track timing
+    /// and failures, but the application must call `maintain_keep_alive()`
+    /// periodically to actually send the PDUs.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Keep-alive configuration including interval and failure thresholds
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Keep-alive started successfully
+    /// * `Err(SmppError::InvalidState)` - Client not connected or already started
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use smpp::client::{DefaultClient, KeepAliveConfig, SmppClient, SmppConnection};
+    /// # use std::time::Duration;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = DefaultClient::connect("localhost:2775").await?;
+    /// 
+    /// let config = KeepAliveConfig::new(Duration::from_secs(30))
+    ///     .with_max_failures(3);
+    /// client.start_keep_alive(config).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn start_keep_alive(&mut self, config: KeepAliveConfig) -> impl Future<Output = SmppResult<()>> + Send;
+
+    /// Stop automatic keep-alive
+    ///
+    /// Disables the keep-alive system and clears any associated state.
+    /// No more automatic enquire_link timing will occur, but manual
+    /// enquire_link calls will still function.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Keep-alive stopped successfully
+    /// * `Err(SmppError)` - Error occurred during shutdown
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use smpp::client::{DefaultClient, SmppClient, SmppConnection};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut client = DefaultClient::connect("localhost:2775").await?;
+    /// client.stop_keep_alive().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn stop_keep_alive(&mut self) -> impl Future<Output = SmppResult<()>> + Send;
+
+    /// Get current keep-alive status
+    ///
+    /// Returns a snapshot of the keep-alive state including whether it's
+    /// running, failure counts, and success statistics. Use this to monitor
+    /// connection health and troubleshoot issues.
+    ///
+    /// # Returns
+    ///
+    /// A `KeepAliveStatus` struct containing current state and statistics.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use smpp::client::{DefaultClient, SmppClient, SmppConnection};
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let client = DefaultClient::connect("localhost:2775").await?;
+    /// let status = client.keep_alive_status();
+    /// 
+    /// if status.running {
+    ///     println!("Keep-alive active: {}/{} success rate", 
+    ///              status.total_pongs, status.total_pings);
+    ///     
+    ///     if status.consecutive_failures > 0 {
+    ///         println!("Warning: {} consecutive failures", 
+    ///                  status.consecutive_failures);
+    ///     }
+    /// } else {
+    ///     println!("Keep-alive is disabled");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn keep_alive_status(&self) -> KeepAliveStatus;
 
     /// Get next sequence number for PDU
     ///

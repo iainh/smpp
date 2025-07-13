@@ -3,6 +3,7 @@
 
 use crate::Frame;
 use crate::client::error::{SmppError, SmppResult};
+use crate::client::keepalive::{KeepAliveConfig, KeepAliveManager, KeepAliveStatus};
 use crate::client::traits::{SmppClient, SmppConnection, SmppTransmitter};
 use crate::client::types::{BindCredentials, BindType, SmsMessage};
 use crate::connection::Connection;
@@ -21,6 +22,8 @@ pub struct DefaultClient {
     sequence_number: u32,
     /// Current connection state
     connected: bool,
+    /// Keep-alive manager for automatic enquire_link handling
+    keep_alive: Option<KeepAliveManager>,
 }
 
 impl SmppConnection for DefaultClient {
@@ -32,10 +35,17 @@ impl SmppConnection for DefaultClient {
             connection,
             sequence_number: 0,
             connected: true,
+            keep_alive: None,
         })
     }
 
     async fn disconnect(&mut self) -> SmppResult<()> {
+        // Disable keep-alive if running
+        if let Some(keep_alive) = &mut self.keep_alive {
+            keep_alive.disable();
+        }
+        self.keep_alive = None;
+        
         // Note: Connection doesn't expose close method, so we just mark as disconnected
         // The underlying TcpStream will be dropped when Connection is dropped
         self.connected = false;
@@ -174,6 +184,11 @@ impl SmppClient for DefaultClient {
             return Err(SmppError::InvalidState("Not connected".to_string()));
         }
 
+        // Record that we're sending a ping
+        if let Some(keep_alive) = &mut self.keep_alive {
+            keep_alive.on_ping_sent();
+        }
+
         self.sequence_number += 1;
 
         let enquire_link = EnquireLink {
@@ -190,20 +205,171 @@ impl SmppClient for DefaultClient {
         match self.connection.read_frame().await {
             Ok(Some(Frame::EnquireLinkResponse(_response))) => {
                 // EnquireLinkResponse doesn't have command_status field - it's always OK
+                
+                // Record successful ping
+                if let Some(keep_alive) = &mut self.keep_alive {
+                    keep_alive.on_ping_success();
+                }
+                
                 Ok(())
             }
-            Ok(Some(other)) => Err(SmppError::UnexpectedPdu {
-                expected: "EnquireLinkResponse".to_string(),
-                actual: format!("{other:?}"),
-            }),
-            Ok(None) => Err(SmppError::ConnectionClosed),
-            Err(e) => Err(SmppError::from(e)),
+            Ok(Some(other)) => {
+                // Record failed ping
+                if let Some(keep_alive) = &mut self.keep_alive {
+                    keep_alive.on_ping_failure();
+                }
+                Err(SmppError::UnexpectedPdu {
+                    expected: "EnquireLinkResponse".to_string(),
+                    actual: format!("{other:?}"),
+                })
+            }
+            Ok(None) => {
+                // Record failed ping
+                if let Some(keep_alive) = &mut self.keep_alive {
+                    keep_alive.on_ping_failure();
+                }
+                Err(SmppError::ConnectionClosed)
+            }
+            Err(e) => {
+                // Record failed ping
+                if let Some(keep_alive) = &mut self.keep_alive {
+                    keep_alive.on_ping_failure();
+                }
+                Err(SmppError::from(e))
+            }
         }
+    }
+
+    async fn start_keep_alive(&mut self, config: KeepAliveConfig) -> SmppResult<()> {
+        if !self.connected {
+            return Err(SmppError::InvalidState("Not connected".to_string()));
+        }
+
+        // Create and enable the keep-alive manager
+        let manager = KeepAliveManager::new(config);
+        self.keep_alive = Some(manager);
+        
+        Ok(())
+    }
+
+    async fn stop_keep_alive(&mut self) -> SmppResult<()> {
+        if let Some(keep_alive) = &mut self.keep_alive {
+            keep_alive.disable();
+        }
+        self.keep_alive = None;
+        Ok(())
+    }
+
+    fn keep_alive_status(&self) -> KeepAliveStatus {
+        self.keep_alive
+            .as_ref()
+            .map(|ka| ka.status())
+            .unwrap_or(KeepAliveStatus {
+                running: false,
+                consecutive_failures: 0,
+                total_pings: 0,
+                total_pongs: 0,
+            })
     }
 
     fn next_sequence_number(&mut self) -> u32 {
         self.sequence_number += 1;
         self.sequence_number
+    }
+}
+
+impl DefaultClient {
+    /// Check if a keep-alive ping should be sent and send it if needed
+    ///
+    /// This is a convenience method that integrates the keep-alive manager
+    /// with the enquire_link functionality. Call this periodically in
+    /// long-running applications to automatically maintain connection health.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(true)` - An enquire_link was sent successfully
+    /// * `Ok(false)` - No ping was needed (too soon, disabled, or max failures reached)
+    /// * `Err(SmppError)` - The enquire_link failed
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use smpp::client::{DefaultClient, KeepAliveConfig, SmppClient, SmppConnection};
+    /// # use std::time::Duration;
+    /// # use tokio::time::sleep;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = DefaultClient::connect("localhost:2775").await?;
+    /// client.start_keep_alive(KeepAliveConfig::default()).await?;
+    /// 
+    /// loop {
+    ///     // Your application logic here
+    ///     
+    ///     // Maintain keep-alive (typically called every few seconds)
+    ///     match client.maintain_keep_alive().await {
+    ///         Ok(true) => println!("Keep-alive ping sent"),
+    ///         Ok(false) => {}, // No ping needed
+    ///         Err(e) => {
+    ///             eprintln!("Keep-alive failed: {}", e);
+    ///             break; // Consider reconnecting
+    ///         }
+    ///     }
+    ///     
+    ///     sleep(Duration::from_secs(5)).await;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn maintain_keep_alive(&mut self) -> SmppResult<bool> {
+        if let Some(keep_alive) = &self.keep_alive {
+            if keep_alive.should_ping() {
+                self.enquire_link().await?;
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    
+    /// Check if the connection has failed due to keep-alive failures
+    ///
+    /// Returns true if the configured maximum number of consecutive
+    /// keep-alive failures has been reached. When this occurs, the
+    /// connection should typically be considered dead and re-established.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Connection has failed based on keep-alive metrics
+    /// * `false` - Connection appears healthy or keep-alive is disabled
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use smpp::client::{DefaultClient, KeepAliveConfig, SmppClient, SmppConnection};
+    /// # use std::time::Duration;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = DefaultClient::connect("localhost:2775").await?;
+    /// 
+    /// let config = KeepAliveConfig::default().with_max_failures(3);
+    /// client.start_keep_alive(config).await?;
+    /// 
+    /// loop {
+    ///     client.maintain_keep_alive().await.ok(); // Ignore errors for this example
+    ///     
+    ///     if client.is_keep_alive_failed() {
+    ///         println!("Connection failed, attempting reconnect...");
+    ///         // Reconnection logic here
+    ///         break;
+    ///     }
+    ///     
+    ///     // Continue with application logic
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn is_keep_alive_failed(&self) -> bool {
+        self.keep_alive
+            .as_ref()
+            .map(|ka| ka.is_connection_failed())
+            .unwrap_or(false)
     }
 }
 

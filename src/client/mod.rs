@@ -9,6 +9,7 @@
 //! * **Layered design** - Separate traits for connection, client, and specific operations
 //! * **Type safety** - Different traits for transmitter/receiver/transceiver capabilities
 //! * **Builder patterns** - Easy client creation with sensible defaults
+//! * **Keep-alive support** - Automatic connection health monitoring
 //! * **Extensible** - Implement traits for custom client behavior
 //!
 //! ## Quick Start
@@ -31,6 +32,42 @@
 //! // Clean shutdown
 //! client.unbind().await?;
 //! client.disconnect().await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Keep-Alive for Long-Running Applications
+//!
+//! For applications that maintain SMPP connections for extended periods,
+//! use the keep-alive functionality to automatically monitor connection health:
+//!
+//! ```rust,no_run
+//! use smpp::client::{DefaultClient, KeepAliveConfig, SmppClient, SmppConnection};
+//! use std::time::Duration;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create and connect client
+//! let mut client = DefaultClient::connect("localhost:2775").await?;
+//!
+//! // Configure keep-alive (30s interval, 3 max failures)
+//! let config = KeepAliveConfig::new(Duration::from_secs(30))
+//!     .with_max_failures(3);
+//! client.start_keep_alive(config).await?;
+//!
+//! loop {
+//!     // Your application logic here
+//!     
+//!     // Maintain connection health
+//!     client.maintain_keep_alive().await?;
+//!     
+//!     // Check for connection failure
+//!     if client.is_keep_alive_failed() {
+//!         println!("Connection failed, need to reconnect");
+//!         break;
+//!     }
+//!     
+//!     tokio::time::sleep(Duration::from_secs(5)).await;
+//! }
 //! # Ok(())
 //! # }
 //! ```
@@ -66,6 +103,7 @@
 pub mod builder;
 pub mod default;
 pub mod error;
+pub mod keepalive;
 pub mod traits;
 pub mod types;
 
@@ -73,6 +111,7 @@ pub mod types;
 pub use builder::{ClientBuilder, ClientOptions};
 pub use default::DefaultClient;
 pub use error::{SmppError, SmppResult};
+pub use keepalive::{KeepAliveConfig, KeepAliveManager, KeepAliveStatus};
 pub use traits::{SmppClient, SmppConnection, SmppReceiver, SmppTransceiver, SmppTransmitter};
 pub use types::{BindCredentials, BindType, SmsMessage, SmsMessageBuilder, SmsOptions};
 
