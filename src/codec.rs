@@ -263,11 +263,6 @@ pub fn peek_u32(buf: &mut Cursor<&[u8]>) -> Result<u32, CodecError> {
 }
 
 /// Utility functions for encoding common SMPP field types
-
-/// Encode a string as a null-terminated C string with fixed width
-///
-/// This function handles the SMPP C-Octet String format where strings
-/// are null-terminated and padded to a fixed field width.
 pub fn encode_cstring(buf: &mut BytesMut, value: &str, max_len: usize) {
     let bytes = value.as_bytes();
     let actual_len = bytes.len().min(max_len - 1); // Reserve space for null terminator
@@ -336,11 +331,10 @@ pub enum Frame {
 }
 
 /// Registry of PDU decoders for extensible parsing
+type DecoderFn = Box<dyn Fn(PduHeader, &mut Cursor<&[u8]>) -> Result<Frame, CodecError> + Send + Sync>;
+
 pub struct PduRegistry {
-    decoders: HashMap<
-        CommandId,
-        Box<dyn Fn(PduHeader, &mut Cursor<&[u8]>) -> Result<Frame, CodecError> + Send + Sync>,
-    >,
+    decoders: HashMap<CommandId, DecoderFn>,
 }
 
 impl PduRegistry {

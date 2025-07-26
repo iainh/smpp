@@ -1306,12 +1306,7 @@ impl Decodable for SubmitSmResponse {
 
         // message_id (null-terminated string, max 64 chars + null)
         let message_id_str = Self::read_c_string(buf, 65, "message_id")?;
-        let message_id = MessageId::try_from(message_id_str.as_str()).map_err(|e| {
-            CodecError::FieldValidation {
-                field: "message_id",
-                reason: e.to_string(),
-            }
-        })?;
+        let message_id = MessageId::from(message_id_str.as_str());
 
         Ok(Self {
             command_status: header.command_status,
