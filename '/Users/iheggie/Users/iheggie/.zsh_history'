@@ -30,3 +30,4 @@
 : 1753547864:0;claude
 : 1753551275:0;nix-shell -p gemini-cli
 : 1753551407:0;cargo check
+: 1753551558:0;cargo clippy

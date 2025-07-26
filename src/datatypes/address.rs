@@ -420,9 +420,9 @@ mod tests {
     #[test]
     fn test_address_display() {
         let phone = PhoneNumber::<15>::national("1234567890").unwrap();
-        assert_eq!(format!("{}", phone), "1234567890");
+        assert_eq!(format!("{phone}"), "1234567890");
 
         let alpha = AlphanumericAddress::<15>::new("SMS INFO").unwrap();
-        assert_eq!(format!("{}", alpha), "SMS INFO");
+        assert_eq!(format!("{alpha}"), "SMS INFO");
     }
 }

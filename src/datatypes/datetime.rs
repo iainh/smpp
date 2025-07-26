@@ -605,10 +605,10 @@ mod tests {
     #[test]
     fn test_smpp_datetime_display() {
         let dt = SmppDateTime::new("240712120000000+").unwrap();
-        assert_eq!(format!("{}", dt), "240712120000000+");
+        assert_eq!(format!("{dt}"), "240712120000000+");
 
         let immediate = SmppDateTime::immediate();
-        assert_eq!(format!("{}", immediate), "immediate");
+        assert_eq!(format!("{immediate}"), "immediate");
     }
 
     #[test]

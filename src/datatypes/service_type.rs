@@ -367,13 +367,13 @@ mod tests {
     #[test]
     fn test_service_type_display() {
         let cmt = ServiceType::Cmt;
-        assert_eq!(format!("{}", cmt), "CMT");
+        assert_eq!(format!("{cmt}"), "CMT");
 
         let default = ServiceType::Default;
-        assert_eq!(format!("{}", default), "");
+        assert_eq!(format!("{default}"), "");
 
         let custom = ServiceType::custom("ABC").unwrap();
-        assert_eq!(format!("{}", custom), "ABC");
+        assert_eq!(format!("{custom}"), "ABC");
     }
 
     #[test]
@@ -405,7 +405,7 @@ mod tests {
 
         for (input, expected) in variants {
             let st = ServiceType::new(input).unwrap();
-            assert_eq!(st, expected, "Failed for input: {}", input);
+            assert_eq!(st, expected, "Failed for input: {input}");
         }
     }
 

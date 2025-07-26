@@ -540,7 +540,7 @@ mod tests {
     fn test_esm_class_display() {
         let esm = EsmClass::store_and_forward(StoreAndForwardType::DeliveryAck).with_udhi();
 
-        let display_str = format!("{}", esm);
+        let display_str = format!("{esm}");
         assert!(display_str.contains("StoreAndForward"));
         assert!(display_str.contains("DeliveryAck"));
     }

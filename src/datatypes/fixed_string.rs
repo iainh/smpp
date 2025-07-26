@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn test_fixed_string_display() {
         let system_id = "test".parse::<SystemId>().unwrap();
-        assert_eq!(format!("{}", system_id), "test");
+        assert_eq!(format!("{system_id}"), "test");
     }
 
     #[test]

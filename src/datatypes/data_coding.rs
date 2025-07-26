@@ -480,7 +480,7 @@ mod tests {
 
         let flash_gsm = DataCoding::Gsm7BitWithClass(MessageClass::Flash);
         assert_eq!(
-            format!("{}", flash_gsm),
+            format!("{flash_gsm}"),
             "GSM 7-bit Default (Flash SMS (immediate display))"
         );
     }

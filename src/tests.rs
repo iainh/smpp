@@ -389,7 +389,7 @@ mod integration_tests {
         // The UTF-8 bytes should be present in the output
         assert!(
             bytes
-                .windows("SMPP测试".as_bytes().len())
+                .windows("SMPP测试".len())
                 .any(|window| window == "SMPP测试".as_bytes())
         );
     }

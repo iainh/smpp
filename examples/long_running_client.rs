@@ -218,7 +218,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             } => {
                 if let (Some(to), Some(from)) = (&cli_args.to, &cli_args.from) {
                     message_count += 1;
-                    let message_text = format!("Test message #{} from long-running client", message_count);
+                    let message_text = format!("Test message #{message_count} from long-running client");
                     let sms = SmsMessage::new(to, from, &message_text);
 
                     match client.send_sms(&sms).await {

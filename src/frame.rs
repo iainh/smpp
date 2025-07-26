@@ -28,7 +28,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Incomplete => write!(f, "Incomplete frame"),
-            Error::Other(err) => write!(f, "Frame error: {}", err),
+            Error::Other(err) => write!(f, "Frame error: {err}"),
         }
     }
 }

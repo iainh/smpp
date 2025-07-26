@@ -75,7 +75,7 @@ fn create_sample_bind_transmitter() -> BindTransmitter {
 }
 
 fn create_sample_enquire_link() -> EnquireLink {
-    EnquireLink { sequence_number: 1 }
+    EnquireLink { command_status: CommandStatus::Ok, sequence_number: 1 }
 }
 
 fn create_sample_deliver_sm() -> DeliverSm {
