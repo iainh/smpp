@@ -3,7 +3,7 @@
 // This shows how the separated codec makes PDU handling much cleaner
 // and more extensible.
 
-use smpp::codec::{CodecError, Encodable, Frame, PduRegistry};
+use smpp::codec::{CodecError, Frame, PduRegistry};
 use smpp::datatypes::{CommandStatus, EnquireLink, EnquireLinkResponse, ToBytes};
 use std::io::Cursor;
 
@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. Encode PDUs using the new trait
     let link_bytes = enquire_link.to_bytes()?;
-    let response_bytes = enquire_response.to_bytes()?;
+    let response_bytes = enquire_response.to_bytes();
 
     println!("\nEncoded sizes:");
     println!("  EnquireLink: {} bytes", link_bytes.len());

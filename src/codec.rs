@@ -542,7 +542,7 @@ mod tests {
         };
 
         let mut buf = BytesMut::new();
-        header.encode(&mut buf);
+        let _ = header.encode(&mut buf);
 
         let mut cursor = Cursor::new(buf.as_ref());
         let decoded = PduHeader::decode(&mut cursor).unwrap();
