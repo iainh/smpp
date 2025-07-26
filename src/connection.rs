@@ -146,7 +146,20 @@ impl Connection {
         // to hold the frame data unless we know the full frame has been
         // received.
         match Frame::check(&mut buf) {
-            Ok(len) => {
+            Ok(_) => {
+                // Get the complete frame length
+                let _len = buf.position() as usize;
+                buf.set_position(0);
+
+                // Read the header to get command_length
+                let header_buf = &self.buffer[..16];
+                let command_length = u32::from_be_bytes([
+                    header_buf[0],
+                    header_buf[1],
+                    header_buf[2],
+                    header_buf[3],
+                ]);
+                let len = command_length as usize;
                 // Reset the position to zero before passing the cursor to
                 // `Frame::parse`.
                 buf.set_position(0);
@@ -199,43 +212,22 @@ impl Connection {
             Frame::BindTransmitter(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
-            Frame::BindTransmitterResponse(pdu) => {
-                self.stream.write_all(&pdu.to_bytes()).await?;
-            }
             Frame::EnquireLink(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
-            Frame::EnquireLinkResponse(pdu) => {
+            Frame::EnquireLinkResp(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
             Frame::SubmitSm(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
-            Frame::SubmitSmResponse(pdu) => {
+            Frame::SubmitSmResp(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
             Frame::Unbind(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
-            Frame::UnbindResponse(pdu) => {
-                self.stream.write_all(&pdu.to_bytes()).await?;
-            }
-            Frame::BindReceiver(pdu) => {
-                self.stream.write_all(&pdu.to_bytes()).await?;
-            }
-            Frame::BindReceiverResponse(pdu) => {
-                self.stream.write_all(&pdu.to_bytes()).await?;
-            }
-            Frame::BindTransceiver(pdu) => {
-                self.stream.write_all(&pdu.to_bytes()).await?;
-            }
-            Frame::BindTransceiverResponse(pdu) => {
-                self.stream.write_all(&pdu.to_bytes()).await?;
-            }
-            Frame::DeliverSm(pdu) => {
-                self.stream.write_all(&pdu.to_bytes()).await?;
-            }
-            Frame::DeliverSmResponse(pdu) => {
+            Frame::UnbindResp(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
             Frame::Outbind(pdu) => {
@@ -243,6 +235,13 @@ impl Connection {
             }
             Frame::GenericNack(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::Unknown { .. } => {
+                // For unknown frames, we can't serialize them back
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Cannot write unknown frame type",
+                ));
             }
         }
 

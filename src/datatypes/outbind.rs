@@ -18,15 +18,17 @@
 //! Once the SMPP session is established the characteristics of the session are
 //! that of a normal SMPP receiver session.
 
-use crate::datatypes::{CommandId, Password, SystemId, ToBytes};
-use bytes::{BufMut, Bytes, BytesMut};
+use crate::codec::{CodecError, Decodable, Encodable, PduHeader};
+use crate::datatypes::{CommandId, CommandStatus, Password, SystemId, ToBytes};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::io::Cursor;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Outbind {
     // pub command_length: u32,
     // pub command_id: CommandId,
-    /// Command status is unsed for outbind and should always be 0
-    //pub command_status: CommandStatus,
+    /// Command status is unused for outbind and should always be 0
+    pub command_status: CommandStatus,
     pub sequence_number: u32,
     /// 5.2.1: The system_id is used by the SMSC to determine the correct type
     ///        of ESME (i.e. transmitter, receiver or transceiver) and to
@@ -68,7 +70,7 @@ impl ToBytes for Outbind {
         buffer.put_u32(length as u32);
         buffer.put_u32(CommandId::Outbind as u32);
         // Command status is always 0 for outbind
-        buffer.put_u32(0u32);
+        buffer.put_u32(self.command_status as u32);
         buffer.put_u32(self.sequence_number);
 
         buffer.put(system_id);
@@ -84,6 +86,124 @@ impl ToBytes for Outbind {
     }
 }
 
+// New codec trait implementations
+
+impl Decodable for Outbind {
+    fn command_id() -> CommandId {
+        CommandId::Outbind
+    }
+
+    fn decode(header: PduHeader, buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        // Validate header
+        Self::validate_header(&header)?;
+
+        // Parse system_id (variable length null-terminated string, max 16 chars)
+        let system_id_str = Self::read_c_string(buf, 17, "system_id")?; // 16 + null
+        let system_id = SystemId::from_parsed_string(system_id_str).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "system_id",
+                reason: e.to_string(),
+            }
+        })?;
+
+        // Parse password (variable length null-terminated string, max 9 chars)
+        let password_str = Self::read_c_string(buf, 10, "password")?; // 9 + null
+        let password = if password_str.is_empty() {
+            None
+        } else {
+            Some(Password::from_parsed_string(password_str).map_err(|e| {
+                CodecError::FieldValidation {
+                    field: "password",
+                    reason: e.to_string(),
+                }
+            })?)
+        };
+
+        Ok(Outbind {
+            command_status: header.command_status,
+            sequence_number: header.sequence_number,
+            system_id,
+            password,
+        })
+    }
+}
+
+impl Outbind {
+    /// Helper function to read null-terminated C strings with length limits
+    fn read_c_string(
+        buf: &mut Cursor<&[u8]>,
+        max_len: usize,
+        field_name: &'static str,
+    ) -> Result<String, CodecError> {
+        let mut string_bytes = Vec::new();
+        let mut bytes_read = 0;
+
+        while bytes_read < max_len {
+            if buf.remaining() == 0 {
+                return Err(CodecError::Incomplete);
+            }
+
+            let byte = buf.get_u8();
+            bytes_read += 1;
+
+            if byte == 0 {
+                // Found null terminator
+                break;
+            }
+
+            string_bytes.push(byte);
+        }
+
+        String::from_utf8(string_bytes).map_err(|e| CodecError::Utf8Error {
+            field: field_name,
+            source: e,
+        })
+    }
+}
+
+impl Encodable for Outbind {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Encode PDU header
+        let header = PduHeader {
+            command_length: 0, // Will be set by the caller
+            command_id: CommandId::Outbind,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
+
+        // Encode body - variable length null-terminated strings to match old format
+        buf.extend_from_slice(self.system_id.as_ref());
+        buf.put_u8(0); // null terminator
+
+        if let Some(ref password) = self.password {
+            buf.extend_from_slice(password.as_ref());
+        }
+        buf.put_u8(0); // null terminator for password (even if empty)
+
+        Ok(())
+    }
+
+    fn encoded_size(&self) -> usize {
+        let mut size = PduHeader::SIZE;
+        size += self.system_id.as_ref().len() + 1; // +1 for null terminator
+        size += self.password.as_ref().map_or(0, |p| p.as_ref().len()) + 1; // +1 for null terminator
+        size
+    }
+}
+
+// Convenience constructors
+impl Outbind {
+    pub fn new(sequence_number: u32, system_id: SystemId, password: Option<Password>) -> Self {
+        Self {
+            command_status: CommandStatus::Ok,
+            sequence_number,
+            system_id,
+            password,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,6 +211,7 @@ mod tests {
     #[test]
     fn outbind_to_bytes() {
         let outbind = Outbind {
+            command_status: CommandStatus::Ok,
             sequence_number: 1,
             system_id: "SMPP3TEST".parse::<SystemId>().unwrap(),
             password: Some("secret".parse::<Password>().unwrap()),
@@ -108,12 +229,13 @@ mod tests {
             0x65, 0x74, 0x00, // password
         ];
 
-        assert_eq!(&outbind.to_bytes(), &expected);
+        assert_eq!(&ToBytes::to_bytes(&outbind), &expected);
     }
 
     #[test]
     fn outbind_to_bytes_no_password() {
         let outbind = Outbind {
+            command_status: CommandStatus::Ok,
             sequence_number: 1,
             system_id: "SMPP3TEST".parse::<SystemId>().unwrap(),
             password: None,
@@ -129,7 +251,7 @@ mod tests {
             0x54, 0x00, // system_id
             0x00, // password
         ];
-        assert_eq!(&outbind.to_bytes(), &expected);
+        assert_eq!(&ToBytes::to_bytes(&outbind), &expected);
     }
 
     #[test]
@@ -141,6 +263,7 @@ mod tests {
 
         // Valid SystemId should work in Outbind
         let outbind = Outbind {
+            command_status: CommandStatus::Ok,
             sequence_number: 1,
             system_id: "valid".parse::<SystemId>().unwrap(),
             password: Some("pass".parse::<Password>().unwrap()),
@@ -159,6 +282,7 @@ mod tests {
 
         // Valid Password should work in Outbind
         let outbind = Outbind {
+            command_status: CommandStatus::Ok,
             sequence_number: 1,
             system_id: "TEST".parse::<SystemId>().unwrap(),
             password: Some("validpw".parse::<Password>().unwrap()),
@@ -172,12 +296,13 @@ mod tests {
     fn outbind_max_valid_lengths() {
         // Test that maximum valid lengths work correctly
         let outbind = Outbind {
+            command_status: CommandStatus::Ok,
             sequence_number: 1,
             system_id: "A".repeat(15).parse::<SystemId>().unwrap(), // Max allowed
             password: Some("B".repeat(8).parse::<Password>().unwrap()), // Max allowed
         };
 
-        let bytes = outbind.to_bytes();
+        let bytes = ToBytes::to_bytes(&outbind);
         assert!(bytes.len() > 16); // Should serialize successfully
     }
 
@@ -187,13 +312,14 @@ mod tests {
         use std::io::Cursor;
 
         let original = Outbind {
+            command_status: CommandStatus::Ok,
             sequence_number: 42,
             system_id: "SMPP3TEST".parse::<SystemId>().unwrap(),
             password: Some("secret08".parse::<Password>().unwrap()),
         };
 
         // Serialize to bytes
-        let serialized = original.to_bytes();
+        let serialized = ToBytes::to_bytes(&original);
 
         // Parse back from bytes
         let mut cursor = Cursor::new(serialized.as_ref());

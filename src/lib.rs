@@ -1,4 +1,5 @@
 pub mod client;
+pub mod codec;
 pub mod connection;
 pub mod datatypes;
 pub mod frame;
@@ -6,7 +7,10 @@ pub mod frame;
 #[cfg(test)]
 mod tests;
 
-pub use frame::*;
+// Re-export frame types (which now come from codec)
+
+// Re-export codec types for direct access
+pub use codec::{CodecError, Decodable, Encodable, Frame, PduHeader, PduRegistry};
 
 // Re-export the main client API for easy access
 pub use client::{

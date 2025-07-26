@@ -27,8 +27,8 @@ use num_enum::TryFromPrimitive;
 /// - SMPP v3.4 Specification Table 4-1 (Command ID Definitions)
 #[derive(TryFromPrimitive)]
 #[repr(u32)]
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum CommandId {
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
+pub enum CommandId {
     /// generic_nack PDU (Section 4.3.1) - Error response for invalid PDUs
     GenericNack = 0x8000_0000,
 

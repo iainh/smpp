@@ -1,5 +1,7 @@
+use crate::codec::{CodecError, Decodable, Encodable, PduHeader};
 use crate::datatypes::{CommandId, CommandStatus, ToBytes};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::io::Cursor;
 
 /// GenericNack is used to acknowledge the receipt of a PDU when the receiving
 /// entity cannot process the PDU due to errors such as invalid command_id,
@@ -74,6 +76,55 @@ impl ToBytes for GenericNack {
     }
 }
 
+// New codec trait implementations
+
+impl Decodable for GenericNack {
+    fn command_id() -> CommandId {
+        CommandId::GenericNack
+    }
+
+    fn decode(header: PduHeader, buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        // Validate header
+        Self::validate_header(&header)?;
+
+        // generic_nack has no body - just verify we're at the end
+        if buf.has_remaining() {
+            return Err(CodecError::FieldValidation {
+                field: "generic_nack_body",
+                reason: "generic_nack PDU should have no body".to_string(),
+            });
+        }
+
+        Ok(GenericNack {
+            command_status: header.command_status,
+            sequence_number: header.sequence_number,
+        })
+    }
+}
+
+impl Encodable for GenericNack {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Calculate total length (header only)
+        let total_length = PduHeader::SIZE as u32;
+
+        // Encode header
+        let header = PduHeader {
+            command_length: total_length,
+            command_id: CommandId::GenericNack,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
+
+        // No body to encode
+        Ok(())
+    }
+
+    fn encoded_size(&self) -> usize {
+        PduHeader::SIZE
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,7 +136,7 @@ mod tests {
             sequence_number: 42,
         };
 
-        let bytes = generic_nack.to_bytes();
+        let bytes = ToBytes::to_bytes(&generic_nack);
 
         let expected = vec![
             0x00, 0x00, 0x00, 0x10, // command_length (16)
@@ -131,7 +182,7 @@ mod tests {
         ];
 
         for nack in test_cases {
-            let bytes = nack.to_bytes();
+            let bytes = ToBytes::to_bytes(&nack);
             assert_eq!(bytes.len(), 16, "GenericNack should always be 16 bytes");
         }
     }
@@ -147,7 +198,7 @@ mod tests {
         };
 
         // Serialize to bytes
-        let serialized = original.to_bytes();
+        let serialized = ToBytes::to_bytes(&original);
 
         // Parse back from bytes
         let mut cursor = Cursor::new(serialized.as_ref());

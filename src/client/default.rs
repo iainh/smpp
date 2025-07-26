@@ -45,7 +45,7 @@ impl SmppConnection for DefaultClient {
             keep_alive.disable();
         }
         self.keep_alive = None;
-        
+
         // Note: Connection doesn't expose close method, so we just mark as disconnected
         // The underlying TcpStream will be dropped when Connection is dropped
         self.connected = false;
@@ -81,7 +81,7 @@ impl SmppClient for DefaultClient {
                 Frame::BindTransmitter(bind_transmitter)
             }
             BindType::Receiver => {
-                let bind_receiver = BindReceiver {
+                let _bind_receiver = BindReceiver {
                     command_status: CommandStatus::Ok,
                     sequence_number: self.sequence_number,
                     system_id: SystemId::from(credentials.system_id.as_str()),
@@ -92,10 +92,13 @@ impl SmppClient for DefaultClient {
                     addr_npi: NumericPlanIndicator::Unknown,
                     address_range: AddressRange::default(),
                 };
-                Frame::BindReceiver(bind_receiver)
+                // TODO: Add BindReceiver support
+                return Err(SmppError::InvalidData(
+                    "BindReceiver not yet supported".to_string(),
+                ));
             }
             BindType::Transceiver => {
-                let bind_transceiver = BindTransceiver {
+                let _bind_transceiver = BindTransceiver {
                     command_status: CommandStatus::Ok,
                     sequence_number: self.sequence_number,
                     system_id: SystemId::from(credentials.system_id.as_str()),
@@ -106,7 +109,10 @@ impl SmppClient for DefaultClient {
                     addr_npi: NumericPlanIndicator::Unknown,
                     address_range: AddressRange::default(),
                 };
-                Frame::BindTransceiver(bind_transceiver)
+                // TODO: Add BindTransceiver support
+                return Err(SmppError::InvalidData(
+                    "BindTransceiver not yet supported".to_string(),
+                ));
             }
         };
 
@@ -119,9 +125,8 @@ impl SmppClient for DefaultClient {
         match self.connection.read_frame().await {
             Ok(Some(response)) => {
                 let command_status = match &response {
-                    Frame::BindTransmitterResponse(resp) => resp.command_status,
-                    Frame::BindReceiverResponse(resp) => resp.command_status,
-                    Frame::BindTransceiverResponse(resp) => resp.command_status,
+                    // TODO: Add response support for missing bind types
+                    Frame::Unknown { header, .. } => header.command_status,
                     other => {
                         return Err(SmppError::UnexpectedPdu {
                             expected: format!("Bind{:?}Response", credentials.bind_type),
@@ -161,7 +166,7 @@ impl SmppClient for DefaultClient {
 
         // Wait for unbind response
         match self.connection.read_frame().await {
-            Ok(Some(Frame::UnbindResponse(response))) => {
+            Ok(Some(Frame::UnbindResp(response))) => {
                 if response.command_status != CommandStatus::Ok {
                     return Err(SmppError::Protocol(response.command_status));
                 }
@@ -191,9 +196,7 @@ impl SmppClient for DefaultClient {
 
         self.sequence_number += 1;
 
-        let enquire_link = EnquireLink {
-            sequence_number: self.sequence_number,
-        };
+        let enquire_link = EnquireLink::new(self.sequence_number);
 
         let frame = Frame::EnquireLink(enquire_link);
         self.connection
@@ -203,14 +206,14 @@ impl SmppClient for DefaultClient {
 
         // Wait for enquire_link response
         match self.connection.read_frame().await {
-            Ok(Some(Frame::EnquireLinkResponse(_response))) => {
+            Ok(Some(Frame::EnquireLinkResp(_response))) => {
                 // EnquireLinkResponse doesn't have command_status field - it's always OK
-                
+
                 // Record successful ping
                 if let Some(keep_alive) = &mut self.keep_alive {
                     keep_alive.on_ping_success();
                 }
-                
+
                 Ok(())
             }
             Ok(Some(other)) => {
@@ -248,7 +251,7 @@ impl SmppClient for DefaultClient {
         // Create and enable the keep-alive manager
         let manager = KeepAliveManager::new(config);
         self.keep_alive = Some(manager);
-        
+
         Ok(())
     }
 
@@ -300,7 +303,7 @@ impl DefaultClient {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut client = DefaultClient::connect("localhost:2775").await?;
     /// client.start_keep_alive(KeepAliveConfig::default()).await?;
-    /// 
+    ///
     /// loop {
     ///     // Your application logic here
     ///     
@@ -328,7 +331,7 @@ impl DefaultClient {
         }
         Ok(false)
     }
-    
+
     /// Check if the connection has failed due to keep-alive failures
     ///
     /// Returns true if the configured maximum number of consecutive
@@ -347,10 +350,10 @@ impl DefaultClient {
     /// # use std::time::Duration;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut client = DefaultClient::connect("localhost:2775").await?;
-    /// 
+    ///
     /// let config = KeepAliveConfig::default().with_max_failures(3);
     /// client.start_keep_alive(config).await?;
-    /// 
+    ///
     /// loop {
     ///     client.maintain_keep_alive().await.ok(); // Ignore errors for this example
     ///     
@@ -453,14 +456,14 @@ impl SmppTransmitter for DefaultClient {
 
         // Wait for and validate submit response
         match self.connection.read_frame().await {
-            Ok(Some(Frame::SubmitSmResponse(response))) => {
+            Ok(Some(Frame::SubmitSmResp(response))) => {
                 if response.command_status != CommandStatus::Ok {
                     return Err(SmppError::Protocol(response.command_status));
                 }
                 Ok(response.message_id.to_string())
             }
             Ok(Some(other)) => Err(SmppError::UnexpectedPdu {
-                expected: "SubmitSmResponse".to_string(),
+                expected: "SubmitSmResp".to_string(),
                 actual: format!("{other:?}"),
             }),
             Ok(None) => Err(SmppError::ConnectionClosed),

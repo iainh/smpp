@@ -1,61 +1,36 @@
+// Example: EnquireLink PDU implementation with new codec pattern
+//
+// This shows how simple PDUs become much cleaner with the codec separation.
+// EnquireLink is a good example because it has no body - just the header.
+
 use crate::codec::{CodecError, Decodable, Encodable, PduHeader};
-use crate::datatypes::{CommandId, CommandStatus, ToBytes};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use crate::datatypes::{CommandId, CommandStatus};
+use bytes::BytesMut;
 use std::io::Cursor;
 
+// These would normally be in src/datatypes/enquire_link.rs
+// but shown here for the example
+
+/// enquire_link PDU (Section 4.11.1) - Keep-alive message
+///
+/// The enquire_link operation is used to provide a confidence check of the
+/// communication path between an ESME and an SMSC. On receipt of this request,
+/// the recipient should respond with an enquire_link_resp, thus verifying that
+/// the application level connection between the ESME and the SMSC is functioning.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnquireLink {
-    // pub command_length: u32,
-    // pub command_id: CommandId::EnquireLink,
-
-    // EnquireLink always sets the command status to NULL
     pub command_status: CommandStatus,
     pub sequence_number: u32,
 }
 
+/// enquire_link_resp PDU (Section 4.11.2) - Keep-alive response
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnquireLinkResponse {
-    // pub command_length: u32,
-    // pub command_id: CommandId::EnquireLinkResp,
-    // EnquireLinkResponse instances always set the command status to ESME_ROK
-    // (CommandStatus::Ok)
     pub command_status: CommandStatus,
     pub sequence_number: u32,
 }
 
-impl ToBytes for EnquireLink {
-    fn to_bytes(&self) -> Bytes {
-        let length = 16; // SMPP header is 16 bytes (4+4+4+4), enquire_link has no body
-        let mut buffer = BytesMut::with_capacity(length);
-
-        buffer.put_u32(length as u32);
-        buffer.put_u32(CommandId::EnquireLink as u32);
-        // EnquireLink always sets the command status to NULL
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
-        buffer.freeze()
-    }
-}
-
-impl ToBytes for EnquireLinkResponse {
-    fn to_bytes(&self) -> Bytes {
-        let length = 16; // SMPP header is 16 bytes (4+4+4+4), enquire_link response has no body
-        let mut buffer = BytesMut::with_capacity(length);
-
-        // Write temporary data that we'll replace later with the actual length
-        buffer.put_u32(length as u32);
-
-        buffer.put_u32(CommandId::EnquireLinkResp as u32);
-        // EnquireLinkResponse instances always set the command status to
-        // ESME_ROK
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
-
-        buffer.freeze()
-    }
-}
-
-// New codec trait implementations
+// Implementation using new codec traits
 
 impl Decodable for EnquireLink {
     fn command_id() -> CommandId {
@@ -93,7 +68,7 @@ impl Encodable for EnquireLink {
             command_status: self.command_status,
             sequence_number: self.sequence_number,
         };
-        header.encode(buf)?;
+        header.encode(buf);
 
         // No body to encode
         Ok(())
@@ -140,7 +115,7 @@ impl Encodable for EnquireLinkResponse {
             command_status: self.command_status,
             sequence_number: self.sequence_number,
         };
-        header.encode(buf)?;
+        header.encode(buf);
 
         // No body to encode
         Ok(())
@@ -174,5 +149,65 @@ impl EnquireLinkResponse {
             command_status: status,
             sequence_number,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::BytesMut;
+
+    #[test]
+    fn enquire_link_roundtrip() {
+        let original = EnquireLink::new(42);
+
+        // Encode
+        let mut buf = BytesMut::new();
+        original.encode(&mut buf).unwrap();
+
+        // Decode
+        let mut cursor = Cursor::new(buf.as_ref());
+        let header = PduHeader::decode(&mut cursor).unwrap();
+        let decoded = EnquireLink::decode(header, &mut cursor).unwrap();
+
+        assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn enquire_link_response_roundtrip() {
+        let original = EnquireLinkResponse::error(123, CommandStatus::SystemError);
+
+        // Encode
+        let mut buf = BytesMut::new();
+        original.encode(&mut buf).unwrap();
+
+        // Decode
+        let mut cursor = Cursor::new(buf.as_ref());
+        let header = PduHeader::decode(&mut cursor).unwrap();
+        let decoded = EnquireLinkResponse::decode(header, &mut cursor).unwrap();
+
+        assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn enquire_link_size_calculation() {
+        let pdu = EnquireLink::new(1);
+        assert_eq!(pdu.encoded_size(), 16); // Header only
+    }
+
+    #[test]
+    fn enquire_link_rejects_body_data() {
+        let header = PduHeader {
+            command_length: 20, // Claims 4 extra bytes
+            command_id: CommandId::EnquireLink,
+            command_status: CommandStatus::Ok,
+            sequence_number: 1,
+        };
+
+        let extra_data = [0x01, 0x02, 0x03, 0x04];
+        let mut cursor = Cursor::new(&extra_data[..]);
+
+        let result = EnquireLink::decode(header, &mut cursor);
+        assert!(matches!(result, Err(CodecError::FieldValidation { .. })));
     }
 }

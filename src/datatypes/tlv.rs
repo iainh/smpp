@@ -1,5 +1,9 @@
 use crate::datatypes::ToBytes;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::io::Cursor;
+
+// Import codec traits
+use crate::codec::{CodecError, Encodable};
 
 // Standard TLV tag constants per SMPP v3.4 specification
 pub mod tags {
@@ -67,6 +71,42 @@ impl ToBytes for Tlv {
         buffer.put(self.value.chunk());
 
         buffer.freeze()
+    }
+}
+
+// Codec trait implementations for TLV
+impl Encodable for Tlv {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        buf.put_u16(self.tag);
+        buf.put_u16(self.length);
+        buf.extend_from_slice(&self.value);
+        Ok(())
+    }
+
+    fn encoded_size(&self) -> usize {
+        4 + self.value.len() // 2 bytes tag + 2 bytes length + value
+    }
+}
+
+impl Tlv {
+    /// Decode a TLV from the buffer
+    pub fn decode(buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        if buf.remaining() < 4 {
+            return Err(CodecError::Incomplete);
+        }
+
+        let tag = buf.get_u16();
+        let length = buf.get_u16();
+
+        if buf.remaining() < length as usize {
+            return Err(CodecError::Incomplete);
+        }
+
+        let mut value_bytes = vec![0u8; length as usize];
+        buf.copy_to_slice(&mut value_bytes);
+        let value = Bytes::from(value_bytes);
+
+        Ok(Self { tag, length, value })
     }
 }
 

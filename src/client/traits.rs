@@ -82,14 +82,17 @@ pub trait SmppClient: SmppConnection {
     /// # use std::time::Duration;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut client = DefaultClient::connect("localhost:2775").await?;
-    /// 
+    ///
     /// let config = KeepAliveConfig::new(Duration::from_secs(30))
     ///     .with_max_failures(3);
     /// client.start_keep_alive(config).await?;
     /// # Ok(())
     /// # }
     /// ```
-    fn start_keep_alive(&mut self, config: KeepAliveConfig) -> impl Future<Output = SmppResult<()>> + Send;
+    fn start_keep_alive(
+        &mut self,
+        config: KeepAliveConfig,
+    ) -> impl Future<Output = SmppResult<()>> + Send;
 
     /// Stop automatic keep-alive
     ///
@@ -131,13 +134,13 @@ pub trait SmppClient: SmppConnection {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let client = DefaultClient::connect("localhost:2775").await?;
     /// let status = client.keep_alive_status();
-    /// 
+    ///
     /// if status.running {
-    ///     println!("Keep-alive active: {}/{} success rate", 
+    ///     println!("Keep-alive active: {}/{} success rate",
     ///              status.total_pongs, status.total_pings);
     ///     
     ///     if status.consecutive_failures > 0 {
-    ///         println!("Warning: {} consecutive failures", 
+    ///         println!("Warning: {} consecutive failures",
     ///                  status.consecutive_failures);
     ///     }
     /// } else {

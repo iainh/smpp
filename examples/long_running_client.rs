@@ -4,7 +4,7 @@
 //! # Long-Running SMPP Client with Keep-Alive
 //!
 //! This example demonstrates how to create a long-running SMPP client that:
-//! 
+//!
 //! * Automatically monitors connection health using keep-alive
 //! * Handles connection failures gracefully
 //! * Optionally sends periodic SMS messages
@@ -33,11 +33,14 @@
 //! ```
 
 use argh::FromArgs;
-use smpp::client::{BindCredentials, DefaultClient, KeepAliveConfig, SmppClient, SmppConnection, SmppTransmitter, SmsMessage};
+use smpp::client::{
+    BindCredentials, DefaultClient, KeepAliveConfig, SmppClient, SmppConnection, SmppTransmitter,
+    SmsMessage,
+};
 use std::error::Error;
 use std::time::Duration;
 use tokio::time::{interval, sleep};
-use tracing::{Level, error, info, warn, debug};
+use tracing::{Level, debug, error, info, warn};
 use tracing_subscriber::FmtSubscriber;
 
 /// Long-running SMPP client with keep-alive functionality
@@ -97,7 +100,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cli_args: CliArgs = argh::from_env();
 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(if cli_args.debugging { Level::DEBUG } else { Level::INFO })
+        .with_max_level(if cli_args.debugging {
+            Level::DEBUG
+        } else {
+            Level::INFO
+        })
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
@@ -132,20 +139,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Configure keep-alive
     let mut keep_alive_config = KeepAliveConfig::new(Duration::from_secs(
-        cli_args.keep_alive_interval.unwrap_or(30)
+        cli_args.keep_alive_interval.unwrap_or(30),
     ));
-    
+
     if let Some(timeout) = cli_args.keep_alive_timeout {
         keep_alive_config = keep_alive_config.with_timeout(Duration::from_secs(timeout));
     }
-    
+
     if let Some(max_failures) = cli_args.max_failures {
         keep_alive_config = keep_alive_config.with_max_failures(max_failures);
     }
 
     // Start keep-alive
     client.start_keep_alive(keep_alive_config).await?;
-    info!("Keep-alive started with interval {:?}", client.keep_alive_status().running);
+    info!(
+        "Keep-alive started with interval {:?}",
+        client.keep_alive_status().running
+    );
 
     // Setup message sending if phone numbers are provided
     let send_messages = cli_args.to.is_some() && cli_args.from.is_some();
@@ -164,7 +174,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut message_count = 0;
 
     info!("Entering main loop");
-    
+
     loop {
         tokio::select! {
             // Check if we should exit
@@ -172,7 +182,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 info!("Run duration elapsed, shutting down");
                 break;
             }
-            
+
             // Maintain keep-alive
             _ = keep_alive_timer.tick() => {
                 match client.maintain_keep_alive().await {
@@ -182,21 +192,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         warn!("Keep-alive ping failed: {}", e);
                     }
                 }
-                
+
                 // Check if connection has failed
                 if client.is_keep_alive_failed() {
                     error!("Connection failed due to keep-alive failures");
                     break;
                 }
-                
+
                 // Log keep-alive status periodically
                 let status = client.keep_alive_status();
                 if status.total_pings > 0 && status.total_pings % 5 == 0 {
-                    info!("Keep-alive status: pings={}, pongs={}, failures={}", 
+                    info!("Keep-alive status: pings={}, pongs={}, failures={}",
                           status.total_pings, status.total_pongs, status.consecutive_failures);
                 }
             }
-            
+
             // Send SMS messages if configured
             _ = async {
                 if let Some(ref mut timer) = sms_timer {
@@ -210,12 +220,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     message_count += 1;
                     let message_text = format!("Test message #{} from long-running client", message_count);
                     let sms = SmsMessage::new(to, from, &message_text);
-                    
+
                     match client.send_sms(&sms).await {
                         Ok(message_id) => {
                             info!("Message {} sent successfully! ID: {}", message_count, message_id);
-                            
-                            // Reset keep-alive failures on successful operations  
+
+                            // Reset keep-alive failures on successful operations
                             let status = client.keep_alive_status();
                             if status.consecutive_failures > 0 {
                                 debug!("Resetting keep-alive failures after successful SMS send");
@@ -232,7 +242,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Shutdown sequence
     info!("Shutting down client");
-    
+
     // Stop keep-alive
     if let Err(e) = client.stop_keep_alive().await {
         warn!("Failed to stop keep-alive: {}", e);
@@ -253,9 +263,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Final keep-alive statistics:");
     info!("  Total pings sent: {}", final_status.total_pings);
     info!("  Total pongs received: {}", final_status.total_pongs);
-    info!("  Final consecutive failures: {}", final_status.consecutive_failures);
+    info!(
+        "  Final consecutive failures: {}",
+        final_status.consecutive_failures
+    );
     info!("  Total SMS messages sent: {}", message_count);
-    
+
     let uptime = start_time.elapsed();
     info!("Client ran for {:.1} seconds", uptime.as_secs_f64());
 

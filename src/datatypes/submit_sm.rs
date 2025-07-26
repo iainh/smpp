@@ -6,7 +6,11 @@ use crate::datatypes::{
     DestinationAddr, EsmClass, EsmClassError, MessageId, ScheduleDeliveryTime, ServiceType,
     ServiceTypeError, ShortMessage, SourceAddr, ToBytes, TypeOfNumber, ValidityPeriod,
 };
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::io::Cursor;
+
+// Import codec traits
+use crate::codec::{CodecError, Decodable, Encodable, PduHeader};
 
 // SMPP v3.4 specification field length limits (excluding null terminator)
 // MAX_SHORT_MESSAGE_LENGTH is now enforced by the ShortMessage type
@@ -775,6 +779,582 @@ impl ToBytes for SubmitSmResponse {
         buffer.put_u8(b'\0');
 
         buffer.freeze()
+    }
+}
+
+// Codec trait implementations for new SMPP codec system
+impl Encodable for SubmitSm {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Validate the PDU before encoding
+        self.validate().map_err(|e| CodecError::FieldValidation {
+            field: "submit_sm",
+            reason: e.to_string(),
+        })?;
+
+        // Encode PDU header
+        let header = PduHeader {
+            command_length: 0, // Will be set by the caller
+            command_id: CommandId::SubmitSm,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
+
+        // Encode mandatory fields in order
+        buf.extend_from_slice(self.service_type.as_ref());
+        buf.put_u8(0); // null terminator
+        buf.put_u8(self.source_addr_ton as u8);
+        buf.put_u8(self.source_addr_npi as u8);
+        buf.extend_from_slice(self.source_addr.as_ref());
+        buf.put_u8(0); // null terminator
+        buf.put_u8(self.dest_addr_ton as u8);
+        buf.put_u8(self.dest_addr_npi as u8);
+        buf.extend_from_slice(self.destination_addr.as_ref());
+        buf.put_u8(0); // null terminator
+        buf.put_u8(self.esm_class.into());
+        buf.put_u8(self.protocol_id);
+        buf.put_u8(self.priority_flag as u8);
+
+        // Schedule delivery time
+        buf.extend_from_slice(self.schedule_delivery_time.as_ref());
+        buf.put_u8(0); // null terminator
+
+        // Validity period
+        buf.extend_from_slice(self.validity_period.as_ref());
+        buf.put_u8(0); // null terminator
+
+        buf.put_u8(self.registered_delivery);
+        buf.put_u8(self.replace_if_present_flag);
+        buf.put_u8(self.data_coding.into());
+        buf.put_u8(self.sm_default_msg_id);
+        buf.put_u8(self.sm_length);
+
+        // Short message (no null terminator for binary data)
+        buf.extend_from_slice(self.short_message.as_bytes());
+
+        // Encode all optional TLV parameters
+        if let Some(ref tlv) = self.user_message_reference {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.source_port {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.source_addr_submit {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.destination_port {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.dest_addr_submit {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.sar_msg_ref_num {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.sar_total_segments {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.sar_segment_seqnum {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.more_messages_to_send {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.payload_type {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.message_payload {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.privacy_indicator {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.callback_num {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.callback_num_pres_ind {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.callback_num_atag {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.source_subaddress {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.dest_subaddress {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.display_time {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.sms_signal {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.ms_validity {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.ms_msg_wait_facilities {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.number_of_messages {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.alert_on_msg_delivery {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.language_indicator {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.its_reply_type {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.its_session_info {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.ussd_service_op {
+            tlv.encode(buf)?;
+        }
+
+        Ok(())
+    }
+
+    fn encoded_size(&self) -> usize {
+        let mut size = PduHeader::SIZE;
+
+        // Mandatory fields
+        size += self.service_type.as_ref().len() + 1; // null terminated
+        size += 1 + 1; // source_addr_ton + source_addr_npi
+        size += self.source_addr.as_ref().len() + 1; // null terminated
+        size += 1 + 1; // dest_addr_ton + dest_addr_npi
+        size += self.destination_addr.as_ref().len() + 1; // null terminated
+        size += 1; // esm_class
+        size += 1; // protocol_id
+        size += 1; // priority_flag
+        size += self.schedule_delivery_time.as_ref().len() + 1; // null terminated
+        size += self.validity_period.as_ref().len() + 1; // null terminated
+        size += 1; // registered_delivery
+        size += 1; // replace_if_present_flag
+        size += 1; // data_coding
+        size += 1; // sm_default_msg_id
+        size += 1; // sm_length
+        size += self.short_message.as_bytes().len(); // not null terminated
+
+        // Optional TLV fields
+        if let Some(ref tlv) = self.user_message_reference {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.source_port {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.source_addr_submit {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.destination_port {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.dest_addr_submit {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.sar_msg_ref_num {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.sar_total_segments {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.sar_segment_seqnum {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.more_messages_to_send {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.payload_type {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.message_payload {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.privacy_indicator {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.callback_num {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.callback_num_pres_ind {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.callback_num_atag {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.source_subaddress {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.dest_subaddress {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.display_time {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.sms_signal {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.ms_validity {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.ms_msg_wait_facilities {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.number_of_messages {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.alert_on_msg_delivery {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.language_indicator {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.its_reply_type {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.its_session_info {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.ussd_service_op {
+            size += tlv.encoded_size();
+        }
+
+        size
+    }
+}
+
+impl Decodable for SubmitSm {
+    fn decode(header: PduHeader, buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        Self::validate_header(&header)?;
+
+        // Decode mandatory fields in order
+
+        // service_type (null-terminated string, max 5 chars + null)
+        let service_type = Self::read_c_string(buf, 6, "service_type")?;
+        let service_type = ServiceType::try_from(service_type.as_str()).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "service_type",
+                reason: e.to_string(),
+            }
+        })?;
+
+        let source_addr_ton =
+            TypeOfNumber::try_from(buf.get_u8()).map_err(|_| CodecError::FieldValidation {
+                field: "source_addr_ton",
+                reason: "Invalid type of number".to_string(),
+            })?;
+
+        let source_addr_npi = NumericPlanIndicator::try_from(buf.get_u8()).map_err(|_| {
+            CodecError::FieldValidation {
+                field: "source_addr_npi",
+                reason: "Invalid numeric plan indicator".to_string(),
+            }
+        })?;
+
+        // source_addr (null-terminated string, max 20 chars + null)
+        let source_addr_str = Self::read_c_string(buf, 21, "source_addr")?;
+        let source_addr = SourceAddr::new(&source_addr_str, source_addr_ton).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "source_addr",
+                reason: e.to_string(),
+            }
+        })?;
+
+        let dest_addr_ton =
+            TypeOfNumber::try_from(buf.get_u8()).map_err(|_| CodecError::FieldValidation {
+                field: "dest_addr_ton",
+                reason: "Invalid type of number".to_string(),
+            })?;
+
+        let dest_addr_npi = NumericPlanIndicator::try_from(buf.get_u8()).map_err(|_| {
+            CodecError::FieldValidation {
+                field: "dest_addr_npi",
+                reason: "Invalid numeric plan indicator".to_string(),
+            }
+        })?;
+
+        // destination_addr (null-terminated string, max 20 chars + null)
+        let dest_addr_str = Self::read_c_string(buf, 21, "destination_addr")?;
+        let destination_addr =
+            DestinationAddr::new(&dest_addr_str, dest_addr_ton).map_err(|e| {
+                CodecError::FieldValidation {
+                    field: "destination_addr",
+                    reason: e.to_string(),
+                }
+            })?;
+
+        let esm_class =
+            EsmClass::try_from(buf.get_u8()).map_err(|e| CodecError::FieldValidation {
+                field: "esm_class",
+                reason: e.to_string(),
+            })?;
+
+        let protocol_id = buf.get_u8();
+
+        let priority_flag =
+            PriorityFlag::try_from(buf.get_u8()).map_err(|_| CodecError::FieldValidation {
+                field: "priority_flag",
+                reason: "Invalid priority flag".to_string(),
+            })?;
+
+        // schedule_delivery_time (null-terminated string, max 16 chars + null)
+        let schedule_time_str = Self::read_c_string(buf, 17, "schedule_delivery_time")?;
+        let schedule_delivery_time = ScheduleDeliveryTime::try_from(schedule_time_str.as_str())
+            .map_err(|e| CodecError::FieldValidation {
+                field: "schedule_delivery_time",
+                reason: e.to_string(),
+            })?;
+
+        // validity_period (null-terminated string, max 16 chars + null)
+        let validity_str = Self::read_c_string(buf, 17, "validity_period")?;
+        let validity_period = ValidityPeriod::try_from(validity_str.as_str()).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "validity_period",
+                reason: e.to_string(),
+            }
+        })?;
+
+        let registered_delivery = buf.get_u8();
+        let replace_if_present_flag = buf.get_u8();
+
+        let data_coding =
+            DataCoding::try_from(buf.get_u8()).map_err(|e| CodecError::FieldValidation {
+                field: "data_coding",
+                reason: e.to_string(),
+            })?;
+
+        let sm_default_msg_id = buf.get_u8();
+        let sm_length = buf.get_u8();
+
+        // short_message (binary data, not null-terminated)
+        if buf.remaining() < sm_length as usize {
+            return Err(CodecError::Incomplete);
+        }
+        let mut short_message_bytes = vec![0u8; sm_length as usize];
+        buf.copy_to_slice(&mut short_message_bytes);
+        let short_message =
+            ShortMessage::new(&short_message_bytes).map_err(|e| CodecError::FieldValidation {
+                field: "short_message",
+                reason: e.to_string(),
+            })?;
+
+        // Parse optional TLV parameters
+        let mut tlvs = std::collections::HashMap::new();
+        while buf.remaining() >= 4 {
+            let tlv = Tlv::decode(buf)?;
+            tlvs.insert(tlv.tag, tlv);
+        }
+
+        // Extract specific TLVs
+        let user_message_reference = tlvs.remove(&0x0204);
+        let source_port = tlvs.remove(&0x020A);
+        let source_addr_submit = tlvs.remove(&0x020B);
+        let destination_port = tlvs.remove(&0x020C);
+        let dest_addr_submit = tlvs.remove(&0x020D);
+        let sar_msg_ref_num = tlvs.remove(&0x020E);
+        let sar_total_segments = tlvs.remove(&0x020F);
+        let sar_segment_seqnum = tlvs.remove(&0x0210);
+        let more_messages_to_send = tlvs.remove(&0x0426);
+        let payload_type = tlvs.remove(&0x0019);
+        let message_payload = tlvs.remove(&0x0424);
+        let privacy_indicator = tlvs.remove(&0x0201);
+        let callback_num = tlvs.remove(&0x0381);
+        let callback_num_pres_ind = tlvs.remove(&0x0302);
+        let callback_num_atag = tlvs.remove(&0x0303);
+        let source_subaddress = tlvs.remove(&0x0202);
+        let dest_subaddress = tlvs.remove(&0x0203);
+        let display_time = tlvs.remove(&0x1201);
+        let sms_signal = tlvs.remove(&0x1203);
+        let ms_validity = tlvs.remove(&0x1204);
+        let ms_msg_wait_facilities = tlvs.remove(&0x1205);
+        let number_of_messages = tlvs.remove(&0x0205);
+        let alert_on_msg_delivery = tlvs.remove(&0x130C);
+        let language_indicator = tlvs.remove(&0x000D);
+        let its_reply_type = tlvs.remove(&0x1380);
+        let its_session_info = tlvs.remove(&0x1383);
+        let ussd_service_op = tlvs.remove(&0x0501);
+
+        let submit_sm = Self {
+            command_status: header.command_status,
+            sequence_number: header.sequence_number,
+            service_type,
+            source_addr_ton,
+            source_addr_npi,
+            source_addr,
+            dest_addr_ton,
+            dest_addr_npi,
+            destination_addr,
+            esm_class,
+            protocol_id,
+            priority_flag,
+            schedule_delivery_time,
+            validity_period,
+            registered_delivery,
+            replace_if_present_flag,
+            data_coding,
+            sm_default_msg_id,
+            sm_length,
+            short_message,
+            user_message_reference,
+            source_port,
+            source_addr_submit,
+            destination_port,
+            dest_addr_submit,
+            sar_msg_ref_num,
+            sar_total_segments,
+            sar_segment_seqnum,
+            more_messages_to_send,
+            payload_type,
+            message_payload,
+            privacy_indicator,
+            callback_num,
+            callback_num_pres_ind,
+            callback_num_atag,
+            source_subaddress,
+            dest_subaddress,
+            display_time,
+            sms_signal,
+            ms_validity,
+            ms_msg_wait_facilities,
+            number_of_messages,
+            alert_on_msg_delivery,
+            language_indicator,
+            its_reply_type,
+            its_session_info,
+            ussd_service_op,
+        };
+
+        // Validate the decoded PDU
+        submit_sm
+            .validate()
+            .map_err(|e| CodecError::FieldValidation {
+                field: "submit_sm",
+                reason: e.to_string(),
+            })?;
+
+        Ok(submit_sm)
+    }
+
+    fn command_id() -> CommandId {
+        CommandId::SubmitSm
+    }
+}
+
+impl SubmitSm {
+    /// Helper function to read null-terminated C strings with length limits
+    fn read_c_string(
+        buf: &mut Cursor<&[u8]>,
+        max_len: usize,
+        field_name: &'static str,
+    ) -> Result<String, CodecError> {
+        let mut string_bytes = Vec::new();
+        let mut bytes_read = 0;
+
+        while bytes_read < max_len {
+            if buf.remaining() == 0 {
+                return Err(CodecError::Incomplete);
+            }
+
+            let byte = buf.get_u8();
+            bytes_read += 1;
+
+            if byte == 0 {
+                // Found null terminator
+                break;
+            }
+
+            string_bytes.push(byte);
+        }
+
+        String::from_utf8(string_bytes).map_err(|e| CodecError::Utf8Error {
+            field: field_name,
+            source: e,
+        })
+    }
+}
+
+// Also implement codec for SubmitSmResponse
+impl Encodable for SubmitSmResponse {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Encode PDU header
+        let header = PduHeader {
+            command_length: 0, // Will be set by the caller
+            command_id: CommandId::SubmitSmResp,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
+
+        // Encode message_id (null-terminated string)
+        buf.extend_from_slice(self.message_id.as_ref());
+        buf.put_u8(0); // null terminator
+
+        Ok(())
+    }
+
+    fn encoded_size(&self) -> usize {
+        PduHeader::SIZE + self.message_id.as_ref().len() + 1 // +1 for null terminator
+    }
+}
+
+impl Decodable for SubmitSmResponse {
+    fn decode(header: PduHeader, buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        Self::validate_header(&header)?;
+
+        // message_id (null-terminated string, max 64 chars + null)
+        let message_id_str = Self::read_c_string(buf, 65, "message_id")?;
+        let message_id = MessageId::try_from(message_id_str.as_str()).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "message_id",
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(Self {
+            command_status: header.command_status,
+            sequence_number: header.sequence_number,
+            message_id,
+        })
+    }
+
+    fn command_id() -> CommandId {
+        CommandId::SubmitSmResp
+    }
+}
+
+impl SubmitSmResponse {
+    /// Helper function to read null-terminated C strings with length limits
+    fn read_c_string(
+        buf: &mut Cursor<&[u8]>,
+        max_len: usize,
+        field_name: &'static str,
+    ) -> Result<String, CodecError> {
+        let mut string_bytes = Vec::new();
+        let mut bytes_read = 0;
+
+        while bytes_read < max_len {
+            if buf.remaining() == 0 {
+                return Err(CodecError::Incomplete);
+            }
+
+            let byte = buf.get_u8();
+            bytes_read += 1;
+
+            if byte == 0 {
+                // Found null terminator
+                break;
+            }
+
+            string_bytes.push(byte);
+        }
+
+        String::from_utf8(string_bytes).map_err(|e| CodecError::Utf8Error {
+            field: field_name,
+            source: e,
+        })
     }
 }
 

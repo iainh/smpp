@@ -22,6 +22,9 @@ name = "send_sms"
 [[example]]
 name = "long_running_client"
 
+[[example]]
+name = "new_codec_example"
+
 [[bench]]
 name = "smpp_benchmarks"
 harness = false
