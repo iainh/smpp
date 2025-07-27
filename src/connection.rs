@@ -242,6 +242,12 @@ impl Connection {
             Frame::CancelSmResp(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
+            Frame::DataSm(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::DataSmResp(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
             Frame::Unbind(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }

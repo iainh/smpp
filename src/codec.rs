@@ -337,6 +337,8 @@ pub enum Frame {
     ReplaceSmResp(crate::datatypes::ReplaceSmResponse),
     CancelSm(crate::datatypes::CancelSm),
     CancelSmResp(crate::datatypes::CancelSmResponse),
+    DataSm(Box<crate::datatypes::DataSm>),
+    DataSmResp(crate::datatypes::DataSmResponse),
     // TODO: Add codec implementations for these PDUs
     // DeliverSm(Box<crate::datatypes::DeliverSm>),
     // DeliverSmResponse(crate::datatypes::DeliverSmResponse),
@@ -394,6 +396,12 @@ impl PduRegistry {
         // Register cancel PDUs
         registry.register_pdu::<crate::datatypes::CancelSm, _>(Frame::CancelSm);
         registry.register_pdu::<crate::datatypes::CancelSmResponse, _>(Frame::CancelSmResp);
+
+        // Register data_sm PDUs
+        registry.register_boxed_pdu::<crate::datatypes::DataSm, _>(|pdu| {
+            Frame::DataSm(Box::new(pdu))
+        });
+        registry.register_pdu::<crate::datatypes::DataSmResponse, _>(Frame::DataSmResp);
 
         registry
     }
@@ -486,6 +494,8 @@ impl Frame {
             Frame::ReplaceSmResp(_) => CommandId::ReplaceSmResp,
             Frame::CancelSm(_) => CommandId::CancelSm,
             Frame::CancelSmResp(_) => CommandId::CancelSmResp,
+            Frame::DataSm(_) => CommandId::DataSm,
+            Frame::DataSmResp(_) => CommandId::DataSmResp,
             Frame::GenericNack(_) => CommandId::GenericNack,
             Frame::Outbind(_) => CommandId::Outbind,
             Frame::Unknown { header, .. } => header.command_id,
@@ -508,6 +518,8 @@ impl Frame {
             Frame::ReplaceSmResp(pdu) => pdu.sequence_number,
             Frame::CancelSm(pdu) => pdu.sequence_number,
             Frame::CancelSmResp(pdu) => pdu.sequence_number,
+            Frame::DataSm(pdu) => pdu.sequence_number,
+            Frame::DataSmResp(pdu) => pdu.sequence_number,
             Frame::GenericNack(pdu) => pdu.sequence_number,
             Frame::Outbind(pdu) => pdu.sequence_number,
             Frame::Unknown { header, .. } => header.sequence_number,

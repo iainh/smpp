@@ -6,6 +6,7 @@ mod cancel_sm;
 mod command_id;
 mod command_status;
 mod data_coding;
+mod data_sm;
 mod datetime;
 mod deliver_sm;
 mod enquire_link;
@@ -52,6 +53,9 @@ pub use bind_transmitter::{
 };
 pub use cancel_sm::{
     CancelSm, CancelSmResponse, CancelSmResponseValidationError, CancelSmValidationError,
+};
+pub use data_sm::{
+    DataSm, DataSmResponse, DataSmResponseValidationError, DataSmValidationError,
 };
 pub use deliver_sm::{DeliverSm, DeliverSmResponse, DeliverSmValidationError};
 pub use enquire_link::{EnquireLink, EnquireLinkResponse};
