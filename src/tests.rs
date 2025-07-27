@@ -861,4 +861,178 @@ mod integration_tests {
             assert_eq!(tlv.value[0], value, "USSD operation {} ({})", value, description);
         }
     }
+
+    #[test]
+    fn test_version_aware_registry_creation() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::InterfaceVersion;
+
+        // Test creating registries for different SMPP versions
+        let v33_registry = PduRegistry::for_version(InterfaceVersion::SmppV33);
+        let v34_registry = PduRegistry::for_version(InterfaceVersion::SmppV34);
+        let v50_registry = PduRegistry::for_version(InterfaceVersion::SmppV50);
+
+        // All registries should have basic PDUs
+        assert!(v33_registry.registered_commands().contains(&crate::datatypes::CommandId::EnquireLink));
+        assert!(v34_registry.registered_commands().contains(&crate::datatypes::CommandId::EnquireLink));
+        assert!(v50_registry.registered_commands().contains(&crate::datatypes::CommandId::EnquireLink));
+
+        // v5.0 registry should have additional capabilities
+        assert_eq!(v50_registry.version(), InterfaceVersion::SmppV50);
+    }
+
+    #[test]
+    fn test_version_detection_from_bind_pdu() {
+        use crate::datatypes::{InterfaceVersion, BindTransmitter, TypeOfNumber, NumericPlanIndicator};
+        use crate::codec::{PduRegistry, Encodable};
+
+        // Create bind PDUs with different interface versions
+        let bind_v34 = BindTransmitter::builder()
+            .sequence_number(1)
+            .system_id("TEST")
+            .password("pass")
+            .system_type("TEST")
+            .interface_version(InterfaceVersion::SmppV34)
+            .addr_ton(TypeOfNumber::International)
+            .addr_npi(NumericPlanIndicator::Isdn)
+            .address_range("")
+            .build();
+
+        let bind_v50 = BindTransmitter::builder()
+            .sequence_number(2)
+            .system_id("TEST")
+            .password("pass")
+            .system_type("TEST")
+            .interface_version(InterfaceVersion::SmppV50)
+            .addr_ton(TypeOfNumber::International)
+            .addr_npi(NumericPlanIndicator::Isdn)
+            .address_range("")
+            .build();
+
+        // Test version detection
+        let v34_version = PduRegistry::detect_version_from_bind(&bind_v34.unwrap().to_bytes());
+        let v50_version = PduRegistry::detect_version_from_bind(&bind_v50.unwrap().to_bytes());
+
+        assert_eq!(v34_version, Some(InterfaceVersion::SmppV34));
+        assert_eq!(v50_version, Some(InterfaceVersion::SmppV50));
+    }
+
+    #[test]
+    fn test_version_aware_registry_fallback() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::InterfaceVersion;
+
+        // Test that v5.0 registry can handle v3.4 PDUs (backward compatibility)
+        let v50_registry = PduRegistry::for_version(InterfaceVersion::SmppV50);
+        
+        // Should be able to decode v3.4 PDUs
+        assert!(v50_registry.supports_version(InterfaceVersion::SmppV34));
+        assert!(v50_registry.supports_version(InterfaceVersion::SmppV33));
+        assert!(v50_registry.supports_version(InterfaceVersion::SmppV50));
+
+        // v3.4 registry should not handle v5.0 specific features
+        let v34_registry = PduRegistry::for_version(InterfaceVersion::SmppV34);
+        assert!(v34_registry.supports_version(InterfaceVersion::SmppV34));
+        assert!(v34_registry.supports_version(InterfaceVersion::SmppV33));
+        assert!(!v34_registry.supports_version(InterfaceVersion::SmppV50));
+    }
+
+    #[test]
+    fn test_version_aware_tlv_handling() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::{InterfaceVersion, tags};
+
+        let v34_registry = PduRegistry::for_version(InterfaceVersion::SmppV34);
+        let v50_registry = PduRegistry::for_version(InterfaceVersion::SmppV50);
+
+        // v3.4 registry should support standard TLVs
+        assert!(v34_registry.supports_tlv(tags::USER_MESSAGE_REFERENCE));
+        assert!(v34_registry.supports_tlv(tags::SOURCE_PORT));
+        assert!(v34_registry.supports_tlv(tags::MESSAGE_PAYLOAD));
+
+        // v3.4 registry should not support v5.0 TLVs
+        assert!(!v34_registry.supports_tlv(tags::CONGESTION_STATE));
+        assert!(!v34_registry.supports_tlv(tags::BILLING_IDENTIFICATION));
+
+        // v5.0 registry should support both v3.4 and v5.0 TLVs
+        assert!(v50_registry.supports_tlv(tags::USER_MESSAGE_REFERENCE));
+        assert!(v50_registry.supports_tlv(tags::CONGESTION_STATE));
+        assert!(v50_registry.supports_tlv(tags::BILLING_IDENTIFICATION));
+        assert!(v50_registry.supports_tlv(tags::SOURCE_NETWORK_ID));
+    }
+
+    #[test]
+    fn test_auto_version_detection() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::{InterfaceVersion, EnquireLink};
+        use crate::codec::Encodable;
+
+        // Test auto-detection with a basic PDU
+        let enquire = EnquireLink::new(1);
+        let _bytes = enquire.to_bytes();
+
+        // Should start with default v3.4 registry
+        let mut registry = PduRegistry::new();
+        assert_eq!(registry.version(), InterfaceVersion::SmppV34);
+
+        // Should be able to upgrade to v5.0 when needed
+        registry.upgrade_to_version(InterfaceVersion::SmppV50);
+        assert_eq!(registry.version(), InterfaceVersion::SmppV50);
+
+        // Should not downgrade from v5.0 to v3.4 (preserve capabilities)
+        registry.upgrade_to_version(InterfaceVersion::SmppV34);
+        assert_eq!(registry.version(), InterfaceVersion::SmppV50);
+    }
+
+    #[test]
+    fn test_version_negotiation_logic() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::InterfaceVersion;
+
+        // Test version negotiation helper methods
+        let negotiated = PduRegistry::negotiate_version(
+            InterfaceVersion::SmppV50, 
+            InterfaceVersion::SmppV34
+        );
+        // Should negotiate down to the common version
+        assert_eq!(negotiated, InterfaceVersion::SmppV34);
+
+        let negotiated = PduRegistry::negotiate_version(
+            InterfaceVersion::SmppV34, 
+            InterfaceVersion::SmppV50
+        );
+        // Should negotiate to the common version
+        assert_eq!(negotiated, InterfaceVersion::SmppV34);
+
+        let negotiated = PduRegistry::negotiate_version(
+            InterfaceVersion::SmppV50, 
+            InterfaceVersion::SmppV50
+        );
+        // Both support v5.0, should use v5.0
+        assert_eq!(negotiated, InterfaceVersion::SmppV50);
+    }
+
+    #[test]
+    fn test_registry_version_specific_features() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::InterfaceVersion;
+
+        let v34_registry = PduRegistry::for_version(InterfaceVersion::SmppV34);
+        let v50_registry = PduRegistry::for_version(InterfaceVersion::SmppV50);
+
+        // v3.4 features
+        assert!(v34_registry.supports_feature("submit_sm"));
+        assert!(v34_registry.supports_feature("deliver_sm"));
+        assert!(v34_registry.supports_feature("submit_multi"));
+
+        // v5.0 specific features
+        assert!(!v34_registry.supports_feature("congestion_control"));
+        assert!(!v34_registry.supports_feature("broadcast_sm"));
+        assert!(!v34_registry.supports_feature("enhanced_billing"));
+
+        // v5.0 registry should support all features
+        assert!(v50_registry.supports_feature("submit_sm"));
+        assert!(v50_registry.supports_feature("congestion_control"));
+        assert!(v50_registry.supports_feature("enhanced_billing"));
+    }
 }

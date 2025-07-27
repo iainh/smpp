@@ -362,62 +362,122 @@ type DecoderFn =
 
 pub struct PduRegistry {
     decoders: HashMap<CommandId, DecoderFn>,
+    version: crate::datatypes::InterfaceVersion,
+    supported_tlvs: std::collections::HashSet<u16>,
 }
 
 impl PduRegistry {
     /// Create a new registry with standard SMPP v3.4 PDUs registered
     pub fn new() -> Self {
+        Self::for_version(crate::datatypes::InterfaceVersion::SmppV34)
+    }
+
+    /// Create a registry for a specific SMPP version
+    pub fn for_version(version: crate::datatypes::InterfaceVersion) -> Self {
         let mut registry = Self {
             decoders: HashMap::new(),
+            version,
+            supported_tlvs: std::collections::HashSet::new(),
         };
 
-        // Register simple PDUs
-        registry.register_pdu::<crate::datatypes::EnquireLink, _>(Frame::EnquireLink);
-        registry.register_pdu::<crate::datatypes::EnquireLinkResponse, _>(Frame::EnquireLinkResp);
-        registry.register_pdu::<crate::datatypes::Unbind, _>(Frame::Unbind);
-        registry.register_pdu::<crate::datatypes::UnbindResponse, _>(Frame::UnbindResp);
-        registry.register_pdu::<crate::datatypes::GenericNack, _>(Frame::GenericNack);
-        registry.register_pdu::<crate::datatypes::Outbind, _>(Frame::Outbind);
-
-        // Register bind PDUs
-        registry.register_pdu::<crate::datatypes::BindTransmitter, _>(Frame::BindTransmitter);
-
-        // Register message PDUs (boxed for large structs)
-        registry.register_boxed_pdu::<crate::datatypes::SubmitSm, _>(|pdu| {
-            Frame::SubmitSm(Box::new(pdu))
-        });
-        registry.register_pdu::<crate::datatypes::SubmitSmResponse, _>(Frame::SubmitSmResp);
-
-        // Register submit_multi PDUs
-        registry.register_boxed_pdu::<crate::datatypes::SubmitMulti, _>(|pdu| {
-            Frame::SubmitMulti(Box::new(pdu))
-        });
-        registry.register_pdu::<crate::datatypes::SubmitMultiResponse, _>(Frame::SubmitMultiResp);
-
-        // Register query PDUs
-        registry.register_pdu::<crate::datatypes::QuerySm, _>(Frame::QuerySm);
-        registry.register_pdu::<crate::datatypes::QuerySmResponse, _>(Frame::QuerySmResp);
-
-        // Register replace PDUs
-        registry.register_boxed_pdu::<crate::datatypes::ReplaceSm, _>(|pdu| {
-            Frame::ReplaceSm(Box::new(pdu))
-        });
-        registry.register_pdu::<crate::datatypes::ReplaceSmResponse, _>(Frame::ReplaceSmResp);
-
-        // Register cancel PDUs
-        registry.register_pdu::<crate::datatypes::CancelSm, _>(Frame::CancelSm);
-        registry.register_pdu::<crate::datatypes::CancelSmResponse, _>(Frame::CancelSmResp);
-
-        // Register data_sm PDUs
-        registry.register_boxed_pdu::<crate::datatypes::DataSm, _>(|pdu| {
-            Frame::DataSm(Box::new(pdu))
-        });
-        registry.register_pdu::<crate::datatypes::DataSmResponse, _>(Frame::DataSmResp);
-
-        // Register notification PDUs
-        registry.register_pdu::<crate::datatypes::AlertNotification, _>(Frame::AlertNotification);
+        // Initialize supported TLVs based on version
+        registry.initialize_supported_tlvs();
+        registry.register_pdus_for_version();
 
         registry
+    }
+
+    /// Initialize supported TLVs based on SMPP version
+    fn initialize_supported_tlvs(&mut self) {
+        use crate::datatypes::tags;
+
+        // Add standard v3.4 TLVs
+        self.supported_tlvs.insert(tags::USER_MESSAGE_REFERENCE);
+        self.supported_tlvs.insert(tags::SOURCE_PORT);
+        self.supported_tlvs.insert(tags::DESTINATION_PORT);
+        self.supported_tlvs.insert(tags::SAR_MSG_REF_NUM);
+        self.supported_tlvs.insert(tags::SAR_TOTAL_SEGMENTS);
+        self.supported_tlvs.insert(tags::SAR_SEGMENT_SEQNUM);
+        self.supported_tlvs.insert(tags::MORE_MESSAGES_TO_SEND);
+        self.supported_tlvs.insert(tags::PAYLOAD_TYPE);
+        self.supported_tlvs.insert(tags::MESSAGE_PAYLOAD);
+        self.supported_tlvs.insert(tags::PRIVACY_INDICATOR);
+        self.supported_tlvs.insert(tags::CALLBACK_NUM);
+        self.supported_tlvs.insert(tags::SOURCE_SUBADDRESS);
+        self.supported_tlvs.insert(tags::DEST_SUBADDRESS);
+        self.supported_tlvs.insert(tags::DISPLAY_TIME);
+        self.supported_tlvs.insert(tags::SMS_SIGNAL);
+        self.supported_tlvs.insert(tags::MS_VALIDITY);
+        self.supported_tlvs.insert(tags::MS_MSG_WAIT_FACILITIES);
+        self.supported_tlvs.insert(tags::NUMBER_OF_MESSAGES);
+        self.supported_tlvs.insert(tags::ALERT_ON_MSG_DELIVERY);
+        self.supported_tlvs.insert(tags::LANGUAGE_INDICATOR);
+        self.supported_tlvs.insert(tags::ITS_REPLY_TYPE);
+        self.supported_tlvs.insert(tags::ITS_SESSION_INFO);
+        self.supported_tlvs.insert(tags::USSD_SERVICE_OP);
+
+        // Add v5.0 specific TLVs
+        if matches!(self.version, crate::datatypes::InterfaceVersion::SmppV50) {
+            self.supported_tlvs.insert(tags::CONGESTION_STATE);
+            self.supported_tlvs.insert(tags::BILLING_IDENTIFICATION);
+            self.supported_tlvs.insert(tags::SOURCE_NETWORK_ID);
+            self.supported_tlvs.insert(tags::DEST_NETWORK_ID);
+            self.supported_tlvs.insert(tags::SOURCE_NODE_ID);
+            self.supported_tlvs.insert(tags::DEST_NODE_ID);
+        }
+    }
+
+    /// Register PDUs based on SMPP version
+    fn register_pdus_for_version(&mut self) {
+        // Register simple PDUs (common to all versions)
+        self.register_pdu::<crate::datatypes::EnquireLink, _>(Frame::EnquireLink);
+        self.register_pdu::<crate::datatypes::EnquireLinkResponse, _>(Frame::EnquireLinkResp);
+        self.register_pdu::<crate::datatypes::Unbind, _>(Frame::Unbind);
+        self.register_pdu::<crate::datatypes::UnbindResponse, _>(Frame::UnbindResp);
+        self.register_pdu::<crate::datatypes::GenericNack, _>(Frame::GenericNack);
+        self.register_pdu::<crate::datatypes::Outbind, _>(Frame::Outbind);
+
+        // Register bind PDUs
+        self.register_pdu::<crate::datatypes::BindTransmitter, _>(Frame::BindTransmitter);
+
+        // Register message PDUs (boxed for large structs)
+        self.register_boxed_pdu::<crate::datatypes::SubmitSm, _>(|pdu| {
+            Frame::SubmitSm(Box::new(pdu))
+        });
+        self.register_pdu::<crate::datatypes::SubmitSmResponse, _>(Frame::SubmitSmResp);
+
+        // Register submit_multi PDUs
+        self.register_boxed_pdu::<crate::datatypes::SubmitMulti, _>(|pdu| {
+            Frame::SubmitMulti(Box::new(pdu))
+        });
+        self.register_pdu::<crate::datatypes::SubmitMultiResponse, _>(Frame::SubmitMultiResp);
+
+        // Register query PDUs
+        self.register_pdu::<crate::datatypes::QuerySm, _>(Frame::QuerySm);
+        self.register_pdu::<crate::datatypes::QuerySmResponse, _>(Frame::QuerySmResp);
+
+        // Register replace PDUs
+        self.register_boxed_pdu::<crate::datatypes::ReplaceSm, _>(|pdu| {
+            Frame::ReplaceSm(Box::new(pdu))
+        });
+        self.register_pdu::<crate::datatypes::ReplaceSmResponse, _>(Frame::ReplaceSmResp);
+
+        // Register cancel PDUs
+        self.register_pdu::<crate::datatypes::CancelSm, _>(Frame::CancelSm);
+        self.register_pdu::<crate::datatypes::CancelSmResponse, _>(Frame::CancelSmResp);
+
+        // Register data_sm PDUs
+        self.register_boxed_pdu::<crate::datatypes::DataSm, _>(|pdu| {
+            Frame::DataSm(Box::new(pdu))
+        });
+        self.register_pdu::<crate::datatypes::DataSmResponse, _>(Frame::DataSmResp);
+
+        // Register notification PDUs
+        self.register_pdu::<crate::datatypes::AlertNotification, _>(Frame::AlertNotification);
+
+        // Register v5.0 specific PDUs
+        // Note: v5.0 PDUs like broadcast_sm would be registered here
+        // when they are implemented in future phases
     }
 
     /// Register a simple PDU type (no boxing required)
@@ -477,6 +537,123 @@ impl PduRegistry {
     /// Check if a command_id is registered
     pub fn is_registered(&self, command_id: CommandId) -> bool {
         self.decoders.contains_key(&command_id)
+    }
+
+    /// Get the SMPP version this registry is configured for
+    pub fn version(&self) -> crate::datatypes::InterfaceVersion {
+        self.version
+    }
+
+    /// Check if this registry supports a specific SMPP version
+    pub fn supports_version(&self, version: crate::datatypes::InterfaceVersion) -> bool {
+        match (self.version, version) {
+            // v5.0 registry can handle all previous versions
+            (crate::datatypes::InterfaceVersion::SmppV50, _) => true,
+            // v3.4 registry can handle v3.3 and v3.4
+            (crate::datatypes::InterfaceVersion::SmppV34, crate::datatypes::InterfaceVersion::SmppV33) => true,
+            (crate::datatypes::InterfaceVersion::SmppV34, crate::datatypes::InterfaceVersion::SmppV34) => true,
+            // v3.3 registry only handles v3.3
+            (crate::datatypes::InterfaceVersion::SmppV33, crate::datatypes::InterfaceVersion::SmppV33) => true,
+            // Any other combination is not supported
+            _ => false,
+        }
+    }
+
+    /// Check if this registry supports a specific TLV tag
+    pub fn supports_tlv(&self, tag: u16) -> bool {
+        self.supported_tlvs.contains(&tag)
+    }
+
+    /// Check if this registry supports a specific feature
+    pub fn supports_feature(&self, feature: &str) -> bool {
+        match feature {
+            // Core v3.4 features
+            "submit_sm" | "deliver_sm" | "submit_multi" | "query_sm" | "replace_sm" | "cancel_sm" | "data_sm" => true,
+            // v5.0 specific features
+            "congestion_control" | "enhanced_billing" => {
+                matches!(self.version, crate::datatypes::InterfaceVersion::SmppV50)
+            }
+            "broadcast_sm" => {
+                // Future v5.0 feature - not yet implemented
+                false
+            }
+            _ => false,
+        }
+    }
+
+    /// Upgrade this registry to support a higher SMPP version
+    /// Note: Does not downgrade - preserves existing capabilities
+    pub fn upgrade_to_version(&mut self, version: crate::datatypes::InterfaceVersion) {
+        // Only upgrade to higher versions, never downgrade
+        let should_upgrade = match (self.version, version) {
+            (crate::datatypes::InterfaceVersion::SmppV33, crate::datatypes::InterfaceVersion::SmppV34) => true,
+            (crate::datatypes::InterfaceVersion::SmppV33, crate::datatypes::InterfaceVersion::SmppV50) => true,
+            (crate::datatypes::InterfaceVersion::SmppV34, crate::datatypes::InterfaceVersion::SmppV50) => true,
+            _ => false,
+        };
+
+        if should_upgrade {
+            self.version = version;
+            // Re-initialize TLVs to include new version capabilities
+            self.supported_tlvs.clear();
+            self.initialize_supported_tlvs();
+        }
+    }
+
+    /// Detect SMPP version from a bind PDU
+    pub fn detect_version_from_bind(pdu_bytes: &[u8]) -> Option<crate::datatypes::InterfaceVersion> {
+        use std::io::Cursor;
+        
+        // Minimum PDU size check (header + interface_version field)
+        if pdu_bytes.len() < 16 + 15 + 9 + 13 + 1 {  // header + system_id + password + system_type + interface_version
+            return None;
+        }
+
+        let mut cursor = Cursor::new(pdu_bytes);
+        
+        // Skip PDU header (16 bytes)
+        cursor.set_position(16);
+        
+        // Skip system_id (16 bytes with null terminator)
+        cursor.set_position(cursor.position() + 16);
+        
+        // Skip password (9 bytes with null terminator)
+        cursor.set_position(cursor.position() + 9);
+        
+        // Skip system_type (13 bytes with null terminator)
+        cursor.set_position(cursor.position() + 13);
+        
+        // Read interface_version (1 byte)
+        if cursor.position() < pdu_bytes.len() as u64 {
+            let interface_version = pdu_bytes[cursor.position() as usize];
+            crate::datatypes::InterfaceVersion::try_from(interface_version).ok()
+        } else {
+            None
+        }
+    }
+
+    /// Negotiate the highest common SMPP version between two versions
+    pub fn negotiate_version(
+        version1: crate::datatypes::InterfaceVersion,
+        version2: crate::datatypes::InterfaceVersion,
+    ) -> crate::datatypes::InterfaceVersion {
+        use crate::datatypes::InterfaceVersion;
+        
+        match (version1, version2) {
+            (InterfaceVersion::SmppV50, InterfaceVersion::SmppV50) => InterfaceVersion::SmppV50,
+            (InterfaceVersion::SmppV34, InterfaceVersion::SmppV34) => InterfaceVersion::SmppV34,
+            (InterfaceVersion::SmppV33, InterfaceVersion::SmppV33) => InterfaceVersion::SmppV33,
+            
+            // Mixed versions - negotiate to the lower common version
+            (InterfaceVersion::SmppV50, InterfaceVersion::SmppV34) |
+            (InterfaceVersion::SmppV34, InterfaceVersion::SmppV50) => InterfaceVersion::SmppV34,
+            
+            (InterfaceVersion::SmppV50, InterfaceVersion::SmppV33) |
+            (InterfaceVersion::SmppV33, InterfaceVersion::SmppV50) => InterfaceVersion::SmppV33,
+            
+            (InterfaceVersion::SmppV34, InterfaceVersion::SmppV33) |
+            (InterfaceVersion::SmppV33, InterfaceVersion::SmppV34) => InterfaceVersion::SmppV33,
+        }
     }
 
     /// Get all registered command_ids
