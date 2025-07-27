@@ -345,6 +345,9 @@ pub enum Frame {
     // DeliverSm(Box<crate::datatypes::DeliverSm>),
     // DeliverSmResponse(crate::datatypes::DeliverSmResponse),
 
+    // Notification PDUs
+    AlertNotification(crate::datatypes::AlertNotification),
+
     // Special PDUs
     GenericNack(crate::datatypes::GenericNack),
     Outbind(crate::datatypes::Outbind),
@@ -410,6 +413,9 @@ impl PduRegistry {
             Frame::DataSm(Box::new(pdu))
         });
         registry.register_pdu::<crate::datatypes::DataSmResponse, _>(Frame::DataSmResp);
+
+        // Register notification PDUs
+        registry.register_pdu::<crate::datatypes::AlertNotification, _>(Frame::AlertNotification);
 
         registry
     }
@@ -506,6 +512,7 @@ impl Frame {
             Frame::CancelSmResp(_) => CommandId::CancelSmResp,
             Frame::DataSm(_) => CommandId::DataSm,
             Frame::DataSmResp(_) => CommandId::DataSmResp,
+            Frame::AlertNotification(_) => CommandId::AlertNotification,
             Frame::GenericNack(_) => CommandId::GenericNack,
             Frame::Outbind(_) => CommandId::Outbind,
             Frame::Unknown { header, .. } => header.command_id,
@@ -532,6 +539,7 @@ impl Frame {
             Frame::CancelSmResp(pdu) => pdu.sequence_number,
             Frame::DataSm(pdu) => pdu.sequence_number,
             Frame::DataSmResp(pdu) => pdu.sequence_number,
+            Frame::AlertNotification(pdu) => pdu.sequence_number,
             Frame::GenericNack(pdu) => pdu.sequence_number,
             Frame::Outbind(pdu) => pdu.sequence_number,
             Frame::Unknown { header, .. } => header.sequence_number,

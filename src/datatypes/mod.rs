@@ -1,4 +1,5 @@
 mod address;
+mod alert_notification;
 mod bind_receiver;
 mod bind_transceiver;
 mod bind_transmitter;
@@ -27,6 +28,7 @@ mod type_of_number;
 mod unbind;
 
 pub use address::{AddressError, AlphanumericAddress, DestinationAddr, PhoneNumber, SourceAddr};
+pub use alert_notification::{AlertNotification, AlertNotificationValidationError};
 pub(crate) use command_id::CommandId;
 pub use command_status::CommandStatus;
 pub use data_coding::{DataCoding, DataCodingError, MessageClass};
