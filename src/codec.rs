@@ -348,6 +348,10 @@ pub enum Frame {
     // Notification PDUs
     AlertNotification(crate::datatypes::AlertNotification),
 
+    // SMPP v5.0 Broadcast PDUs
+    BroadcastSm(Box<crate::datatypes::BroadcastSm>),
+    BroadcastSmResp(crate::datatypes::BroadcastSmResponse),
+
     // Special PDUs
     GenericNack(crate::datatypes::GenericNack),
     Outbind(crate::datatypes::Outbind),
@@ -476,8 +480,12 @@ impl PduRegistry {
         self.register_pdu::<crate::datatypes::AlertNotification, _>(Frame::AlertNotification);
 
         // Register v5.0 specific PDUs
-        // Note: v5.0 PDUs like broadcast_sm would be registered here
-        // when they are implemented in future phases
+        if matches!(self.version, crate::datatypes::InterfaceVersion::SmppV50) {
+            self.register_boxed_pdu::<crate::datatypes::BroadcastSm, _>(|pdu| {
+                Frame::BroadcastSm(Box::new(pdu))
+            });
+            self.register_pdu::<crate::datatypes::BroadcastSmResponse, _>(Frame::BroadcastSmResp);
+        }
     }
 
     /// Register a simple PDU type (no boxing required)
@@ -574,8 +582,7 @@ impl PduRegistry {
                 matches!(self.version, crate::datatypes::InterfaceVersion::SmppV50)
             }
             "broadcast_sm" => {
-                // Future v5.0 feature - not yet implemented
-                false
+                matches!(self.version, crate::datatypes::InterfaceVersion::SmppV50)
             }
             _ => false,
         }
@@ -690,6 +697,8 @@ impl Frame {
             Frame::DataSm(_) => CommandId::DataSm,
             Frame::DataSmResp(_) => CommandId::DataSmResp,
             Frame::AlertNotification(_) => CommandId::AlertNotification,
+            Frame::BroadcastSm(_) => CommandId::BroadcastSm,
+            Frame::BroadcastSmResp(_) => CommandId::BroadcastSmResp,
             Frame::GenericNack(_) => CommandId::GenericNack,
             Frame::Outbind(_) => CommandId::Outbind,
             Frame::Unknown { header, .. } => header.command_id,
@@ -717,6 +726,8 @@ impl Frame {
             Frame::DataSm(pdu) => pdu.sequence_number,
             Frame::DataSmResp(pdu) => pdu.sequence_number,
             Frame::AlertNotification(pdu) => pdu.sequence_number,
+            Frame::BroadcastSm(pdu) => pdu.sequence_number,
+            Frame::BroadcastSmResp(pdu) => pdu.sequence_number,
             Frame::GenericNack(pdu) => pdu.sequence_number,
             Frame::Outbind(pdu) => pdu.sequence_number,
             Frame::Unknown { header, .. } => header.sequence_number,

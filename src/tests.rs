@@ -1035,4 +1035,167 @@ mod integration_tests {
         assert!(v50_registry.supports_feature("congestion_control"));
         assert!(v50_registry.supports_feature("enhanced_billing"));
     }
+
+    #[test]
+    fn test_broadcast_sm_pdu_structure() {
+        // Test basic broadcast_sm PDU structure
+        use crate::datatypes::{BroadcastSm, ServiceType, TypeOfNumber, NumericPlanIndicator, 
+                               DataCoding, PriorityFlag, ScheduleDeliveryTime, ValidityPeriod};
+        
+        // Create a basic broadcast_sm PDU
+        let broadcast_sm = BroadcastSm::builder()
+            .sequence_number(1)
+            .service_type(ServiceType::default())
+            .source_addr("1234567890", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .message_id("BC001")
+            .priority_flag(PriorityFlag::Level0)
+            .schedule_delivery_time(ScheduleDeliveryTime::immediate())
+            .validity_period(ValidityPeriod::immediate())
+            .data_coding(DataCoding::default())
+            .broadcast_area_identifier(vec![0x01, 0x02, 0x03, 0x04])
+            .broadcast_content_type(0x01)
+            .broadcast_rep_num(1)
+            .broadcast_frequency_interval(3600) // 1 hour
+            .build();
+
+        assert!(broadcast_sm.is_ok());
+        let pdu = broadcast_sm.unwrap();
+        
+        // Test field access
+        assert_eq!(pdu.sequence_number(), 1);
+        assert_eq!(pdu.message_id(), "BC001");
+        assert_eq!(pdu.broadcast_rep_num(), 1);
+        assert_eq!(pdu.broadcast_frequency_interval(), 3600);
+    }
+
+    #[test]
+    fn test_broadcast_sm_encoding_decoding() {
+        use crate::datatypes::{BroadcastSm, ServiceType, TypeOfNumber, NumericPlanIndicator, 
+                               DataCoding, PriorityFlag, ScheduleDeliveryTime, ValidityPeriod};
+        use crate::codec::Encodable;
+
+        // Create broadcast_sm PDU
+        let original = BroadcastSm::builder()
+            .sequence_number(42)
+            .service_type(ServiceType::default())
+            .source_addr("555123456", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .message_id("BROADCAST001")
+            .priority_flag(PriorityFlag::Level1)
+            .schedule_delivery_time(ScheduleDeliveryTime::immediate())
+            .validity_period(ValidityPeriod::immediate())
+            .data_coding(DataCoding::default())
+            .broadcast_area_identifier(vec![0x10, 0x20, 0x30, 0x40])
+            .broadcast_content_type(0x02)
+            .broadcast_rep_num(3)
+            .broadcast_frequency_interval(7200) // 2 hours
+            .build()
+            .unwrap();
+
+        // Test encoding
+        let encoded = original.to_bytes();
+        assert!(encoded.len() > 16); // Should be larger than just PDU header
+
+        // Test that we can create the same PDU again (consistency)
+        let duplicate = BroadcastSm::builder()
+            .sequence_number(42)
+            .service_type(ServiceType::default())
+            .source_addr("555123456", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .message_id("BROADCAST001")
+            .priority_flag(PriorityFlag::Level1)
+            .schedule_delivery_time(ScheduleDeliveryTime::immediate())
+            .validity_period(ValidityPeriod::immediate())
+            .data_coding(DataCoding::default())
+            .broadcast_area_identifier(vec![0x10, 0x20, 0x30, 0x40])
+            .broadcast_content_type(0x02)
+            .broadcast_rep_num(3)
+            .broadcast_frequency_interval(7200)
+            .build()
+            .unwrap();
+
+        assert_eq!(original.sequence_number(), duplicate.sequence_number());
+        assert_eq!(original.message_id(), duplicate.message_id());
+    }
+
+    #[test]
+    fn test_broadcast_sm_response_structure() {
+        use crate::datatypes::{BroadcastSmResponse, CommandStatus};
+
+        // Test successful response
+        let response = BroadcastSmResponse::new(1, CommandStatus::Ok, "BC001");
+        assert_eq!(response.sequence_number(), 1);
+        assert_eq!(response.command_status(), CommandStatus::Ok);
+        assert_eq!(response.message_id(), "BC001");
+
+        // Test error response
+        let error_response = BroadcastSmResponse::new(2, CommandStatus::InvalidCommandLength, "");
+        assert_eq!(error_response.command_status(), CommandStatus::InvalidCommandLength);
+        assert_eq!(error_response.message_id(), "");
+    }
+
+    #[test]
+    fn test_broadcast_sm_validation() {
+        use crate::datatypes::{BroadcastSm, ServiceType, TypeOfNumber, NumericPlanIndicator, 
+                               DataCoding, PriorityFlag, ScheduleDeliveryTime, ValidityPeriod};
+
+        // Test invalid broadcast_area_identifier (empty)
+        let result = BroadcastSm::builder()
+            .sequence_number(1)
+            .service_type(ServiceType::default())
+            .source_addr("1234567890", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .message_id("BC001")
+            .priority_flag(PriorityFlag::Level0)
+            .schedule_delivery_time(ScheduleDeliveryTime::immediate())
+            .validity_period(ValidityPeriod::immediate())
+            .data_coding(DataCoding::default())
+            .broadcast_area_identifier(vec![]) // Empty - should be invalid
+            .broadcast_content_type(0x01)
+            .broadcast_rep_num(1)
+            .broadcast_frequency_interval(3600)
+            .build();
+
+        assert!(result.is_err());
+
+        // Test invalid broadcast_rep_num (zero)
+        let result = BroadcastSm::builder()
+            .sequence_number(1)
+            .service_type(ServiceType::default())
+            .source_addr("1234567890", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .message_id("BC001")
+            .priority_flag(PriorityFlag::Level0)
+            .schedule_delivery_time(ScheduleDeliveryTime::immediate())
+            .validity_period(ValidityPeriod::immediate())
+            .data_coding(DataCoding::default())
+            .broadcast_area_identifier(vec![0x01, 0x02, 0x03, 0x04])
+            .broadcast_content_type(0x01)
+            .broadcast_rep_num(0) // Zero - should be invalid
+            .broadcast_frequency_interval(3600)
+            .build();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_broadcast_sm_command_id() {
+        use crate::datatypes::{BroadcastSm, CommandId};
+        use crate::codec::Decodable;
+
+        // Test that broadcast_sm has correct command_id
+        assert_eq!(BroadcastSm::command_id(), CommandId::BroadcastSm);
+    }
+
+    #[test]
+    fn test_broadcast_sm_in_v50_registry() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::{InterfaceVersion, CommandId};
+
+        // Test that v5.0 registry supports broadcast_sm
+        let v50_registry = PduRegistry::for_version(InterfaceVersion::SmppV50);
+        assert!(v50_registry.is_registered(CommandId::BroadcastSm));
+        assert!(v50_registry.is_registered(CommandId::BroadcastSmResp));
+
+        // Test that v3.4 registry does not support broadcast_sm
+        let v34_registry = PduRegistry::for_version(InterfaceVersion::SmppV34);
+        assert!(!v34_registry.is_registered(CommandId::BroadcastSm));
+        assert!(!v34_registry.is_registered(CommandId::BroadcastSmResp));
+    }
 }

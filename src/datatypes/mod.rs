@@ -3,6 +3,7 @@ mod alert_notification;
 mod bind_receiver;
 mod bind_transceiver;
 mod bind_transmitter;
+mod broadcast_sm;
 mod cancel_sm;
 mod command_id;
 mod command_status;
@@ -53,6 +54,9 @@ pub use bind_transceiver::{
 };
 pub use bind_transmitter::{
     BindTransmitter, BindTransmitterResponse, BindTransmitterValidationError,
+};
+pub use broadcast_sm::{
+    BroadcastSm, BroadcastSmResponse, BroadcastSmValidationError,
 };
 pub use cancel_sm::{
     CancelSm, CancelSmResponse, CancelSmResponseValidationError, CancelSmValidationError,

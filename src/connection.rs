@@ -257,6 +257,12 @@ impl Connection {
             Frame::AlertNotification(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
+            Frame::BroadcastSm(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::BroadcastSmResp(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
             Frame::Unbind(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }

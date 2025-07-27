@@ -123,6 +123,13 @@ pub enum CommandId {
     DataSm = 0x0000_0103,
     /// data_sm_resp PDU (Section 4.12.3) - Response to data_sm
     DataSmResp = 0x8000_0103,
+
+    // SMPP v5.0 Broadcast Operations
+    /// broadcast_sm PDU (SMPP v5.0) - Broadcast message to multiple recipients
+    BroadcastSm = 0x0000_0111,
+    /// broadcast_sm_resp PDU (SMPP v5.0) - Response to broadcast_sm
+    BroadcastSmResp = 0x8000_0111,
+
     // Reserved for SMPP extension
     //          0x00000104 - 0x0000FFFF
     //          0x80000104 - 0x8000FFFF
