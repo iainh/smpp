@@ -1,8 +1,8 @@
 //! Integration tests for SMPP PDU encoding and decoding
 
+use crate::codec::Encodable;
 use crate::datatypes::*;
 use crate::frame::{Error as FrameError, Frame};
-use crate::codec::Encodable;
 use std::io::Cursor;
 
 #[cfg(test)]

@@ -1,11 +1,10 @@
+use crate::codec::{CodecError, Encodable, PduHeader, encode_cstring, encode_u8};
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
     CommandId, CommandStatus, DataCoding, DestinationAddr, EsmClass, MessageId,
-    ScheduleDeliveryTime, ServiceType, ShortMessage, SourceAddr, TypeOfNumber,
-    ValidityPeriod,
+    ScheduleDeliveryTime, ServiceType, ShortMessage, SourceAddr, TypeOfNumber, ValidityPeriod,
 };
-use crate::codec::{CodecError, Encodable, PduHeader, encode_cstring, encode_u8};
 use bytes::BytesMut;
 
 /// This operation is used by the SMSC to deliver a short message to an ESME.
@@ -444,8 +443,6 @@ pub struct DeliverSmResponse {
     pub message_id: MessageId,
 }
 
-
-
 // New codec trait implementations
 
 impl Encodable for DeliverSm {
@@ -483,7 +480,7 @@ impl Encodable for DeliverSm {
         encode_u8(buf, self.data_coding.to_byte());
         encode_u8(buf, self.sm_default_msg_id);
         encode_u8(buf, self.sm_length);
-        
+
         // Encode short_message (variable length up to sm_length)
         let message_bytes = self.short_message.as_bytes();
         buf.extend_from_slice(&message_bytes[..(self.sm_length as usize).min(message_bytes.len())]);
@@ -561,10 +558,10 @@ impl Encodable for DeliverSm {
 
     fn encoded_size(&self) -> usize {
         let mut size = PduHeader::SIZE;
-        
+
         // Fixed mandatory fields
         size += 6 + 1 + 1 + 21 + 1 + 1 + 21 + 1 + 1 + 1 + 17 + 17 + 1 + 1 + 1 + 1 + 1;
-        
+
         // Variable short_message length
         size += self.sm_length as usize;
 

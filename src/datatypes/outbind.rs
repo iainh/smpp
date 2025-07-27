@@ -55,7 +55,6 @@ impl Outbind {
     }
 }
 
-
 // New codec trait implementations
 
 impl Decodable for Outbind {

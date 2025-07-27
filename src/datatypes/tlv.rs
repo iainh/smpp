@@ -59,7 +59,6 @@ pub struct Tlv {
     pub value: Bytes,
 }
 
-
 // Codec trait implementations for TLV
 impl Encodable for Tlv {
     fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {

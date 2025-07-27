@@ -548,7 +548,6 @@ pub struct SubmitSmResponse {
     pub message_id: MessageId,
 }
 
-
 // Codec trait implementations for new SMPP codec system
 impl Encodable for SubmitSm {
     fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
@@ -601,7 +600,8 @@ impl Encodable for SubmitSm {
 
         // Encode all optional TLV parameters using macro
         encode_optional_tlvs!(
-            self, buf,
+            self,
+            buf,
             user_message_reference,
             source_port,
             source_addr_submit,
@@ -657,7 +657,8 @@ impl Encodable for SubmitSm {
 
         // Optional TLV fields - calculate sizes using macro
         size_optional_tlvs!(
-            size, self,
+            size,
+            self,
             user_message_reference,
             source_port,
             source_addr_submit,
@@ -1310,7 +1311,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Cannot use both short_message and message_payload - they are mutually exclusive")]
+    #[should_panic(
+        expected = "Cannot use both short_message and message_payload - they are mutually exclusive"
+    )]
     fn submit_sm_validation_mutual_exclusivity() {
         use bytes::Bytes;
 
