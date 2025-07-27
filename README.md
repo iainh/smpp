@@ -8,12 +8,24 @@ This library provides a complete implementation of SMPP v3.4 for building SMS ap
 
 ### Key Features
 
-- **Full SMPP v3.4 Compliance**: Implements all core PDUs per specification sections 4.1-4.12
+- **Complete SMPP v3.4 Compliance**: All 26 PDU types implemented per specification sections 4.1-4.12
 - **Type Safety**: Strongly-typed fields with compile-time validation
 - **High Performance**: Zero-allocation parsing with <200ns PDU processing
 - **Async/Await Support**: Built on Tokio for modern Rust async ecosystem
 - **Comprehensive Validation**: Protocol-level validation per SMPP specification
-- **Production Ready**: Extensive testing and benchmarking
+- **Consistent API**: Clean, intuitive method naming without unnecessary prefixes
+- **Production Ready**: Extensive testing and benchmarking with 210+ test cases
+
+## What's New in Version 0.3.0
+
+This release achieves **100% SMPP v3.4 specification compliance** with significant improvements:
+
+- **Complete PDU Coverage**: All 26 PDU types now implemented including `submit_multi`, `data_sm`, `query_sm`, `cancel_sm`, `replace_sm`, and `alert_notification`
+- **Enhanced TLV Support**: Comprehensive support for optional TLV parameters across all PDUs
+- **API Consistency**: Removed `get_` prefixes from accessor methods for cleaner, more idiomatic Rust code
+- **Improved Documentation**: Fixed macro documentation and enhanced code examples
+- **Robust Validation**: Enhanced field validation and error handling throughout the protocol stack
+- **Performance Optimizations**: Continued sub-microsecond parsing performance with expanded PDU support
 
 ## SMPP v3.4 Specification Compliance
 
@@ -31,10 +43,21 @@ This library provides a complete implementation of SMPP v3.4 for building SMS ap
 | unbind_resp | 0x80000006 | 4.2.2 | ✅ Complete |
 | submit_sm | 0x00000004 | 4.4.1 | ✅ Complete |
 | submit_sm_resp | 0x80000004 | 4.4.2 | ✅ Complete |
+| submit_multi | 0x00000021 | 4.5.1 | ✅ Complete |
+| submit_multi_resp | 0x80000021 | 4.5.2 | ✅ Complete |
 | deliver_sm | 0x00000005 | 4.6.1 | ✅ Complete |
 | deliver_sm_resp | 0x80000005 | 4.6.2 | ✅ Complete |
+| data_sm | 0x00000103 | 4.7.1 | ✅ Complete |
+| data_sm_resp | 0x80000103 | 4.7.2 | ✅ Complete |
+| query_sm | 0x00000003 | 4.8.1 | ✅ Complete |
+| query_sm_resp | 0x80000003 | 4.8.2 | ✅ Complete |
+| cancel_sm | 0x00000008 | 4.9.1 | ✅ Complete |
+| cancel_sm_resp | 0x80000008 | 4.9.2 | ✅ Complete |
+| replace_sm | 0x00000007 | 4.10.1 | ✅ Complete |
+| replace_sm_resp | 0x80000007 | 4.10.2 | ✅ Complete |
 | enquire_link | 0x00000015 | 4.11.1 | ✅ Complete |
 | enquire_link_resp | 0x80000015 | 4.11.2 | ✅ Complete |
+| alert_notification | 0x00000102 | 4.12.1 | ✅ Complete |
 | generic_nack | 0x80000000 | 4.3.1 | ✅ Complete |
 | outbind | 0x0000000B | 4.1.4 | ✅ Complete |
 
@@ -60,7 +83,7 @@ All fields validated according to SMPP v3.4 specification:
 
 ```toml
 [dependencies]
-smpp = "0.2.0"
+smpp = "0.3.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
