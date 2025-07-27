@@ -411,4 +411,243 @@ mod integration_tests {
             assert_eq!(&bytes[12..16], &seq_num.to_be_bytes());
         }
     }
+
+    #[test]
+    fn test_interface_version_smpp_v50_serialization() {
+        // Test that SMPP v5.0 serializes to correct byte value
+        let version = InterfaceVersion::SmppV50;
+        assert_eq!(version as u8, 0x50);
+    }
+
+    #[test]
+    fn test_interface_version_smpp_v50_try_from() {
+        // Test that byte value 0x50 converts to SMPP v5.0
+        let version = InterfaceVersion::try_from(0x50);
+        assert!(version.is_ok());
+        assert_eq!(version.unwrap(), InterfaceVersion::SmppV50);
+    }
+
+    #[test]
+    fn test_interface_version_all_variants() {
+        // Test all supported interface versions
+        let versions = [
+            (InterfaceVersion::SmppV33, 0x33),
+            (InterfaceVersion::SmppV34, 0x34),
+            (InterfaceVersion::SmppV50, 0x50),
+        ];
+
+        for (version, expected_byte) in versions {
+            // Test enum to byte conversion
+            assert_eq!(version as u8, expected_byte);
+            
+            // Test byte to enum conversion
+            let parsed = InterfaceVersion::try_from(expected_byte);
+            assert!(parsed.is_ok(), "Failed to parse version from byte {:#04x}", expected_byte);
+            assert_eq!(parsed.unwrap(), version);
+        }
+    }
+
+    #[test]
+    fn test_interface_version_invalid_values() {
+        // Test that invalid byte values are rejected
+        let invalid_values = [0x00, 0x01, 0x32, 0x35, 0x49, 0x51, 0xFF];
+        
+        for invalid in invalid_values {
+            let result = InterfaceVersion::try_from(invalid);
+            assert!(result.is_err(), "Should reject invalid version byte {:#04x}", invalid);
+        }
+    }
+
+    #[test]
+    fn test_interface_version_debug_format() {
+        // Test that debug formatting works correctly
+        assert_eq!(format!("{:?}", InterfaceVersion::SmppV33), "SmppV33");
+        assert_eq!(format!("{:?}", InterfaceVersion::SmppV34), "SmppV34");
+        assert_eq!(format!("{:?}", InterfaceVersion::SmppV50), "SmppV50");
+    }
+
+    #[test]
+    fn test_interface_version_clone_and_copy() {
+        // Test that InterfaceVersion implements Clone and Copy correctly
+        let original = InterfaceVersion::SmppV50;
+        let cloned = original.clone();
+        let copied = original;
+        
+        assert_eq!(original, cloned);
+        assert_eq!(original, copied);
+        assert_eq!(cloned, copied);
+    }
+
+    #[test]
+    fn test_interface_version_partial_eq() {
+        // Test equality comparisons
+        assert_eq!(InterfaceVersion::SmppV33, InterfaceVersion::SmppV33);
+        assert_eq!(InterfaceVersion::SmppV34, InterfaceVersion::SmppV34);
+        assert_eq!(InterfaceVersion::SmppV50, InterfaceVersion::SmppV50);
+        
+        assert_ne!(InterfaceVersion::SmppV33, InterfaceVersion::SmppV34);
+        assert_ne!(InterfaceVersion::SmppV34, InterfaceVersion::SmppV50);
+        assert_ne!(InterfaceVersion::SmppV33, InterfaceVersion::SmppV50);
+    }
+
+    #[test]
+    fn test_interface_version_backwards_compatibility() {
+        // Test that v5.0 can be used in contexts expecting any version
+        let versions = [
+            InterfaceVersion::SmppV33,
+            InterfaceVersion::SmppV34,
+            InterfaceVersion::SmppV50,
+        ];
+
+        // Simulate version selection logic
+        for version in versions {
+            match version {
+                InterfaceVersion::SmppV33 => {
+                    // v3.3 features only
+                    assert_eq!(version as u8, 0x33);
+                }
+                InterfaceVersion::SmppV34 => {
+                    // v3.4 features
+                    assert_eq!(version as u8, 0x34);
+                }
+                InterfaceVersion::SmppV50 => {
+                    // v5.0 features
+                    assert_eq!(version as u8, 0x50);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_congestion_state_tlv_encoding() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test congestion state value of 0 (no congestion)
+        let tlv = Tlv {
+            tag: tags::CONGESTION_STATE,
+            length: 1,
+            value: Bytes::from_static(&[0]),
+        };
+
+        let bytes = tlv.to_bytes();
+        let expected = vec![
+            0x14, 0x2C, // tag (CONGESTION_STATE = 0x142C)
+            0x00, 0x01, // length
+            0x00,       // value (0%)
+        ];
+        assert_eq!(bytes.as_ref(), &expected);
+    }
+
+    #[test]
+    fn test_congestion_state_tlv_all_valid_values() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test boundary values: 0, 50, 100
+        let test_values = [0u8, 50u8, 100u8];
+        
+        for value in test_values {
+            let tlv = Tlv {
+                tag: tags::CONGESTION_STATE,
+                length: 1,
+                value: Bytes::from(vec![value]),
+            };
+
+            let bytes = tlv.to_bytes();
+            
+            // Verify tag and length
+            assert_eq!(&bytes[0..2], &[0x14, 0x2C]); // CONGESTION_STATE tag
+            assert_eq!(&bytes[2..4], &[0x00, 0x01]); // length = 1
+            assert_eq!(bytes[4], value); // congestion value
+        }
+    }
+
+    #[test]
+    fn test_congestion_state_tlv_decoding() {
+        use crate::datatypes::{tags, Tlv};
+        use std::io::Cursor;
+
+        // Test decoding congestion state value of 75%
+        let data = vec![
+            0x14, 0x2C, // tag
+            0x00, 0x01, // length
+            0x4B,       // value (75)
+        ];
+
+        let mut cursor = Cursor::new(data.as_slice());
+        let tlv = Tlv::decode(&mut cursor).expect("Should decode successfully");
+
+        assert_eq!(tlv.tag, tags::CONGESTION_STATE);
+        assert_eq!(tlv.length, 1);
+        assert_eq!(tlv.value.as_ref(), &[75]);
+    }
+
+    #[test]
+    fn test_congestion_state_tlv_roundtrip() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+        use std::io::Cursor;
+
+        // Test roundtrip encoding/decoding
+        let original = Tlv {
+            tag: tags::CONGESTION_STATE,
+            length: 1,
+            value: Bytes::from_static(&[33]), // 33% congestion
+        };
+
+        let encoded = original.to_bytes();
+        let mut cursor = Cursor::new(encoded.as_ref());
+        let decoded = Tlv::decode(&mut cursor).expect("Should decode successfully");
+
+        assert_eq!(original.tag, decoded.tag);
+        assert_eq!(original.length, decoded.length);
+        assert_eq!(original.value, decoded.value);
+    }
+
+    #[test]
+    fn test_congestion_state_validation_helper() {
+        // Test helper function to validate congestion state values
+        fn validate_congestion_state(value: u8) -> bool {
+            value <= 100
+        }
+
+        // Valid values
+        assert!(validate_congestion_state(0));
+        assert!(validate_congestion_state(50));
+        assert!(validate_congestion_state(100));
+
+        // Invalid values
+        assert!(!validate_congestion_state(101));
+        assert!(!validate_congestion_state(255));
+    }
+
+    #[test]
+    fn test_congestion_state_semantic_meaning() {
+        // Test the semantic meaning of different congestion levels
+        let test_cases = [
+            (0, "No congestion"),
+            (25, "Low congestion"),
+            (50, "Medium congestion"),
+            (75, "High congestion"),
+            (100, "Maximum congestion"),
+        ];
+
+        for (value, description) in test_cases {
+            // Verify the value is in valid range
+            assert!(value <= 100, "Congestion value {} is invalid: {}", value, description);
+            
+            // Test that we can create TLV with this value
+            use crate::datatypes::{tags, Tlv};
+            use bytes::Bytes;
+
+            let tlv = Tlv {
+                tag: tags::CONGESTION_STATE,
+                length: 1,
+                value: Bytes::from(vec![value]),
+            };
+
+            assert_eq!(tlv.value[0], value);
+        }
+    }
 }

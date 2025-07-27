@@ -34,6 +34,9 @@ pub mod tags {
     pub const ITS_SESSION_INFO: u16 = 0x1383;
     pub const USSD_SERVICE_OP: u16 = 0x0501;
 
+    // SMPP v5.0 TLV tags
+    pub const CONGESTION_STATE: u16 = 0x142C;
+
     // Additional TLV tags for deliver_sm and other PDUs
     pub const USER_DATA_HEADER: u16 = 0x0005;
     pub const NETWORK_ERROR_CODE: u16 = 0x0423;

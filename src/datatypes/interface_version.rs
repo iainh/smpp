@@ -7,4 +7,5 @@ use num_enum::TryFromPrimitive;
 pub enum InterfaceVersion {
     SmppV33 = 0x33,
     SmppV34 = 0x34,
+    SmppV50 = 0x50,
 }
