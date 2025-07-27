@@ -650,4 +650,215 @@ mod integration_tests {
             assert_eq!(tlv.value[0], value);
         }
     }
+
+    #[test]
+    fn test_billing_identification_tlv_encoding() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test billing identification with sample identifier
+        let billing_id = b"BILLING123";
+        let tlv = Tlv {
+            tag: tags::BILLING_IDENTIFICATION,
+            length: billing_id.len() as u16,
+            value: Bytes::copy_from_slice(billing_id),
+        };
+
+        let bytes = tlv.to_bytes();
+        let mut expected = vec![
+            0x06, 0x00, // tag (BILLING_IDENTIFICATION = 0x0600)
+            0x00, 0x0A, // length (10 bytes)
+        ];
+        expected.extend_from_slice(billing_id);
+        assert_eq!(bytes.as_ref(), &expected);
+    }
+
+    #[test]
+    fn test_source_network_id_tlv_encoding() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test source network ID 
+        let network_id = b"NET001";
+        let tlv = Tlv {
+            tag: tags::SOURCE_NETWORK_ID,
+            length: network_id.len() as u16,
+            value: Bytes::copy_from_slice(network_id),
+        };
+
+        let bytes = tlv.to_bytes();
+        let mut expected = vec![
+            0x06, 0x0E, // tag (SOURCE_NETWORK_ID = 0x060E)
+            0x00, 0x06, // length (6 bytes)
+        ];
+        expected.extend_from_slice(network_id);
+        assert_eq!(bytes.as_ref(), &expected);
+    }
+
+    #[test]
+    fn test_dest_network_id_tlv_encoding() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test destination network ID
+        let network_id = b"NET002";
+        let tlv = Tlv {
+            tag: tags::DEST_NETWORK_ID,
+            length: network_id.len() as u16,
+            value: Bytes::copy_from_slice(network_id),
+        };
+
+        let bytes = tlv.to_bytes();
+        let mut expected = vec![
+            0x06, 0x0F, // tag (DEST_NETWORK_ID = 0x060F)
+            0x00, 0x06, // length (6 bytes)
+        ];
+        expected.extend_from_slice(network_id);
+        assert_eq!(bytes.as_ref(), &expected);
+    }
+
+    #[test]
+    fn test_source_node_id_tlv_encoding() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test source node ID with 8-byte value
+        let node_id = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
+        let tlv = Tlv {
+            tag: tags::SOURCE_NODE_ID,
+            length: 8,
+            value: Bytes::copy_from_slice(&node_id),
+        };
+
+        let bytes = tlv.to_bytes();
+        let mut expected = vec![
+            0x06, 0x0C, // tag (SOURCE_NODE_ID = 0x060C)
+            0x00, 0x08, // length (8 bytes)
+        ];
+        expected.extend_from_slice(&node_id);
+        assert_eq!(bytes.as_ref(), &expected);
+    }
+
+    #[test]
+    fn test_dest_node_id_tlv_encoding() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test destination node ID with 8-byte value
+        let node_id = [0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA, 0xF9, 0xF8];
+        let tlv = Tlv {
+            tag: tags::DEST_NODE_ID,
+            length: 8,
+            value: Bytes::copy_from_slice(&node_id),
+        };
+
+        let bytes = tlv.to_bytes();
+        let mut expected = vec![
+            0x06, 0x0D, // tag (DEST_NODE_ID = 0x060D)
+            0x00, 0x08, // length (8 bytes)
+        ];
+        expected.extend_from_slice(&node_id);
+        assert_eq!(bytes.as_ref(), &expected);
+    }
+
+    #[test]
+    fn test_ussd_service_op_tlv_encoding() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+
+        // Test USSD service operation - PSSD indication (value 0x01)
+        let tlv = Tlv {
+            tag: tags::USSD_SERVICE_OP,
+            length: 1,
+            value: Bytes::from_static(&[0x01]),
+        };
+
+        let bytes = tlv.to_bytes();
+        let expected = vec![
+            0x05, 0x01, // tag (USSD_SERVICE_OP = 0x0501)
+            0x00, 0x01, // length (1 byte)
+            0x01,       // value (PSSD indication)
+        ];
+        assert_eq!(bytes.as_ref(), &expected);
+    }
+
+    #[test]
+    fn test_core_v50_tlvs_roundtrip() {
+        use crate::datatypes::{tags, Tlv};
+        use bytes::Bytes;
+        use std::io::Cursor;
+
+        // Test roundtrip for multiple v5.0 TLVs
+        let test_cases = [
+            (tags::BILLING_IDENTIFICATION, b"BILL001".as_slice()),
+            (tags::SOURCE_NETWORK_ID, b"SRC_NET".as_slice()),
+            (tags::DEST_NETWORK_ID, b"DST_NET".as_slice()),
+            (tags::USSD_SERVICE_OP, &[0x02]),
+        ];
+
+        for (tag, value_data) in test_cases {
+            let original = Tlv {
+                tag,
+                length: value_data.len() as u16,
+                value: Bytes::copy_from_slice(value_data),
+            };
+
+            let encoded = original.to_bytes();
+            let mut cursor = Cursor::new(encoded.as_ref());
+            let decoded = Tlv::decode(&mut cursor).expect("Should decode successfully");
+
+            assert_eq!(original.tag, decoded.tag, "Tag mismatch for {:#06x}", tag);
+            assert_eq!(original.length, decoded.length, "Length mismatch for {:#06x}", tag);
+            assert_eq!(original.value, decoded.value, "Value mismatch for {:#06x}", tag);
+        }
+    }
+
+    #[test]
+    fn test_node_id_validation() {
+        // Test that node IDs are exactly 8 bytes
+        fn validate_node_id(value: &[u8]) -> bool {
+            value.len() == 8
+        }
+
+        // Valid 8-byte node IDs
+        assert!(validate_node_id(&[0; 8]));
+        assert!(validate_node_id(&[0xFF; 8]));
+        assert!(validate_node_id(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]));
+
+        // Invalid node IDs
+        assert!(!validate_node_id(&[]));
+        assert!(!validate_node_id(&[0x01]));
+        assert!(!validate_node_id(&[0; 7]));
+        assert!(!validate_node_id(&[0; 9]));
+        assert!(!validate_node_id(&[0; 16]));
+    }
+
+    #[test]
+    fn test_ussd_service_op_values() {
+        // Test USSD service operation predefined values
+        let ussd_operations = [
+            (0x00, "PSSD request"),
+            (0x01, "PSSR request"),
+            (0x02, "USSR request"),
+            (0x03, "USSN request"),
+            (0x10, "PSSD response"),
+            (0x11, "PSSR response"),
+            (0x12, "USSR response"),
+            (0x13, "USSN response"),
+        ];
+
+        for (value, description) in ussd_operations {
+            // Test that we can create TLV with this operation value
+            use crate::datatypes::{tags, Tlv};
+            use bytes::Bytes;
+
+            let tlv = Tlv {
+                tag: tags::USSD_SERVICE_OP,
+                length: 1,
+                value: Bytes::from(vec![value]),
+            };
+
+            assert_eq!(tlv.value[0], value, "USSD operation {} ({})", value, description);
+        }
+    }
 }

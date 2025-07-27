@@ -36,6 +36,11 @@ pub mod tags {
 
     // SMPP v5.0 TLV tags
     pub const CONGESTION_STATE: u16 = 0x142C;
+    pub const BILLING_IDENTIFICATION: u16 = 0x0600;
+    pub const SOURCE_NETWORK_ID: u16 = 0x060E;
+    pub const DEST_NETWORK_ID: u16 = 0x060F;
+    pub const SOURCE_NODE_ID: u16 = 0x060C;
+    pub const DEST_NODE_ID: u16 = 0x060D;
 
     // Additional TLV tags for deliver_sm and other PDUs
     pub const USER_DATA_HEADER: u16 = 0x0005;
