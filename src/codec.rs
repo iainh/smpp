@@ -196,11 +196,6 @@ impl CodecError {
 }
 
 /// Utility functions for decoding common SMPP field types
-
-/// Decode a null-terminated C string with maximum length
-///
-/// This function handles the SMPP C-Octet String format where strings
-/// are null-terminated and padded to a fixed field width.
 pub fn decode_cstring(
     buf: &mut Cursor<&[u8]>,
     max_len: usize,
@@ -331,7 +326,8 @@ pub enum Frame {
 }
 
 /// Registry of PDU decoders for extensible parsing
-type DecoderFn = Box<dyn Fn(PduHeader, &mut Cursor<&[u8]>) -> Result<Frame, CodecError> + Send + Sync>;
+type DecoderFn =
+    Box<dyn Fn(PduHeader, &mut Cursor<&[u8]>) -> Result<Frame, CodecError> + Send + Sync>;
 
 pub struct PduRegistry {
     decoders: HashMap<CommandId, DecoderFn>,

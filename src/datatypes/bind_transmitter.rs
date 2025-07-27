@@ -580,6 +580,12 @@ mod tests {
         assert!(btr_bytes.len() > 16); // Should have header + some data
     }
 
+    fn to_bytes_from_encodable<T: Encodable>(pdu: &T) -> Bytes {
+        let mut bytes = BytesMut::new();
+        pdu.encode(&mut bytes).unwrap();
+        bytes.freeze()
+    }
+
     #[test]
     fn bind_transmitter_roundtrip_test() {
         use crate::frame::Frame;
@@ -598,7 +604,7 @@ mod tests {
         };
 
         // Serialize to bytes
-        let serialized = original.to_bytes();
+        let serialized = to_bytes_from_encodable(&original);
 
         // Parse back from bytes
         let mut cursor = Cursor::new(serialized.as_ref());

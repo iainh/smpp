@@ -1027,6 +1027,7 @@ impl Encodable for SubmitSm {
 }
 
 impl Decodable for SubmitSm {
+    #[allow(clippy::unnecessary_fallible_conversions)]
     fn decode(header: PduHeader, buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Self::validate_header(&header)?;
 
@@ -1086,11 +1087,7 @@ impl Decodable for SubmitSm {
                 }
             })?;
 
-        let esm_class =
-            EsmClass::try_from(buf.get_u8()).map_err(|e| CodecError::FieldValidation {
-                field: "esm_class",
-                reason: e.to_string(),
-            })?;
+        let esm_class = EsmClass::from(buf.get_u8());
 
         let protocol_id = buf.get_u8();
 
@@ -1110,21 +1107,12 @@ impl Decodable for SubmitSm {
 
         // validity_period (null-terminated string, max 16 chars + null)
         let validity_str = Self::read_c_string(buf, 17, "validity_period")?;
-        let validity_period = ValidityPeriod::try_from(validity_str.as_str()).map_err(|e| {
-            CodecError::FieldValidation {
-                field: "validity_period",
-                reason: e.to_string(),
-            }
-        })?;
+        let validity_period = ValidityPeriod::from(validity_str.as_str());
 
         let registered_delivery = buf.get_u8();
         let replace_if_present_flag = buf.get_u8();
 
-        let data_coding =
-            DataCoding::try_from(buf.get_u8()).map_err(|e| CodecError::FieldValidation {
-                field: "data_coding",
-                reason: e.to_string(),
-            })?;
+        let data_coding = DataCoding::from(buf.get_u8());
 
         let sm_default_msg_id = buf.get_u8();
         let sm_length = buf.get_u8();

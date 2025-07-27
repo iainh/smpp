@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // 2. Encode PDUs using the new trait
-    let link_bytes = enquire_link.to_bytes()?;
+    let link_bytes = enquire_link.to_bytes();
     let response_bytes = enquire_response.to_bytes();
 
     println!("\nEncoded sizes:");

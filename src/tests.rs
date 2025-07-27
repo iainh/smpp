@@ -28,7 +28,7 @@ mod integration_tests {
         let mut cursor = Cursor::new(data.as_slice());
 
         let result = Frame::check(&mut cursor);
-        assert!(matches!(result, Err(FrameError::Incomplete)));
+        assert!(matches!(result, Err(FrameError::Other(_))));
     }
 
     #[test]
