@@ -1,4 +1,3 @@
-use crate::datatypes::ToBytes;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::io::Cursor;
 
@@ -60,19 +59,6 @@ pub struct Tlv {
     pub value: Bytes,
 }
 
-impl ToBytes for Tlv {
-    fn to_bytes(&self) -> Bytes {
-        // the required size of the buffer if the length of the value plus 4
-        // octets for the two u16s.
-        let mut buffer = BytesMut::with_capacity(self.value.len() + 4);
-
-        buffer.put_u16(self.tag);
-        buffer.put_u16(self.length);
-        buffer.put(self.value.chunk());
-
-        buffer.freeze()
-    }
-}
 
 // Codec trait implementations for TLV
 impl Encodable for Tlv {
@@ -89,6 +75,13 @@ impl Encodable for Tlv {
 }
 
 impl Tlv {
+    /// Convert TLV to bytes without PDU header (overrides Encodable::to_bytes)
+    pub fn to_bytes(&self) -> Bytes {
+        let mut buf = BytesMut::new();
+        self.encode(&mut buf).expect("TLV encoding should not fail");
+        buf.freeze()
+    }
+
     /// Decode a TLV from the buffer
     pub fn decode(buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         if buf.remaining() < 4 {

@@ -19,8 +19,8 @@
 //! that of a normal SMPP receiver session.
 
 use crate::codec::{CodecError, Decodable, Encodable, PduHeader};
-use crate::datatypes::{CommandId, CommandStatus, Password, SystemId, ToBytes};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use crate::datatypes::{CommandId, CommandStatus, Password, SystemId};
+use bytes::{Buf, BufMut, BytesMut};
 use std::io::Cursor;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -55,36 +55,6 @@ impl Outbind {
     }
 }
 
-impl ToBytes for Outbind {
-    fn to_bytes(&self) -> Bytes {
-        // Fixed arrays are always valid by construction
-        self.validate().expect("Outbind validation failed");
-
-        let system_id = self.system_id.as_ref();
-        let password = self.password.as_ref().map(|p| p.as_ref());
-
-        let length = 16 + system_id.len() + 1 + password.map_or(0, |p| p.len()) + 1;
-
-        let mut buffer = BytesMut::with_capacity(length);
-
-        buffer.put_u32(length as u32);
-        buffer.put_u32(CommandId::Outbind as u32);
-        // Command status is always 0 for outbind
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
-
-        buffer.put(system_id);
-        buffer.put_u8(b'\0');
-
-        if let Some(password) = password {
-            buffer.put(password);
-        }
-
-        buffer.put_u8(b'\0');
-
-        buffer.freeze()
-    }
-}
 
 // New codec trait implementations
 
@@ -229,7 +199,7 @@ mod tests {
             0x65, 0x74, 0x00, // password
         ];
 
-        assert_eq!(&ToBytes::to_bytes(&outbind), &expected);
+        assert_eq!(&Encodable::to_bytes(&outbind), &expected);
     }
 
     #[test]
@@ -251,7 +221,7 @@ mod tests {
             0x54, 0x00, // system_id
             0x00, // password
         ];
-        assert_eq!(&ToBytes::to_bytes(&outbind), &expected);
+        assert_eq!(&Encodable::to_bytes(&outbind), &expected);
     }
 
     #[test]
@@ -302,7 +272,7 @@ mod tests {
             password: Some("B".repeat(8).parse::<Password>().unwrap()), // Max allowed
         };
 
-        let bytes = ToBytes::to_bytes(&outbind);
+        let bytes = Encodable::to_bytes(&outbind);
         assert!(bytes.len() > 16); // Should serialize successfully
     }
 
@@ -319,7 +289,7 @@ mod tests {
         };
 
         // Serialize to bytes
-        let serialized = ToBytes::to_bytes(&original);
+        let serialized = Encodable::to_bytes(&original);
 
         // Parse back from bytes
         let mut cursor = Cursor::new(serialized.as_ref());

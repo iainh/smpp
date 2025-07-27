@@ -3,8 +3,8 @@
 // This shows how the separated codec makes PDU handling much cleaner
 // and more extensible.
 
-use smpp::codec::{CodecError, Frame, PduRegistry};
-use smpp::datatypes::{CommandStatus, EnquireLink, EnquireLinkResponse, ToBytes};
+use smpp::codec::{CodecError, Encodable, Frame, PduRegistry};
+use smpp::datatypes::{CommandStatus, EnquireLink, EnquireLinkResponse};
 use std::io::Cursor;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

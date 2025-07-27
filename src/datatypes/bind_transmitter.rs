@@ -2,13 +2,14 @@ use crate::codec::{
     CodecError, Decodable, Encodable, PduHeader, decode_cstring, decode_u8, encode_cstring,
     encode_u8,
 };
+use crate::macros::builder_setters;
 use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
-    AddressRange, CommandId, CommandStatus, Password, SystemId, SystemType, ToBytes, TypeOfNumber,
+    AddressRange, CommandId, CommandStatus, Password, SystemId, SystemType, TypeOfNumber,
 };
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::BytesMut;
 use std::io::Cursor;
 
 /// BindTransmitter is used to bind a transmitter ESME to the SMSC.
@@ -113,11 +114,15 @@ impl BindTransmitterBuilder {
         }
     }
 
-    pub fn sequence_number(mut self, seq: u32) -> Self {
-        self.sequence_number = seq;
-        self
+    // Generate builder setters using macro
+    builder_setters! {
+        sequence_number: u32,
+        interface_version: InterfaceVersion,
+        addr_ton: TypeOfNumber,
+        addr_npi: NumericPlanIndicator
     }
 
+    // Custom setters that need string conversion
     pub fn system_id(mut self, system_id: &str) -> Self {
         self.system_id = SystemId::from(system_id);
         self
@@ -130,21 +135,6 @@ impl BindTransmitterBuilder {
 
     pub fn system_type(mut self, system_type: &str) -> Self {
         self.system_type = SystemType::from(system_type);
-        self
-    }
-
-    pub fn interface_version(mut self, version: InterfaceVersion) -> Self {
-        self.interface_version = version;
-        self
-    }
-
-    pub fn addr_ton(mut self, ton: TypeOfNumber) -> Self {
-        self.addr_ton = ton;
-        self
-    }
-
-    pub fn addr_npi(mut self, npi: NumericPlanIndicator) -> Self {
-        self.addr_npi = npi;
         self
     }
 
@@ -184,81 +174,35 @@ pub struct BindTransmitterResponse {
     pub sc_interface_version: Option<Tlv>,
 }
 
-impl ToBytes for BindTransmitter {
-    fn to_bytes(&self) -> Bytes {
-        // Fixed arrays are always valid by construction
-        self.validate().expect("BindTransmitter validation failed");
 
-        let system_id = self.system_id.as_ref();
-        let password = self.password.as_ref().map(|p| p.as_ref());
-        let system_type = self.system_type.as_ref();
-        let address_range = self.address_range.as_ref();
+impl Encodable for BindTransmitterResponse {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Encode PDU header
+        let header = PduHeader {
+            command_length: 0, // Will be set by the caller
+            command_id: CommandId::BindTransmitterResp,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
 
-        let length = 23
-            + system_id.len()
-            + password.map_or(0, |p| p.len())
-            + system_type.len()
-            + address_range.len();
+        // Encode body - system_id as fixed-length null-terminated string
+        encode_cstring(buf, self.system_id.as_str().unwrap_or(""), 16);
 
-        let mut buffer = BytesMut::with_capacity(length);
-        buffer.put_u32(length as u32);
-
-        buffer.put_u32(CommandId::BindTransmitter as u32);
-        buffer.put_u32(0u32); // Request PDUs must have command_status = 0 per SMPP spec
-        buffer.put_u32(self.sequence_number);
-
-        buffer.put(system_id);
-        buffer.put_u8(b'\0');
-
-        if let Some(password) = password {
-            buffer.put(password);
-        }
-
-        buffer.put_u8(b'\0');
-
-        buffer.put(system_type);
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.interface_version as u8);
-        buffer.put_u8(self.addr_ton as u8);
-        buffer.put_u8(self.addr_npi as u8);
-
-        buffer.put(address_range);
-        buffer.put_u8(b'\0');
-
-        buffer.freeze()
-    }
-}
-
-impl ToBytes for BindTransmitterResponse {
-    fn to_bytes(&self) -> Bytes {
-        // Fixed arrays are always valid by construction
-        let system_id = self.system_id.as_ref();
-
-        // Calculate length: header (16) + system_id + null terminator + optional TLV
-        let mut length = 16 + system_id.len() + 1;
+        // Encode optional TLV parameters
         if let Some(ref tlv) = self.sc_interface_version {
-            length += tlv.to_bytes().len();
+            tlv.encode(buf)?;
         }
 
-        let mut buffer = BytesMut::with_capacity(length);
+        Ok(())
+    }
 
-        // Header
-        buffer.put_u32(length as u32);
-        buffer.put_u32(CommandId::BindTransmitterResp as u32); // FIX: Use correct response command ID
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
-
-        // Body: system_id (mandatory field)
-        buffer.put(system_id);
-        buffer.put_u8(b'\0'); // null terminator
-
-        // Optional TLV parameters
-        if let Some(sc_interface_version) = &self.sc_interface_version {
-            buffer.extend_from_slice(&sc_interface_version.to_bytes());
+    fn encoded_size(&self) -> usize {
+        let mut size = PduHeader::SIZE + 16; // header + fixed system_id field
+        if let Some(ref tlv) = self.sc_interface_version {
+            size += tlv.encoded_size();
         }
-
-        buffer.freeze()
+        size
     }
 }
 
@@ -400,23 +344,36 @@ mod tests {
             address_range: AddressRange::from(""),
         };
 
-        let bt_bytes = bind_transmitter.to_bytes();
+        let bt_bytes = Encodable::to_bytes(&bind_transmitter);
 
-        // Expected byte representation of a bind transmitter
+        // Expected byte representation of a bind transmitter (SMPP v3.4 fixed-length format)
         let expected: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x2F, // command_length
+            0x00, 0x00, 0x00, 0x62, // command_length (98 bytes total)
             0x00, 0x00, 0x00, 0x02, // command_id
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
-            // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
-            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, // password
-            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
-            0x34, // interface_version
-            0x01, // addr_ton
-            0x01, // addr_npi
-            0x00, // address_range
+            // Body (fixed-length fields):
+            // system_id (16 bytes): "SMPP3TEST" + null + padding
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // password (9 bytes): "secret08" + null
+            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00,
+            // system_type (13 bytes): "SUBMIT1" + null + padding
+            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            // interface_version (1 byte)
+            0x34,
+            // addr_ton (1 byte)
+            0x01,
+            // addr_npi (1 byte) 
+            0x01,
+            // address_range (41 bytes): null + padding
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
         ];
 
         assert_eq!(&bt_bytes, &expected);
@@ -436,23 +393,36 @@ mod tests {
             address_range: AddressRange::from(""),
         };
 
-        let bt_bytes = bind_transmitter.to_bytes();
+        let bt_bytes = Encodable::to_bytes(&bind_transmitter);
 
-        // Expected byte representation of a bind transmitter without password
+        // Expected byte representation of a bind transmitter without password (SMPP v3.4 fixed-length)
         let expected: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x27, // command_length (shorter due to no password)
+            0x00, 0x00, 0x00, 0x62, // command_length (98 bytes total - same size as with password due to fixed fields)
             0x00, 0x00, 0x00, 0x02, // command_id
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
-            // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
-            0x00, // empty password
-            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
-            0x34, // interface_version
-            0x01, // addr_ton
-            0x01, // addr_npi
-            0x00, // address_range
+            // Body (fixed-length fields):
+            // system_id (16 bytes): "SMPP3TEST" + null + padding
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // password (9 bytes): empty + null + padding
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // system_type (13 bytes): "SUBMIT1" + null + padding
+            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            // interface_version (1 byte)
+            0x34,
+            // addr_ton (1 byte)
+            0x01,
+            // addr_npi (1 byte)
+            0x01,
+            // address_range (41 bytes): null + padding
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
         ];
 
         assert_eq!(&bt_bytes, &expected);
@@ -472,23 +442,36 @@ mod tests {
             address_range: AddressRange::from("123456789"),
         };
 
-        let bt_bytes = bind_transmitter.to_bytes();
+        let bt_bytes = Encodable::to_bytes(&bind_transmitter);
 
-        // Expected byte representation of a bind transmitter with address range
+        // Expected byte representation of a bind transmitter with address range (SMPP v3.4 fixed-length)
         let expected: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x38, // command_length (longer due to address range)
+            0x00, 0x00, 0x00, 0x62, // command_length (98 bytes total - same as other tests due to fixed fields)
             0x00, 0x00, 0x00, 0x02, // command_id
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
-            // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
-            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, // password
-            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
-            0x34, // interface_version
-            0x01, // addr_ton
-            0x01, // addr_npi
-            0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x00, // address_range
+            // Body (fixed-length fields):
+            // system_id (16 bytes): "SMPP3TEST" + null + padding
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // password (9 bytes): "secret08" + null
+            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00,
+            // system_type (13 bytes): "SUBMIT1" + null + padding
+            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            // interface_version (1 byte)
+            0x34,
+            // addr_ton (1 byte)
+            0x01,
+            // addr_npi (1 byte)
+            0x01,
+            // address_range (41 bytes): "123456789" + null + padding
+            0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
         ];
 
         assert_eq!(&bt_bytes, &expected);
@@ -508,23 +491,36 @@ mod tests {
             address_range: AddressRange::from(""),
         };
 
-        let bt_bytes = bind_transmitter.to_bytes();
+        let bt_bytes = Encodable::to_bytes(&bind_transmitter);
 
-        // Expected byte representation of a bind transmitter with v3.3
+        // Expected byte representation of a bind transmitter with v3.3 (SMPP v3.4 fixed-length)
         let expected: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x2F, // command_length
+            0x00, 0x00, 0x00, 0x62, // command_length (98 bytes total)
             0x00, 0x00, 0x00, 0x02, // command_id
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
-            // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
-            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, // password
-            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
-            0x33, // interface_version (v3.3)
-            0x02, // addr_ton (National)
-            0x03, // addr_npi (Data)
-            0x00, // address_range
+            // Body (fixed-length fields):
+            // system_id (16 bytes): "SMPP3TEST" + null + padding
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // password (9 bytes): "secret08" + null
+            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00,
+            // system_type (13 bytes): "SUBMIT1" + null + padding
+            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            // interface_version (1 byte) - v3.3
+            0x33,
+            // addr_ton (1 byte) - National
+            0x02,
+            // addr_npi (1 byte) - Data
+            0x03,
+            // address_range (41 bytes): null + padding
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
         ];
 
         assert_eq!(&bt_bytes, &expected);
@@ -541,16 +537,17 @@ mod tests {
 
         let btr_bytes = bind_transmitter_response.to_bytes();
 
-        // Expected byte representation of a bind transmitter response without TLV
+        // Expected byte representation of a bind transmitter response without TLV (SMPP v3.4 fixed-length)
         let expected: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x1A, // command_length (26 bytes total)
+            0x00, 0x00, 0x00, 0x20, // command_length (32 bytes total: 16 header + 16 system_id)
             0x80, 0x00, 0x00, 0x02, // command_id (BindTransmitterResp = 0x80000002)
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
             // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54,
-            0x00, // system_id "SMPP3TEST\0"
+            // system_id (16 bytes): "SMPP3TEST" + null + padding
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
         assert_eq!(&btr_bytes, &expected);
@@ -580,7 +577,7 @@ mod tests {
         assert!(btr_bytes.len() > 16); // Should have header + some data
     }
 
-    fn to_bytes_from_encodable<T: Encodable>(pdu: &T) -> Bytes {
+    fn to_bytes_from_encodable<T: Encodable>(pdu: &T) -> bytes::Bytes {
         let mut bytes = BytesMut::new();
         pdu.encode(&mut bytes).unwrap();
         bytes.freeze()
@@ -716,7 +713,7 @@ mod tests {
             address_range: AddressRange::from("D".repeat(40).as_str()), // Max allowed
         };
 
-        let bytes = bind_transmitter.to_bytes();
+        let bytes = Encodable::to_bytes(&bind_transmitter);
         assert!(bytes.len() > 16); // Should serialize successfully
     }
 

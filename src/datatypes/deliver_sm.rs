@@ -2,10 +2,11 @@ use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
     CommandId, CommandStatus, DataCoding, DestinationAddr, EsmClass, MessageId,
-    ScheduleDeliveryTime, ServiceType, ShortMessage, SourceAddr, ToBytes, TypeOfNumber,
+    ScheduleDeliveryTime, ServiceType, ShortMessage, SourceAddr, TypeOfNumber,
     ValidityPeriod,
 };
-use bytes::{BufMut, Bytes, BytesMut};
+use crate::codec::{CodecError, Encodable, PduHeader, encode_cstring, encode_u8};
+use bytes::BytesMut;
 
 /// This operation is used by the SMSC to deliver a short message to an ESME.
 /// The deliver_sm PDU is used to deliver both mobile originated messages and
@@ -443,167 +444,221 @@ pub struct DeliverSmResponse {
     pub message_id: MessageId,
 }
 
-impl ToBytes for DeliverSm {
-    fn to_bytes(&self) -> Bytes {
-        // Validate field constraints per SMPP v3.4 specification
-        self.validate().expect("DeliverSm validation failed");
 
-        let mut buffer = BytesMut::with_capacity(1024);
 
-        // Write junk data that we'll replace later with the actual length
-        buffer.put_u32(0_u32);
+// New codec trait implementations
 
-        buffer.put_u32(CommandId::DeliverSm as u32);
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
+impl Encodable for DeliverSm {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Validate the PDU before encoding
+        self.validate().map_err(|e| CodecError::FieldValidation {
+            field: "deliver_sm",
+            reason: e.to_string(),
+        })?;
 
-        // Mandatory parameters
-        buffer.put(self.service_type.as_ref());
-        buffer.put_u8(b'\0');
+        // Encode PDU header
+        let header = PduHeader {
+            command_length: 0, // Will be set by the caller
+            command_id: CommandId::DeliverSm,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
 
-        buffer.put_u8(self.source_addr_ton as u8);
-        buffer.put_u8(self.source_addr_npi as u8);
+        // Encode mandatory parameters as fixed-length fields
+        encode_cstring(buf, self.service_type.as_str(), 6);
+        encode_u8(buf, self.source_addr_ton as u8);
+        encode_u8(buf, self.source_addr_npi as u8);
+        encode_cstring(buf, self.source_addr.as_str().unwrap_or(""), 21);
+        encode_u8(buf, self.dest_addr_ton as u8);
+        encode_u8(buf, self.dest_addr_npi as u8);
+        encode_cstring(buf, self.destination_addr.as_str().unwrap_or(""), 21);
+        encode_u8(buf, self.esm_class.to_byte());
+        encode_u8(buf, self.protocol_id);
+        encode_u8(buf, self.priority_flag);
+        encode_cstring(buf, self.schedule_delivery_time.as_str().unwrap_or(""), 17);
+        encode_cstring(buf, self.validity_period.as_str().unwrap_or(""), 17);
+        encode_u8(buf, self.registered_delivery);
+        encode_u8(buf, self.replace_if_present_flag);
+        encode_u8(buf, self.data_coding.to_byte());
+        encode_u8(buf, self.sm_default_msg_id);
+        encode_u8(buf, self.sm_length);
+        
+        // Encode short_message (variable length up to sm_length)
+        let message_bytes = self.short_message.as_bytes();
+        buf.extend_from_slice(&message_bytes[..(self.sm_length as usize).min(message_bytes.len())]);
 
-        buffer.put(self.source_addr.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.dest_addr_ton as u8);
-        buffer.put_u8(self.dest_addr_npi as u8);
-
-        buffer.put(self.destination_addr.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.esm_class.to_byte());
-        buffer.put_u8(self.protocol_id);
-        buffer.put_u8(self.priority_flag);
-
-        buffer.put(self.schedule_delivery_time.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put(self.validity_period.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.registered_delivery);
-        buffer.put_u8(self.replace_if_present_flag);
-        buffer.put_u8(self.data_coding.to_byte());
-        buffer.put_u8(self.sm_default_msg_id);
-
-        buffer.put_u8(self.sm_length);
-        buffer.put(self.short_message.as_bytes());
-
-        // Optional parameters
-        if let Some(user_message_reference) = &self.user_message_reference {
-            buffer.extend_from_slice(&user_message_reference.to_bytes());
+        // Encode optional TLV parameters
+        if let Some(ref tlv) = self.user_message_reference {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.source_port {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.destination_port {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.sar_msg_ref_num {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.sar_total_segments {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.sar_segment_seqnum {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.user_data_header {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.privacy_indicator {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.callback_num {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.source_subaddress {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.dest_subaddress {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.language_indicator {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.its_session_info {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.network_error_code {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.message_payload {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.delivery_failure_reason {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.additional_status_info_text {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.dpf_result {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.set_dpf {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.ms_availability_status {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.receipted_message_id {
+            tlv.encode(buf)?;
+        }
+        if let Some(ref tlv) = self.message_state {
+            tlv.encode(buf)?;
         }
 
-        if let Some(source_port) = &self.source_port {
-            buffer.extend_from_slice(&source_port.to_bytes());
+        Ok(())
+    }
+
+    fn encoded_size(&self) -> usize {
+        let mut size = PduHeader::SIZE;
+        
+        // Fixed mandatory fields
+        size += 6 + 1 + 1 + 21 + 1 + 1 + 21 + 1 + 1 + 1 + 17 + 17 + 1 + 1 + 1 + 1 + 1;
+        
+        // Variable short_message length
+        size += self.sm_length as usize;
+
+        // Optional TLV parameters
+        if let Some(ref tlv) = self.user_message_reference {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.source_port {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.destination_port {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.sar_msg_ref_num {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.sar_total_segments {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.sar_segment_seqnum {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.user_data_header {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.privacy_indicator {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.callback_num {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.source_subaddress {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.dest_subaddress {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.language_indicator {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.its_session_info {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.network_error_code {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.message_payload {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.delivery_failure_reason {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.additional_status_info_text {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.dpf_result {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.set_dpf {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.ms_availability_status {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.receipted_message_id {
+            size += tlv.encoded_size();
+        }
+        if let Some(ref tlv) = self.message_state {
+            size += tlv.encoded_size();
         }
 
-        if let Some(destination_port) = &self.destination_port {
-            buffer.extend_from_slice(&destination_port.to_bytes());
-        }
-
-        if let Some(sar_msg_ref_num) = &self.sar_msg_ref_num {
-            buffer.extend_from_slice(&sar_msg_ref_num.to_bytes());
-        }
-
-        if let Some(sar_total_segments) = &self.sar_total_segments {
-            buffer.extend_from_slice(&sar_total_segments.to_bytes());
-        }
-
-        if let Some(sar_segment_seqnum) = &self.sar_segment_seqnum {
-            buffer.extend_from_slice(&sar_segment_seqnum.to_bytes());
-        }
-
-        if let Some(user_data_header) = &self.user_data_header {
-            buffer.extend_from_slice(&user_data_header.to_bytes());
-        }
-
-        if let Some(privacy_indicator) = &self.privacy_indicator {
-            buffer.extend_from_slice(&privacy_indicator.to_bytes());
-        }
-
-        if let Some(callback_num) = &self.callback_num {
-            buffer.extend_from_slice(&callback_num.to_bytes());
-        }
-
-        if let Some(source_subaddress) = &self.source_subaddress {
-            buffer.extend_from_slice(&source_subaddress.to_bytes());
-        }
-
-        if let Some(dest_subaddress) = &self.dest_subaddress {
-            buffer.extend_from_slice(&dest_subaddress.to_bytes());
-        }
-
-        if let Some(language_indicator) = &self.language_indicator {
-            buffer.extend_from_slice(&language_indicator.to_bytes());
-        }
-
-        if let Some(its_session_info) = &self.its_session_info {
-            buffer.extend_from_slice(&its_session_info.to_bytes());
-        }
-
-        if let Some(network_error_code) = &self.network_error_code {
-            buffer.extend_from_slice(&network_error_code.to_bytes());
-        }
-
-        if let Some(message_payload) = &self.message_payload {
-            buffer.extend_from_slice(&message_payload.to_bytes());
-        }
-
-        if let Some(delivery_failure_reason) = &self.delivery_failure_reason {
-            buffer.extend_from_slice(&delivery_failure_reason.to_bytes());
-        }
-
-        if let Some(additional_status_info_text) = &self.additional_status_info_text {
-            buffer.extend_from_slice(&additional_status_info_text.to_bytes());
-        }
-
-        if let Some(dpf_result) = &self.dpf_result {
-            buffer.extend_from_slice(&dpf_result.to_bytes());
-        }
-
-        if let Some(set_dpf) = &self.set_dpf {
-            buffer.extend_from_slice(&set_dpf.to_bytes());
-        }
-
-        if let Some(ms_availability_status) = &self.ms_availability_status {
-            buffer.extend_from_slice(&ms_availability_status.to_bytes());
-        }
-
-        if let Some(receipted_message_id) = &self.receipted_message_id {
-            buffer.extend_from_slice(&receipted_message_id.to_bytes());
-        }
-
-        if let Some(message_state) = &self.message_state {
-            buffer.extend_from_slice(&message_state.to_bytes());
-        }
-
-        let length = buffer.len() as u32;
-
-        let length_section = &mut buffer[0..][..4];
-        length_section.copy_from_slice(&length.to_be_bytes());
-
-        buffer.freeze()
+        size
     }
 }
 
-impl ToBytes for DeliverSmResponse {
-    fn to_bytes(&self) -> Bytes {
-        let length = 17 + self.message_id.as_ref().len();
+impl Encodable for DeliverSmResponse {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Encode PDU header
+        let header = PduHeader {
+            command_length: 0, // Will be set by the caller
+            command_id: CommandId::DeliverSmResp,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
 
-        let mut buffer = BytesMut::with_capacity(length);
+        // Encode body - message_id as null-terminated string
+        encode_cstring(buf, self.message_id.as_str().unwrap_or(""), 65); // Max MessageId length
 
-        buffer.put_u32(length as u32);
-        buffer.put_u32(CommandId::DeliverSmResp as u32);
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
+        Ok(())
+    }
 
-        buffer.put(self.message_id.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.freeze()
+    fn encoded_size(&self) -> usize {
+        PduHeader::SIZE + 65 // header + fixed MessageId field size
     }
 }
 
@@ -716,7 +771,7 @@ mod tests {
             message_id: MessageId::from(""), // Usually NULL for deliver_sm_resp
         };
 
-        let bytes = deliver_sm_response.to_bytes();
+        let bytes = Encodable::to_bytes(&deliver_sm_response);
 
         // Verify header
         assert_eq!(&bytes[0..4], &(bytes.len() as u32).to_be_bytes()); // command_length
@@ -727,13 +782,13 @@ mod tests {
         assert_eq!(&bytes[8..12], &(CommandStatus::Ok as u32).to_be_bytes()); // command_status
         assert_eq!(&bytes[12..16], &1u32.to_be_bytes()); // sequence_number
 
-        // Should be minimum size: 16 bytes header + 1 byte null terminator
-        assert_eq!(bytes.len(), 17);
-        assert_eq!(bytes[16], 0); // null terminator
+        // Should be SMPP v3.4 fixed size: 16 bytes header + 65 bytes MessageId field
+        assert_eq!(bytes.len(), 81);
+        assert_eq!(bytes[16], 0); // null terminator for empty message_id
     }
 
     #[test]
-    #[should_panic(expected = "SmLengthMismatch")]
+    #[should_panic(expected = "sm_length (5) does not match short_message length (11)")]
     fn deliver_sm_validation_sm_length_mismatch() {
         let deliver_sm = DeliverSm {
             command_status: CommandStatus::Ok,

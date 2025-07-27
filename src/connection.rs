@@ -1,7 +1,7 @@
 // ABOUTME: Provides TCP connection management for SMPP v3.4 protocol communication
 // ABOUTME: Implements frame-based I/O with buffering for optimal network performance
 
-use crate::datatypes::ToBytes;
+use crate::codec::Encodable;
 use crate::frame::{self, Frame};
 use bytes::{Buf, BytesMut};
 use std::io::{self, Cursor};

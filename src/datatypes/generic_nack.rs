@@ -1,7 +1,5 @@
-use crate::codec::{CodecError, Decodable, Encodable, PduHeader};
-use crate::datatypes::{CommandId, CommandStatus, ToBytes};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::io::Cursor;
+use crate::datatypes::{CommandId, CommandStatus};
+use crate::macros::impl_header_only_pdu;
 
 /// GenericNack is used to acknowledge the receipt of a PDU when the receiving
 /// entity cannot process the PDU due to errors such as invalid command_id,
@@ -57,77 +55,13 @@ impl GenericNack {
     }
 }
 
-impl ToBytes for GenericNack {
-    fn to_bytes(&self) -> Bytes {
-        // Generic NACK always has a fixed length of 16 bytes (header only)
-        const GENERIC_NACK_LENGTH: u32 = 16;
-
-        let mut buffer = BytesMut::with_capacity(GENERIC_NACK_LENGTH as usize);
-
-        // Standard SMPP header
-        buffer.put_u32(GENERIC_NACK_LENGTH);
-        buffer.put_u32(CommandId::GenericNack as u32);
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
-
-        // No body for generic_nack
-
-        buffer.freeze()
-    }
-}
-
-// New codec trait implementations
-
-impl Decodable for GenericNack {
-    fn command_id() -> CommandId {
-        CommandId::GenericNack
-    }
-
-    fn decode(header: PduHeader, buf: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        // Validate header
-        Self::validate_header(&header)?;
-
-        // generic_nack has no body - just verify we're at the end
-        if buf.has_remaining() {
-            return Err(CodecError::FieldValidation {
-                field: "generic_nack_body",
-                reason: "generic_nack PDU should have no body".to_string(),
-            });
-        }
-
-        Ok(GenericNack {
-            command_status: header.command_status,
-            sequence_number: header.sequence_number,
-        })
-    }
-}
-
-impl Encodable for GenericNack {
-    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
-        // Calculate total length (header only)
-        let total_length = PduHeader::SIZE as u32;
-
-        // Encode header
-        let header = PduHeader {
-            command_length: total_length,
-            command_id: CommandId::GenericNack,
-            command_status: self.command_status,
-            sequence_number: self.sequence_number,
-        };
-        header.encode(buf)?;
-
-        // No body to encode
-        Ok(())
-    }
-
-    fn encoded_size(&self) -> usize {
-        PduHeader::SIZE
-    }
-}
+// Use macro to generate codec boilerplate
+impl_header_only_pdu!(GenericNack, CommandId::GenericNack);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::codec::Encodable;
 
     #[test]
     fn generic_nack_to_bytes() {
@@ -136,7 +70,7 @@ mod tests {
             sequence_number: 42,
         };
 
-        let bytes = ToBytes::to_bytes(&generic_nack);
+        let bytes = generic_nack.to_bytes();
 
         let expected = vec![
             0x00, 0x00, 0x00, 0x10, // command_length (16)
@@ -182,7 +116,7 @@ mod tests {
         ];
 
         for nack in test_cases {
-            let bytes = ToBytes::to_bytes(&nack);
+            let bytes = nack.to_bytes();
             assert_eq!(bytes.len(), 16, "GenericNack should always be 16 bytes");
         }
     }
@@ -198,7 +132,7 @@ mod tests {
         };
 
         // Serialize to bytes
-        let serialized = ToBytes::to_bytes(&original);
+        let serialized = original.to_bytes();
 
         // Parse back from bytes
         let mut cursor = Cursor::new(serialized.as_ref());

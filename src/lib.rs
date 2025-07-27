@@ -3,6 +3,7 @@ pub mod codec;
 pub mod connection;
 pub mod datatypes;
 pub mod frame;
+pub mod macros;
 
 #[cfg(test)]
 mod tests;

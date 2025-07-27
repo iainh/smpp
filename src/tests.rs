@@ -2,6 +2,7 @@
 
 use crate::datatypes::*;
 use crate::frame::{Error as FrameError, Frame};
+use crate::codec::Encodable;
 use std::io::Cursor;
 
 #[cfg(test)]
@@ -60,7 +61,7 @@ mod integration_tests {
             address_range: AddressRange::from("D".repeat(40).as_str()), // Max 40 chars (41 with null terminator)
         };
 
-        let bytes = bind_transmitter.to_bytes();
+        let bytes = crate::codec::Encodable::to_bytes(&bind_transmitter);
 
         // Should not panic and should produce valid output
         assert!(bytes.len() > 16); // At least header size
@@ -125,7 +126,7 @@ mod integration_tests {
             ussd_service_op: None,
         };
 
-        let bytes = submit_sm.to_bytes();
+        let bytes = crate::codec::Encodable::to_bytes(&submit_sm);
 
         // Should handle empty message gracefully
         assert!(bytes.len() > 16);
@@ -220,7 +221,7 @@ mod integration_tests {
                 sequence_number: 1,
                 message_id: MessageId::from("test"),
             };
-            let bytes = response.to_bytes();
+            let bytes = crate::codec::Encodable::to_bytes(&response);
             assert!(bytes.len() > 16);
         }
 
@@ -245,7 +246,7 @@ mod integration_tests {
                 addr_npi: NumericPlanIndicator::Isdn,
                 address_range: AddressRange::from(""),
             };
-            let bytes = bt.to_bytes();
+            let bytes = Encodable::to_bytes(&bt);
             assert!(bytes.len() > 16);
         }
 
@@ -273,7 +274,7 @@ mod integration_tests {
                 addr_npi: npi,
                 address_range: AddressRange::from(""),
             };
-            let bytes = bt.to_bytes();
+            let bytes = Encodable::to_bytes(&bt);
             assert!(bytes.len() > 16);
         }
 
@@ -289,7 +290,7 @@ mod integration_tests {
             let mut test_submit = submit_sm.clone();
             test_submit.priority_flag = priority;
 
-            let bytes = test_submit.to_bytes();
+            let bytes = Encodable::to_bytes(&test_submit);
             assert!(bytes.len() > 16);
         }
 
@@ -306,7 +307,7 @@ mod integration_tests {
                 addr_npi: NumericPlanIndicator::Isdn,
                 address_range: AddressRange::from(""),
             };
-            let bytes = bt.to_bytes();
+            let bytes = Encodable::to_bytes(&bt);
             assert!(bytes.len() > 16);
         }
     }
@@ -381,7 +382,7 @@ mod integration_tests {
             address_range: AddressRange::from(""),
         };
 
-        let bytes = bind_transmitter.to_bytes();
+        let bytes = crate::codec::Encodable::to_bytes(&bind_transmitter);
 
         // Should encode without panicking
         assert!(bytes.len() > 16);
@@ -404,7 +405,7 @@ mod integration_tests {
                 message_id: MessageId::from("test"),
             };
 
-            let bytes = response.to_bytes();
+            let bytes = crate::codec::Encodable::to_bytes(&response);
 
             // Verify sequence number is encoded correctly
             assert_eq!(&bytes[12..16], &seq_num.to_be_bytes());

@@ -4,13 +4,14 @@ use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
     AddressError, CommandId, CommandStatus, DataCoding, DataCodingError, DateTimeError,
     DestinationAddr, EsmClass, EsmClassError, MessageId, ScheduleDeliveryTime, ServiceType,
-    ServiceTypeError, ShortMessage, SourceAddr, ToBytes, TypeOfNumber, ValidityPeriod,
+    ServiceTypeError, ShortMessage, SourceAddr, TypeOfNumber, ValidityPeriod,
 };
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use std::io::Cursor;
 
 // Import codec traits
 use crate::codec::{CodecError, Decodable, Encodable, PduHeader};
+use crate::macros::{builder_setters, encode_optional_tlvs, size_optional_tlvs};
 
 // SMPP v3.4 specification field length limits (excluding null terminator)
 // MAX_SHORT_MESSAGE_LENGTH is now enforced by the ShortMessage type
@@ -413,11 +414,22 @@ impl SubmitSmBuilder {
         }
     }
 
-    pub fn sequence_number(mut self, seq: u32) -> Self {
-        self.sequence_number = seq;
-        self
+    // Generate simple builder setters using macro
+    builder_setters! {
+        sequence_number: u32,
+        source_addr_ton: TypeOfNumber,
+        source_addr_npi: NumericPlanIndicator,
+        dest_addr_ton: TypeOfNumber,
+        dest_addr_npi: NumericPlanIndicator,
+        priority_flag: PriorityFlag,
+        registered_delivery: u8,
+        esm_class: EsmClass,
+        data_coding: DataCoding,
+        schedule_delivery_time: ScheduleDeliveryTime,
+        validity_period: ValidityPeriod
     }
 
+    // Custom setters that need conversion or special handling
     pub fn service_type(mut self, service_type: &str) -> Self {
         self.service_type = ServiceType::from(service_type);
         self
@@ -434,58 +446,8 @@ impl SubmitSmBuilder {
         self
     }
 
-    pub fn source_addr_ton(mut self, ton: TypeOfNumber) -> Self {
-        self.source_addr_ton = ton;
-        self
-    }
-
-    pub fn source_addr_npi(mut self, npi: NumericPlanIndicator) -> Self {
-        self.source_addr_npi = npi;
-        self
-    }
-
-    pub fn dest_addr_ton(mut self, ton: TypeOfNumber) -> Self {
-        self.dest_addr_ton = ton;
-        self
-    }
-
-    pub fn dest_addr_npi(mut self, npi: NumericPlanIndicator) -> Self {
-        self.dest_addr_npi = npi;
-        self
-    }
-
     pub fn short_message(mut self, message: &str) -> Self {
         self.short_message = ShortMessage::from(message);
-        self
-    }
-
-    pub fn priority_flag(mut self, priority: PriorityFlag) -> Self {
-        self.priority_flag = priority;
-        self
-    }
-
-    pub fn registered_delivery(mut self, delivery: u8) -> Self {
-        self.registered_delivery = delivery;
-        self
-    }
-
-    pub fn esm_class(mut self, esm_class: EsmClass) -> Self {
-        self.esm_class = esm_class;
-        self
-    }
-
-    pub fn data_coding(mut self, data_coding: DataCoding) -> Self {
-        self.data_coding = data_coding;
-        self
-    }
-
-    pub fn schedule_delivery_time(mut self, time: ScheduleDeliveryTime) -> Self {
-        self.schedule_delivery_time = time;
-        self
-    }
-
-    pub fn validity_period(mut self, period: ValidityPeriod) -> Self {
-        self.validity_period = period;
         self
     }
 
@@ -586,201 +548,6 @@ pub struct SubmitSmResponse {
     pub message_id: MessageId,
 }
 
-impl ToBytes for SubmitSm {
-    fn to_bytes(&self) -> Bytes {
-        // Fixed arrays are always valid by construction
-        self.validate().expect("SubmitSm validation failed");
-
-        let mut buffer = BytesMut::with_capacity(1024);
-
-        // Write junk data that we'll replace later with the actual length
-        buffer.put_u32(0_u32);
-
-        buffer.put_u32(CommandId::SubmitSm as u32);
-        buffer.put_u32(0u32); // Request PDUs must have command_status = 0 per SMPP spec
-        buffer.put_u32(self.sequence_number);
-
-        // Mandatory parameters
-        buffer.put(self.service_type.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.source_addr_ton as u8);
-        buffer.put_u8(self.source_addr_npi as u8);
-
-        buffer.put(self.source_addr.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.dest_addr_ton as u8);
-        buffer.put_u8(self.dest_addr_npi as u8);
-
-        buffer.put(self.destination_addr.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.esm_class.to_byte());
-        buffer.put_u8(self.protocol_id);
-        buffer.put_u8(self.priority_flag as u8);
-
-        buffer.put(self.schedule_delivery_time.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put(self.validity_period.as_ref());
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.registered_delivery);
-        buffer.put_u8(self.replace_if_present_flag);
-        buffer.put_u8(self.data_coding.to_byte());
-        buffer.put_u8(self.sm_default_msg_id);
-
-        // If we are using the short message and short message length
-        // (sm_length) fields, then we
-        // don't null terminate the string. the value of sm_length is used when
-        // reading.
-        // TODO: is the length of the short_message is greater than 254 octets,
-        //       then message_payload should be used and sm_length set to 0.
-        buffer.put_u8(self.sm_length);
-        buffer.put(self.short_message.as_bytes());
-
-        // Optional parameters
-
-        if let Some(user_message_reference) = &self.user_message_reference {
-            buffer.extend_from_slice(&user_message_reference.to_bytes());
-        }
-
-        if let Some(source_port) = &self.source_port {
-            buffer.extend_from_slice(&source_port.to_bytes());
-        }
-
-        if let Some(source_addr_submit) = &self.source_addr_submit {
-            buffer.extend_from_slice(&source_addr_submit.to_bytes());
-        }
-
-        if let Some(destination_port) = &self.destination_port {
-            buffer.extend_from_slice(&destination_port.to_bytes());
-        }
-
-        if let Some(dest_addr_submit) = &self.dest_addr_submit {
-            buffer.extend_from_slice(&dest_addr_submit.to_bytes());
-        }
-
-        if let Some(sar_msg_ref_num) = &self.sar_msg_ref_num {
-            buffer.extend_from_slice(&sar_msg_ref_num.to_bytes());
-        }
-
-        if let Some(sar_total_segments) = &self.sar_total_segments {
-            buffer.extend_from_slice(&sar_total_segments.to_bytes());
-        }
-
-        if let Some(sar_segment_seqnum) = &self.sar_segment_seqnum {
-            buffer.extend_from_slice(&sar_segment_seqnum.to_bytes());
-        }
-
-        if let Some(more_messages_to_send) = &self.more_messages_to_send {
-            buffer.extend_from_slice(&more_messages_to_send.to_bytes());
-        }
-
-        if let Some(payload_type) = &self.payload_type {
-            buffer.extend_from_slice(&payload_type.to_bytes());
-        }
-
-        if let Some(message_payload) = &self.message_payload {
-            buffer.extend_from_slice(&message_payload.to_bytes());
-        }
-
-        if let Some(privacy_indicator) = &self.privacy_indicator {
-            buffer.extend_from_slice(&privacy_indicator.to_bytes());
-        }
-
-        if let Some(callback_num) = &self.callback_num {
-            buffer.extend_from_slice(&callback_num.to_bytes());
-        }
-
-        if let Some(callback_num_pres_ind) = &self.callback_num_pres_ind {
-            buffer.extend_from_slice(&callback_num_pres_ind.to_bytes());
-        }
-
-        if let Some(callback_num_atag) = &self.callback_num_atag {
-            buffer.extend_from_slice(&callback_num_atag.to_bytes());
-        }
-
-        if let Some(source_subaddress) = &self.source_subaddress {
-            buffer.extend_from_slice(&source_subaddress.to_bytes());
-        }
-
-        if let Some(dest_subaddress) = &self.dest_subaddress {
-            buffer.extend_from_slice(&dest_subaddress.to_bytes());
-        }
-
-        if let Some(display_time) = &self.display_time {
-            buffer.extend_from_slice(&display_time.to_bytes());
-        }
-
-        if let Some(sms_signal) = &self.sms_signal {
-            buffer.extend_from_slice(&sms_signal.to_bytes());
-        }
-
-        if let Some(ms_validity) = &self.ms_validity {
-            buffer.extend_from_slice(&ms_validity.to_bytes());
-        }
-
-        if let Some(ms_msg_wait_facilities) = &self.ms_msg_wait_facilities {
-            buffer.extend_from_slice(&ms_msg_wait_facilities.to_bytes());
-        }
-
-        if let Some(number_of_messages) = &self.number_of_messages {
-            buffer.extend_from_slice(&number_of_messages.to_bytes());
-        }
-
-        if let Some(alert_on_msg_delivery) = &self.alert_on_msg_delivery {
-            buffer.extend_from_slice(&alert_on_msg_delivery.to_bytes());
-        }
-
-        if let Some(language_indicator) = &self.language_indicator {
-            buffer.extend_from_slice(&language_indicator.to_bytes());
-        }
-
-        if let Some(its_reply_type) = &self.its_reply_type {
-            buffer.extend_from_slice(&its_reply_type.to_bytes());
-        }
-
-        if let Some(its_session_info) = &self.its_session_info {
-            buffer.extend_from_slice(&its_session_info.to_bytes());
-        }
-
-        if let Some(ussd_service_op) = &self.ussd_service_op {
-            buffer.extend_from_slice(&ussd_service_op.to_bytes());
-        }
-
-        let length = buffer.len() as u32;
-
-        let length_section = &mut buffer[0..][..4];
-        length_section.copy_from_slice(&length.to_be_bytes());
-
-        buffer.freeze()
-    }
-}
-
-impl ToBytes for SubmitSmResponse {
-    fn to_bytes(&self) -> Bytes {
-        // Fixed arrays are always valid by construction
-        let message_id = self.message_id.as_ref();
-
-        let length = 17 + message_id.len();
-
-        let mut buffer = BytesMut::with_capacity(length);
-
-        // Write junk data that we'll replace later with the actual length
-        buffer.put_u32(length as u32);
-
-        buffer.put_u32(CommandId::SubmitSmResp as u32);
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
-
-        buffer.put(message_id);
-        buffer.put_u8(b'\0');
-
-        buffer.freeze()
-    }
-}
 
 // Codec trait implementations for new SMPP codec system
 impl Encodable for SubmitSm {
@@ -832,88 +599,37 @@ impl Encodable for SubmitSm {
         // Short message (no null terminator for binary data)
         buf.extend_from_slice(self.short_message.as_bytes());
 
-        // Encode all optional TLV parameters
-        if let Some(ref tlv) = self.user_message_reference {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.source_port {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.source_addr_submit {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.destination_port {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.dest_addr_submit {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.sar_msg_ref_num {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.sar_total_segments {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.sar_segment_seqnum {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.more_messages_to_send {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.payload_type {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.message_payload {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.privacy_indicator {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.callback_num {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.callback_num_pres_ind {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.callback_num_atag {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.source_subaddress {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.dest_subaddress {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.display_time {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.sms_signal {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.ms_validity {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.ms_msg_wait_facilities {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.number_of_messages {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.alert_on_msg_delivery {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.language_indicator {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.its_reply_type {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.its_session_info {
-            tlv.encode(buf)?;
-        }
-        if let Some(ref tlv) = self.ussd_service_op {
-            tlv.encode(buf)?;
-        }
+        // Encode all optional TLV parameters using macro
+        encode_optional_tlvs!(
+            self, buf,
+            user_message_reference,
+            source_port,
+            source_addr_submit,
+            destination_port,
+            dest_addr_submit,
+            sar_msg_ref_num,
+            sar_total_segments,
+            sar_segment_seqnum,
+            more_messages_to_send,
+            payload_type,
+            message_payload,
+            privacy_indicator,
+            callback_num,
+            callback_num_pres_ind,
+            callback_num_atag,
+            source_subaddress,
+            dest_subaddress,
+            display_time,
+            sms_signal,
+            ms_validity,
+            ms_msg_wait_facilities,
+            number_of_messages,
+            alert_on_msg_delivery,
+            language_indicator,
+            its_reply_type,
+            its_session_info,
+            ussd_service_op
+        );
 
         Ok(())
     }
@@ -939,88 +655,37 @@ impl Encodable for SubmitSm {
         size += 1; // sm_length
         size += self.short_message.as_bytes().len(); // not null terminated
 
-        // Optional TLV fields
-        if let Some(ref tlv) = self.user_message_reference {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.source_port {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.source_addr_submit {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.destination_port {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.dest_addr_submit {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.sar_msg_ref_num {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.sar_total_segments {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.sar_segment_seqnum {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.more_messages_to_send {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.payload_type {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.message_payload {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.privacy_indicator {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.callback_num {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.callback_num_pres_ind {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.callback_num_atag {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.source_subaddress {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.dest_subaddress {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.display_time {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.sms_signal {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.ms_validity {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.ms_msg_wait_facilities {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.number_of_messages {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.alert_on_msg_delivery {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.language_indicator {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.its_reply_type {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.its_session_info {
-            size += tlv.encoded_size();
-        }
-        if let Some(ref tlv) = self.ussd_service_op {
-            size += tlv.encoded_size();
-        }
+        // Optional TLV fields - calculate sizes using macro
+        size_optional_tlvs!(
+            size, self,
+            user_message_reference,
+            source_port,
+            source_addr_submit,
+            destination_port,
+            dest_addr_submit,
+            sar_msg_ref_num,
+            sar_total_segments,
+            sar_segment_seqnum,
+            more_messages_to_send,
+            payload_type,
+            message_payload,
+            privacy_indicator,
+            callback_num,
+            callback_num_pres_ind,
+            callback_num_atag,
+            source_subaddress,
+            dest_subaddress,
+            display_time,
+            sms_signal,
+            ms_validity,
+            ms_msg_wait_facilities,
+            number_of_messages,
+            alert_on_msg_delivery,
+            language_indicator,
+            its_reply_type,
+            its_session_info,
+            ussd_service_op
+        );
 
         size
     }
@@ -1563,7 +1228,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "SmLengthMismatch")]
+    #[should_panic(expected = "sm_length (5) does not match short_message length (11)")]
     fn submit_sm_validation_sm_length_mismatch() {
         let submit_sm = SubmitSm {
             command_status: CommandStatus::Ok,
@@ -1645,7 +1310,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "MutualExclusivityViolation")]
+    #[should_panic(expected = "Cannot use both short_message and message_payload - they are mutually exclusive")]
     fn submit_sm_validation_mutual_exclusivity() {
         use bytes::Bytes;
 

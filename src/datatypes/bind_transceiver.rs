@@ -2,9 +2,13 @@ use crate::datatypes::interface_version::InterfaceVersion;
 use crate::datatypes::numeric_plan_indicator::NumericPlanIndicator;
 use crate::datatypes::tlv::Tlv;
 use crate::datatypes::{
-    AddressRange, CommandId, CommandStatus, Password, SystemId, SystemType, ToBytes, TypeOfNumber,
+    AddressRange, CommandId, CommandStatus, Password, SystemId, SystemType, TypeOfNumber,
 };
-use bytes::{BufMut, Bytes, BytesMut};
+use crate::codec::{
+    CodecError, Decodable, Encodable, PduHeader, decode_cstring, decode_u8, encode_cstring,
+    encode_u8,
+};
+use bytes::BytesMut;
 
 /// BindTransceiver is used to bind a transceiver ESME to the SMSC.
 /// A transceiver ESME can both send and receive messages through a single connection.
@@ -180,79 +184,156 @@ pub struct BindTransceiverResponse {
     pub sc_interface_version: Option<Tlv>,
 }
 
-impl ToBytes for BindTransceiver {
-    fn to_bytes(&self) -> Bytes {
-        // Fixed arrays are always valid by construction
-        let system_id = self.system_id.as_ref();
-        let password = self.password.as_ref().map(|p| p.as_ref());
-        let system_type = self.system_type.as_ref();
-        let address_range = self.address_range.as_ref();
 
-        let length = 23
-            + system_id.len()
-            + password.map_or(0, |p| p.len())
-            + system_type.len()
-            + address_range.len();
 
-        let mut buffer = BytesMut::with_capacity(length);
-        buffer.put_u32(length as u32);
+impl Encodable for BindTransceiverResponse {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Encode PDU header
+        let header = PduHeader {
+            command_length: 0, // Will be set by the caller
+            command_id: CommandId::BindTransceiverResp,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
 
-        buffer.put_u32(CommandId::BindTransceiver as u32);
-        buffer.put_u32(0u32); // Request PDUs must have command_status = 0 per SMPP spec
-        buffer.put_u32(self.sequence_number);
+        // Encode body - system_id as fixed-length null-terminated string
+        encode_cstring(buf, self.system_id.as_str().unwrap_or(""), 16);
 
-        buffer.put(system_id);
-        buffer.put_u8(b'\0');
-
-        if let Some(password) = password {
-            buffer.put(password);
+        // Encode optional TLV parameters
+        if let Some(ref tlv) = self.sc_interface_version {
+            tlv.encode(buf)?;
         }
 
-        buffer.put_u8(b'\0');
+        Ok(())
+    }
 
-        buffer.put(system_type);
-        buffer.put_u8(b'\0');
-
-        buffer.put_u8(self.interface_version as u8);
-        buffer.put_u8(self.addr_ton as u8);
-        buffer.put_u8(self.addr_npi as u8);
-
-        buffer.put(address_range);
-        buffer.put_u8(b'\0');
-
-        buffer.freeze()
+    fn encoded_size(&self) -> usize {
+        let mut size = PduHeader::SIZE + 16; // header + fixed system_id field
+        if let Some(ref tlv) = self.sc_interface_version {
+            size += tlv.encoded_size();
+        }
+        size
     }
 }
 
-impl ToBytes for BindTransceiverResponse {
-    fn to_bytes(&self) -> Bytes {
-        // Fixed arrays are always valid by construction
-        let system_id = self.system_id.as_ref();
+// New codec trait implementations
 
-        // Calculate length: header (16) + system_id + null terminator + optional TLV
-        let mut length = 16 + system_id.len() + 1;
-        if let Some(ref tlv) = self.sc_interface_version {
-            length += tlv.to_bytes().len();
-        }
+impl Decodable for BindTransceiver {
+    fn command_id() -> CommandId {
+        CommandId::BindTransceiver
+    }
 
-        let mut buffer = BytesMut::with_capacity(length);
+    fn decode(header: PduHeader, buf: &mut std::io::Cursor<&[u8]>) -> Result<Self, CodecError> {
+        // Validate header
+        Self::validate_header(&header)?;
 
-        // Header
-        buffer.put_u32(length as u32);
-        buffer.put_u32(CommandId::BindTransceiverResp as u32);
-        buffer.put_u32(self.command_status as u32);
-        buffer.put_u32(self.sequence_number);
+        // Parse mandatory fields (following SMPP v3.4 Section 4.1.1)
+        let system_id_str = decode_cstring(buf, 16, "system_id")?;
+        let password_str = decode_cstring(buf, 9, "password")?;
+        let system_type_str = decode_cstring(buf, 13, "system_type")?;
+        let interface_version = InterfaceVersion::try_from(decode_u8(buf)?).map_err(|_| {
+            CodecError::FieldValidation {
+                field: "interface_version",
+                reason: "Invalid interface version".to_string(),
+            }
+        })?;
+        let addr_ton =
+            TypeOfNumber::try_from(decode_u8(buf)?).map_err(|_| CodecError::FieldValidation {
+                field: "addr_ton",
+                reason: "Invalid type of number".to_string(),
+            })?;
+        let addr_npi = NumericPlanIndicator::try_from(decode_u8(buf)?).map_err(|_| {
+            CodecError::FieldValidation {
+                field: "addr_npi",
+                reason: "Invalid numbering plan indicator".to_string(),
+            }
+        })?;
+        let address_range_str = decode_cstring(buf, 41, "address_range")?;
 
-        // Body: system_id (mandatory field)
-        buffer.put(system_id);
-        buffer.put_u8(b'\0'); // null terminator
+        // Convert to domain types
+        let system_id = SystemId::from_parsed_string(system_id_str).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "system_id",
+                reason: e.to_string(),
+            }
+        })?;
 
-        // Optional TLV parameters
-        if let Some(sc_interface_version) = &self.sc_interface_version {
-            buffer.extend_from_slice(&sc_interface_version.to_bytes());
-        }
+        let password = if password_str.is_empty() {
+            None
+        } else {
+            Some(Password::from_parsed_string(password_str).map_err(|e| {
+                CodecError::FieldValidation {
+                    field: "password",
+                    reason: e.to_string(),
+                }
+            })?)
+        };
 
-        buffer.freeze()
+        let system_type = SystemType::from_parsed_string(system_type_str).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "system_type",
+                reason: e.to_string(),
+            }
+        })?;
+
+        let address_range = AddressRange::from_parsed_string(address_range_str).map_err(|e| {
+            CodecError::FieldValidation {
+                field: "address_range",
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(BindTransceiver {
+            command_status: header.command_status,
+            sequence_number: header.sequence_number,
+            system_id,
+            password,
+            system_type,
+            interface_version,
+            addr_ton,
+            addr_npi,
+            address_range,
+        })
+    }
+}
+
+impl Encodable for BindTransceiver {
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), CodecError> {
+        // Calculate body size (fixed field sizes)
+        let body_size = 16 + 9 + 13 + 1 + 1 + 1 + 41; // All fixed field sizes
+        let total_length = PduHeader::SIZE + body_size;
+
+        // Encode header
+        let header = PduHeader {
+            command_length: total_length as u32,
+            command_id: CommandId::BindTransceiver,
+            command_status: self.command_status,
+            sequence_number: self.sequence_number,
+        };
+        header.encode(buf)?;
+
+        // Encode body
+        encode_cstring(buf, self.system_id.as_str().unwrap_or(""), 16);
+        encode_cstring(
+            buf,
+            self.password
+                .as_ref()
+                .map(|p| p.as_str().unwrap_or(""))
+                .unwrap_or(""),
+            9,
+        );
+        encode_cstring(buf, self.system_type.as_str().unwrap_or(""), 13);
+        encode_u8(buf, self.interface_version as u8);
+        encode_u8(buf, self.addr_ton as u8);
+        encode_u8(buf, self.addr_npi as u8);
+        encode_cstring(buf, self.address_range.as_str().unwrap_or(""), 41);
+
+        Ok(())
+    }
+
+    fn encoded_size(&self) -> usize {
+        PduHeader::SIZE + 16 + 9 + 13 + 1 + 1 + 1 + 41 // header + fixed field sizes
     }
 }
 
@@ -274,23 +355,36 @@ mod tests {
             address_range: AddressRange::from(""),
         };
 
-        let bt_bytes = bind_transceiver.to_bytes();
+        let bt_bytes = Encodable::to_bytes(&bind_transceiver);
 
-        // Expected byte representation of a bind transceiver
+        // Expected byte representation of a bind transceiver (SMPP v3.4 fixed-length)
         let expected: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x2F, // command_length
+            0x00, 0x00, 0x00, 0x62, // command_length (98 bytes total)
             0x00, 0x00, 0x00, 0x09, // command_id (BindTransceiver = 0x00000009)
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
-            // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00, // system_id
-            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00, // password
-            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00, // system_type
-            0x34, // interface_version
-            0x01, // addr_ton
-            0x01, // addr_npi
-            0x00, // address_range
+            // Body (fixed-length fields):
+            // system_id (16 bytes): "SMPP3TEST" + null + padding
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // password (9 bytes): "secret08" + null
+            0x73, 0x65, 0x63, 0x72, 0x65, 0x74, 0x30, 0x38, 0x00,
+            // system_type (13 bytes): "SUBMIT1" + null + padding
+            0x53, 0x55, 0x42, 0x4D, 0x49, 0x54, 0x31, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            // interface_version (1 byte)
+            0x34,
+            // addr_ton (1 byte)
+            0x01,
+            // addr_npi (1 byte)
+            0x01,
+            // address_range (41 bytes): null + padding
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
         ];
 
         assert_eq!(&bt_bytes, &expected);
@@ -307,16 +401,17 @@ mod tests {
 
         let btr_bytes = bind_transceiver_response.to_bytes();
 
-        // Expected byte representation of a bind transceiver response without TLV
+        // Expected byte representation of a bind transceiver response without TLV (SMPP v3.4 fixed-length)
         let expected: Vec<u8> = vec![
             // Header:
-            0x00, 0x00, 0x00, 0x1A, // command_length (26 bytes total)
+            0x00, 0x00, 0x00, 0x20, // command_length (32 bytes total: 16 header + 16 system_id)
             0x80, 0x00, 0x00, 0x09, // command_id (BindTransceiverResp = 0x80000009)
             0x00, 0x00, 0x00, 0x00, // command_status
             0x00, 0x00, 0x00, 0x01, // sequence_number
             // Body:
-            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54,
-            0x00, // system_id "SMPP3TEST\0"
+            // system_id (16 bytes): "SMPP3TEST" + null + padding
+            0x53, 0x4D, 0x50, 0x50, 0x33, 0x54, 0x45, 0x53, 0x54, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
         assert_eq!(&btr_bytes, &expected);
@@ -367,7 +462,7 @@ mod tests {
         };
 
         // Serialize to bytes
-        let serialized = original.to_bytes();
+        let serialized = Encodable::to_bytes(&original);
 
         // Parse back from bytes
         let mut cursor = Cursor::new(serialized.as_ref());

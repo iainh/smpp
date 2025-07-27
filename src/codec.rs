@@ -99,6 +99,23 @@ pub trait Encodable {
         let mut buf = BytesMut::new();
         self.encode(&mut buf).map(|_| buf.len()).unwrap_or(0)
     }
+
+    /// Convert this PDU to bytes (convenience method)
+    /// 
+    /// This is a default implementation that creates a buffer, encodes into it,
+    /// fixes the command_length field, and returns the frozen bytes. This replaces the legacy ToBytes trait.
+    fn to_bytes(&self) -> Bytes {
+        let mut buf = BytesMut::new();
+        self.encode(&mut buf).expect("Encoding should not fail for valid PDU");
+        
+        // Fix the command_length field in the header (first 4 bytes)
+        if buf.len() >= 4 {
+            let length = buf.len() as u32;
+            buf[0..4].copy_from_slice(&length.to_be_bytes());
+        }
+        
+        buf.freeze()
+    }
 }
 
 /// Trait for types that can be decoded from bytes
@@ -519,7 +536,7 @@ mod tests {
     use super::*;
     use crate::datatypes::{
         CommandStatus, EnquireLink, EnquireLinkResponse, GenericNack, Outbind, Password, SystemId,
-        ToBytes, Unbind,
+        Unbind,
     };
 
     #[test]

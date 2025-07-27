@@ -54,14 +54,10 @@ pub use outbind::{Outbind, OutbindValidationError};
 pub use submit_sm::{SubmitSm, SubmitSmResponse, SubmitSmValidationError};
 pub use unbind::{Unbind, UnbindResponse};
 
-use bytes::Bytes;
 
 // SMPP v3.4 specification field length limits (excluding null terminator)
 // These constants are shared across multiple PDU types
 pub const MAX_SYSTEM_ID_LENGTH: usize = 15;
 pub const MAX_PASSWORD_LENGTH: usize = 8;
 
-pub trait ToBytes {
-    /// Converts the provided data to bytes.
-    fn to_bytes(&self) -> Bytes;
-}
+
