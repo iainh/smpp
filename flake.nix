@@ -3,24 +3,25 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fenix.url = "github:nix-community/fenix";
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, fenix, flake-utils, ... }:
+  outputs = { nixpkgs, fenix, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-        };
-        rust-toolchain = fenix.packages.${system}.stable.defaultToolchain;
+        pkgs = nixpkgs.legacyPackages.${system};
+        rust-toolchain = fenix.packages.${system}.stable.toolchain;
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = [
+          buildInputs = with pkgs; [
             rust-toolchain
-            pkgs.cargo-outdated
-            pkgs.nixd
+            cargo-outdated
+            nixd
           ];
         };
       }
