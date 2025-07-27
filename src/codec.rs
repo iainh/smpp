@@ -331,6 +331,8 @@ pub enum Frame {
     // Message PDUs
     SubmitSm(Box<crate::datatypes::SubmitSm>),
     SubmitSmResp(crate::datatypes::SubmitSmResponse),
+    SubmitMulti(Box<crate::datatypes::SubmitMulti>),
+    SubmitMultiResp(crate::datatypes::SubmitMultiResponse),
     QuerySm(crate::datatypes::QuerySm),
     QuerySmResp(crate::datatypes::QuerySmResponse),
     ReplaceSm(Box<crate::datatypes::ReplaceSm>),
@@ -382,6 +384,12 @@ impl PduRegistry {
             Frame::SubmitSm(Box::new(pdu))
         });
         registry.register_pdu::<crate::datatypes::SubmitSmResponse, _>(Frame::SubmitSmResp);
+
+        // Register submit_multi PDUs
+        registry.register_boxed_pdu::<crate::datatypes::SubmitMulti, _>(|pdu| {
+            Frame::SubmitMulti(Box::new(pdu))
+        });
+        registry.register_pdu::<crate::datatypes::SubmitMultiResponse, _>(Frame::SubmitMultiResp);
 
         // Register query PDUs
         registry.register_pdu::<crate::datatypes::QuerySm, _>(Frame::QuerySm);
@@ -488,6 +496,8 @@ impl Frame {
             Frame::BindTransmitter(_) => CommandId::BindTransmitter,
             Frame::SubmitSm(_) => CommandId::SubmitSm,
             Frame::SubmitSmResp(_) => CommandId::SubmitSmResp,
+            Frame::SubmitMulti(_) => CommandId::SubmitMulti,
+            Frame::SubmitMultiResp(_) => CommandId::SubmitMultiResp,
             Frame::QuerySm(_) => CommandId::QuerySm,
             Frame::QuerySmResp(_) => CommandId::QuerySmResp,
             Frame::ReplaceSm(_) => CommandId::ReplaceSm,
@@ -512,6 +522,8 @@ impl Frame {
             Frame::BindTransmitter(pdu) => pdu.sequence_number,
             Frame::SubmitSm(pdu) => pdu.sequence_number,
             Frame::SubmitSmResp(pdu) => pdu.sequence_number,
+            Frame::SubmitMulti(pdu) => pdu.sequence_number,
+            Frame::SubmitMultiResp(pdu) => pdu.sequence_number,
             Frame::QuerySm(pdu) => pdu.sequence_number,
             Frame::QuerySmResp(pdu) => pdu.sequence_number,
             Frame::ReplaceSm(pdu) => pdu.sequence_number,

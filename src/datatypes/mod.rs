@@ -20,6 +20,7 @@ mod priority_flag;
 mod query_sm;
 mod replace_sm;
 mod service_type;
+mod submit_multi;
 mod submit_sm;
 mod tlv;
 mod type_of_number;
@@ -66,6 +67,10 @@ pub use query_sm::{
 };
 pub use replace_sm::{
     ReplaceSm, ReplaceSmResponse, ReplaceSmResponseValidationError, ReplaceSmValidationError,
+};
+pub use submit_multi::{
+    DestinationAddress, SubmitMulti, SubmitMultiResponse, SubmitMultiResponseValidationError, 
+    SubmitMultiValidationError, UnsuccessSmeAddress,
 };
 pub use submit_sm::{SubmitSm, SubmitSmResponse, SubmitSmValidationError};
 pub use unbind::{Unbind, UnbindResponse};

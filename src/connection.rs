@@ -224,6 +224,12 @@ impl Connection {
             Frame::SubmitSmResp(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
+            Frame::SubmitMulti(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::SubmitMultiResp(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
             Frame::QuerySm(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
