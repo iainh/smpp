@@ -2,6 +2,7 @@ mod address;
 mod bind_receiver;
 mod bind_transceiver;
 mod bind_transmitter;
+mod cancel_sm;
 mod command_id;
 mod command_status;
 mod data_coding;
@@ -15,6 +16,8 @@ mod interface_version;
 mod numeric_plan_indicator;
 mod outbind;
 mod priority_flag;
+mod query_sm;
+mod replace_sm;
 mod service_type;
 mod submit_sm;
 mod tlv;
@@ -47,17 +50,23 @@ pub use bind_transceiver::{
 pub use bind_transmitter::{
     BindTransmitter, BindTransmitterResponse, BindTransmitterValidationError,
 };
+pub use cancel_sm::{
+    CancelSm, CancelSmResponse, CancelSmResponseValidationError, CancelSmValidationError,
+};
 pub use deliver_sm::{DeliverSm, DeliverSmResponse, DeliverSmValidationError};
 pub use enquire_link::{EnquireLink, EnquireLinkResponse};
 pub use generic_nack::GenericNack;
 pub use outbind::{Outbind, OutbindValidationError};
+pub use query_sm::{
+    MessageState, QuerySm, QuerySmResponse, QuerySmResponseValidationError, QuerySmValidationError,
+};
+pub use replace_sm::{
+    ReplaceSm, ReplaceSmResponse, ReplaceSmResponseValidationError, ReplaceSmValidationError,
+};
 pub use submit_sm::{SubmitSm, SubmitSmResponse, SubmitSmValidationError};
 pub use unbind::{Unbind, UnbindResponse};
-
 
 // SMPP v3.4 specification field length limits (excluding null terminator)
 // These constants are shared across multiple PDU types
 pub const MAX_SYSTEM_ID_LENGTH: usize = 15;
 pub const MAX_PASSWORD_LENGTH: usize = 8;
-
-

@@ -101,19 +101,20 @@ pub trait Encodable {
     }
 
     /// Convert this PDU to bytes (convenience method)
-    /// 
+    ///
     /// This is a default implementation that creates a buffer, encodes into it,
     /// fixes the command_length field, and returns the frozen bytes. This replaces the legacy ToBytes trait.
     fn to_bytes(&self) -> Bytes {
         let mut buf = BytesMut::new();
-        self.encode(&mut buf).expect("Encoding should not fail for valid PDU");
-        
+        self.encode(&mut buf)
+            .expect("Encoding should not fail for valid PDU");
+
         // Fix the command_length field in the header (first 4 bytes)
         if buf.len() >= 4 {
             let length = buf.len() as u32;
             buf[0..4].copy_from_slice(&length.to_be_bytes());
         }
-        
+
         buf.freeze()
     }
 }
@@ -330,6 +331,12 @@ pub enum Frame {
     // Message PDUs
     SubmitSm(Box<crate::datatypes::SubmitSm>),
     SubmitSmResp(crate::datatypes::SubmitSmResponse),
+    QuerySm(crate::datatypes::QuerySm),
+    QuerySmResp(crate::datatypes::QuerySmResponse),
+    ReplaceSm(Box<crate::datatypes::ReplaceSm>),
+    ReplaceSmResp(crate::datatypes::ReplaceSmResponse),
+    CancelSm(crate::datatypes::CancelSm),
+    CancelSmResp(crate::datatypes::CancelSmResponse),
     // TODO: Add codec implementations for these PDUs
     // DeliverSm(Box<crate::datatypes::DeliverSm>),
     // DeliverSmResponse(crate::datatypes::DeliverSmResponse),
@@ -373,6 +380,20 @@ impl PduRegistry {
             Frame::SubmitSm(Box::new(pdu))
         });
         registry.register_pdu::<crate::datatypes::SubmitSmResponse, _>(Frame::SubmitSmResp);
+
+        // Register query PDUs
+        registry.register_pdu::<crate::datatypes::QuerySm, _>(Frame::QuerySm);
+        registry.register_pdu::<crate::datatypes::QuerySmResponse, _>(Frame::QuerySmResp);
+
+        // Register replace PDUs
+        registry.register_boxed_pdu::<crate::datatypes::ReplaceSm, _>(|pdu| {
+            Frame::ReplaceSm(Box::new(pdu))
+        });
+        registry.register_pdu::<crate::datatypes::ReplaceSmResponse, _>(Frame::ReplaceSmResp);
+
+        // Register cancel PDUs
+        registry.register_pdu::<crate::datatypes::CancelSm, _>(Frame::CancelSm);
+        registry.register_pdu::<crate::datatypes::CancelSmResponse, _>(Frame::CancelSmResp);
 
         registry
     }
@@ -459,6 +480,12 @@ impl Frame {
             Frame::BindTransmitter(_) => CommandId::BindTransmitter,
             Frame::SubmitSm(_) => CommandId::SubmitSm,
             Frame::SubmitSmResp(_) => CommandId::SubmitSmResp,
+            Frame::QuerySm(_) => CommandId::QuerySm,
+            Frame::QuerySmResp(_) => CommandId::QuerySmResp,
+            Frame::ReplaceSm(_) => CommandId::ReplaceSm,
+            Frame::ReplaceSmResp(_) => CommandId::ReplaceSmResp,
+            Frame::CancelSm(_) => CommandId::CancelSm,
+            Frame::CancelSmResp(_) => CommandId::CancelSmResp,
             Frame::GenericNack(_) => CommandId::GenericNack,
             Frame::Outbind(_) => CommandId::Outbind,
             Frame::Unknown { header, .. } => header.command_id,
@@ -475,6 +502,12 @@ impl Frame {
             Frame::BindTransmitter(pdu) => pdu.sequence_number,
             Frame::SubmitSm(pdu) => pdu.sequence_number,
             Frame::SubmitSmResp(pdu) => pdu.sequence_number,
+            Frame::QuerySm(pdu) => pdu.sequence_number,
+            Frame::QuerySmResp(pdu) => pdu.sequence_number,
+            Frame::ReplaceSm(pdu) => pdu.sequence_number,
+            Frame::ReplaceSmResp(pdu) => pdu.sequence_number,
+            Frame::CancelSm(pdu) => pdu.sequence_number,
+            Frame::CancelSmResp(pdu) => pdu.sequence_number,
             Frame::GenericNack(pdu) => pdu.sequence_number,
             Frame::Outbind(pdu) => pdu.sequence_number,
             Frame::Unknown { header, .. } => header.sequence_number,
