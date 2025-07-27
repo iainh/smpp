@@ -256,7 +256,7 @@ impl DataSm {
     }
 
     /// Get the message payload from TLV parameters if present
-    pub fn get_message_payload(&self) -> Option<&bytes::Bytes> {
+    pub fn message_payload(&self) -> Option<&bytes::Bytes> {
         self.optional_parameters
             .iter()
             .find(|tlv| tlv.tag == crate::datatypes::tlv::tags::MESSAGE_PAYLOAD)
@@ -264,7 +264,7 @@ impl DataSm {
     }
 
     /// Get the source port from TLV parameters if present
-    pub fn get_source_port(&self) -> Option<u16> {
+    pub fn source_port(&self) -> Option<u16> {
         self.optional_parameters
             .iter()
             .find(|tlv| tlv.tag == crate::datatypes::tlv::tags::SOURCE_PORT)
@@ -278,7 +278,7 @@ impl DataSm {
     }
 
     /// Get the destination port from TLV parameters if present
-    pub fn get_destination_port(&self) -> Option<u16> {
+    pub fn destination_port(&self) -> Option<u16> {
         self.optional_parameters
             .iter()
             .find(|tlv| tlv.tag == crate::datatypes::tlv::tags::DESTINATION_PORT)
@@ -720,7 +720,7 @@ mod tests {
         assert_eq!(data_sm.service_type.as_str(), "WAP");
         assert_eq!(data_sm.optional_parameters.len(), 1);
         
-        let payload = data_sm.get_message_payload().unwrap();
+        let payload = data_sm.message_payload().unwrap();
         assert_eq!(payload.as_ref(), message_payload);
     }
 
@@ -792,8 +792,8 @@ mod tests {
         data_sm.add_source_port(8080);
         data_sm.add_destination_port(9999);
 
-        assert_eq!(data_sm.get_source_port(), Some(8080));
-        assert_eq!(data_sm.get_destination_port(), Some(9999));
+        assert_eq!(data_sm.source_port(), Some(8080));
+        assert_eq!(data_sm.destination_port(), Some(9999));
         assert_eq!(data_sm.optional_parameters.len(), 2);
     }
 

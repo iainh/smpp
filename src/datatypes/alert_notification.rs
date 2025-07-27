@@ -156,12 +156,12 @@ impl AlertNotification {
     }
 
     /// Get the subscriber address that is now available
-    pub fn get_subscriber_address(&self) -> &SourceAddr {
+    pub fn subscriber_address(&self) -> &SourceAddr {
         &self.source_addr
     }
 
     /// Get the ESME address to be notified
-    pub fn get_esme_address(&self) -> &SourceAddr {
+    pub fn esme_address(&self) -> &SourceAddr {
         &self.esme_addr
     }
 
@@ -176,12 +176,12 @@ impl AlertNotification {
     }
 
     /// Get the subscriber number as a string (if available)
-    pub fn get_subscriber_number(&self) -> Option<&str> {
+    pub fn subscriber_number(&self) -> Option<&str> {
         self.source_addr.as_str().ok()
     }
 
     /// Get the ESME address as a string (if available)
-    pub fn get_esme_address_string(&self) -> Option<&str> {
+    pub fn esme_address_string(&self) -> Option<&str> {
         self.esme_addr.as_str().ok()
     }
 
@@ -338,8 +338,8 @@ mod tests {
 
         assert_eq!(alert_notification.sequence_number, 456);
         assert_eq!(alert_notification.source_addr_ton, TypeOfNumber::International);
-        assert_eq!(alert_notification.get_subscriber_number().unwrap(), "+1234567890");
-        assert_eq!(alert_notification.get_esme_address_string().unwrap(), "SMSGATEWAY");
+        assert_eq!(alert_notification.subscriber_number().unwrap(), "+1234567890");
+        assert_eq!(alert_notification.esme_address_string().unwrap(), "SMSGATEWAY");
         assert!(alert_notification.is_international_subscriber());
     }
 
@@ -405,10 +405,10 @@ mod tests {
         .unwrap();
 
         // Test getter methods
-        assert_eq!(alert_notification.get_subscriber_address().as_str().ok().unwrap(), "+1234567890");
-        assert_eq!(alert_notification.get_esme_address().as_str().ok().unwrap(), "+1555666777");
-        assert_eq!(alert_notification.get_subscriber_number().unwrap(), "+1234567890");
-        assert_eq!(alert_notification.get_esme_address_string().unwrap(), "+1555666777");
+        assert_eq!(alert_notification.subscriber_address().as_str().ok().unwrap(), "+1234567890");
+        assert_eq!(alert_notification.esme_address().as_str().ok().unwrap(), "+1555666777");
+        assert_eq!(alert_notification.subscriber_number().unwrap(), "+1234567890");
+        assert_eq!(alert_notification.esme_address_string().unwrap(), "+1555666777");
 
         // Test type checking methods
         assert!(alert_notification.is_international_subscriber());
