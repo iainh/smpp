@@ -263,6 +263,18 @@ impl Connection {
             Frame::BroadcastSmResp(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }
+            Frame::QueryBroadcastSm(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::QueryBroadcastSmResp(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::CancelBroadcastSm(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
+            Frame::CancelBroadcastSmResp(pdu) => {
+                self.stream.write_all(&pdu.to_bytes()).await?;
+            }
             Frame::Unbind(pdu) => {
                 self.stream.write_all(&pdu.to_bytes()).await?;
             }

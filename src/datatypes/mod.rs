@@ -4,6 +4,7 @@ mod bind_receiver;
 mod bind_transceiver;
 mod bind_transmitter;
 mod broadcast_sm;
+mod cancel_broadcast_sm;
 mod cancel_sm;
 mod command_id;
 mod command_status;
@@ -19,6 +20,7 @@ mod interface_version;
 mod numeric_plan_indicator;
 mod outbind;
 mod priority_flag;
+mod query_broadcast_sm;
 mod query_sm;
 mod replace_sm;
 mod service_type;
@@ -58,6 +60,9 @@ pub use bind_transmitter::{
 pub use broadcast_sm::{
     BroadcastSm, BroadcastSmResponse, BroadcastSmValidationError,
 };
+pub use cancel_broadcast_sm::{
+    CancelBroadcastSm, CancelBroadcastSmResponse, CancelBroadcastSmValidationError,
+};
 pub use cancel_sm::{
     CancelSm, CancelSmResponse, CancelSmResponseValidationError, CancelSmValidationError,
 };
@@ -68,6 +73,9 @@ pub use deliver_sm::{DeliverSm, DeliverSmResponse, DeliverSmValidationError};
 pub use enquire_link::{EnquireLink, EnquireLinkResponse};
 pub use generic_nack::GenericNack;
 pub use outbind::{Outbind, OutbindValidationError};
+pub use query_broadcast_sm::{
+    QueryBroadcastSm, QueryBroadcastSmResponse, QueryBroadcastSmValidationError,
+};
 pub use query_sm::{
     MessageState, QuerySm, QuerySmResponse, QuerySmResponseValidationError, QuerySmValidationError,
 };

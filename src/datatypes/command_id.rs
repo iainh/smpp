@@ -129,6 +129,14 @@ pub enum CommandId {
     BroadcastSm = 0x0000_0111,
     /// broadcast_sm_resp PDU (SMPP v5.0) - Response to broadcast_sm
     BroadcastSmResp = 0x8000_0111,
+    /// query_broadcast_sm PDU (SMPP v5.0) - Query broadcast message status
+    QueryBroadcastSm = 0x0000_0112,
+    /// query_broadcast_sm_resp PDU (SMPP v5.0) - Response to query_broadcast_sm
+    QueryBroadcastSmResp = 0x8000_0112,
+    /// cancel_broadcast_sm PDU (SMPP v5.0) - Cancel broadcast message
+    CancelBroadcastSm = 0x0000_0113,
+    /// cancel_broadcast_sm_resp PDU (SMPP v5.0) - Response to cancel_broadcast_sm
+    CancelBroadcastSmResp = 0x8000_0113,
 
     // Reserved for SMPP extension
     //          0x00000104 - 0x0000FFFF

@@ -1198,4 +1198,194 @@ mod integration_tests {
         assert!(!v34_registry.is_registered(CommandId::BroadcastSm));
         assert!(!v34_registry.is_registered(CommandId::BroadcastSmResp));
     }
+
+    #[test]
+    fn test_query_broadcast_sm_pdu_structure() {
+        // Test basic query_broadcast_sm PDU structure
+        use crate::datatypes::{QueryBroadcastSm, TypeOfNumber, NumericPlanIndicator};
+        
+        // Create a basic query_broadcast_sm PDU
+        let query_broadcast_sm = QueryBroadcastSm::builder()
+            .sequence_number(42)
+            .message_id("BC001")
+            .source_addr("1234567890", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .build();
+
+        assert!(query_broadcast_sm.is_ok());
+        let pdu = query_broadcast_sm.unwrap();
+        
+        // Test field access
+        assert_eq!(pdu.sequence_number(), 42);
+        assert_eq!(pdu.message_id(), "BC001");
+        assert_eq!(pdu.source_addr_ton(), TypeOfNumber::International);
+        assert_eq!(pdu.source_addr_npi(), NumericPlanIndicator::Isdn);
+        assert_eq!(pdu.source_addr(), "1234567890");
+    }
+
+    #[test]
+    fn test_query_broadcast_sm_encoding_decoding() {
+        use crate::datatypes::{QueryBroadcastSm, TypeOfNumber, NumericPlanIndicator};
+        use crate::codec::Encodable;
+
+        // Create query_broadcast_sm PDU
+        let original = QueryBroadcastSm::builder()
+            .sequence_number(100)
+            .message_id("QUERY_BC_001")
+            .source_addr("555123456", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .build()
+            .unwrap();
+
+        // Test encoding
+        let encoded = original.to_bytes();
+        assert!(encoded.len() > 16); // Should be larger than just PDU header
+
+        // Test field consistency
+        assert_eq!(original.sequence_number(), 100);
+        assert_eq!(original.message_id(), "QUERY_BC_001");
+        assert_eq!(original.source_addr(), "555123456");
+    }
+
+    #[test]
+    fn test_query_broadcast_sm_response_structure() {
+        use crate::datatypes::{QueryBroadcastSmResponse, CommandStatus, MessageState};
+
+        // Test successful response
+        let response = QueryBroadcastSmResponse::new(
+            42, 
+            CommandStatus::Ok, 
+            "BC001",
+            MessageState::Delivered,
+            None // final_date
+        );
+        assert_eq!(response.sequence_number(), 42);
+        assert_eq!(response.command_status(), CommandStatus::Ok);
+        assert_eq!(response.message_id(), "BC001");
+        assert_eq!(response.message_state(), MessageState::Delivered);
+
+        // Test error response
+        let error_response = QueryBroadcastSmResponse::new(
+            43,
+            CommandStatus::InvalidMessageId,
+            "",
+            MessageState::Unknown,
+            None
+        );
+        assert_eq!(error_response.command_status(), CommandStatus::InvalidMessageId);
+        assert_eq!(error_response.message_state(), MessageState::Unknown);
+    }
+
+    #[test]
+    fn test_cancel_broadcast_sm_pdu_structure() {
+        // Test basic cancel_broadcast_sm PDU structure
+        use crate::datatypes::{CancelBroadcastSm, ServiceType, TypeOfNumber, NumericPlanIndicator};
+        
+        // Create a basic cancel_broadcast_sm PDU
+        let cancel_broadcast_sm = CancelBroadcastSm::builder()
+            .sequence_number(55)
+            .service_type(ServiceType::default())
+            .message_id("BC001")
+            .source_addr("1234567890", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .build();
+
+        assert!(cancel_broadcast_sm.is_ok());
+        let pdu = cancel_broadcast_sm.unwrap();
+        
+        // Test field access
+        assert_eq!(pdu.sequence_number(), 55);
+        assert_eq!(pdu.message_id(), "BC001");
+        assert_eq!(pdu.source_addr_ton(), TypeOfNumber::International);
+        assert_eq!(pdu.source_addr_npi(), NumericPlanIndicator::Isdn);
+        assert_eq!(pdu.source_addr(), "1234567890");
+    }
+
+    #[test]
+    fn test_cancel_broadcast_sm_encoding_decoding() {
+        use crate::datatypes::{CancelBroadcastSm, ServiceType, TypeOfNumber, NumericPlanIndicator};
+        use crate::codec::Encodable;
+
+        // Create cancel_broadcast_sm PDU
+        let original = CancelBroadcastSm::builder()
+            .sequence_number(200)
+            .service_type(ServiceType::from("SMS"))
+            .message_id("CANCEL_BC_001")
+            .source_addr("555123456", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .build()
+            .unwrap();
+
+        // Test encoding
+        let encoded = original.to_bytes();
+        assert!(encoded.len() > 16); // Should be larger than just PDU header
+
+        // Test field consistency
+        assert_eq!(original.sequence_number(), 200);
+        assert_eq!(original.message_id(), "CANCEL_BC_001");
+        assert_eq!(original.source_addr(), "555123456");
+    }
+
+    #[test]
+    fn test_cancel_broadcast_sm_response_structure() {
+        use crate::datatypes::{CancelBroadcastSmResponse, CommandStatus};
+
+        // Test successful response
+        let response = CancelBroadcastSmResponse::new(55, CommandStatus::Ok);
+        assert_eq!(response.sequence_number(), 55);
+        assert_eq!(response.command_status(), CommandStatus::Ok);
+
+        // Test error response
+        let error_response = CancelBroadcastSmResponse::new(56, CommandStatus::InvalidMessageId);
+        assert_eq!(error_response.sequence_number(), 56);
+        assert_eq!(error_response.command_status(), CommandStatus::InvalidMessageId);
+    }
+
+    #[test]
+    fn test_broadcast_command_ids() {
+        use crate::datatypes::{QueryBroadcastSm, CancelBroadcastSm, CommandId};
+        use crate::codec::Decodable;
+
+        // Test that broadcast operations have correct command_ids
+        assert_eq!(QueryBroadcastSm::command_id(), CommandId::QueryBroadcastSm);
+        assert_eq!(CancelBroadcastSm::command_id(), CommandId::CancelBroadcastSm);
+    }
+
+    #[test]
+    fn test_remaining_broadcast_pdus_in_v50_registry() {
+        use crate::codec::PduRegistry;
+        use crate::datatypes::{InterfaceVersion, CommandId};
+
+        // Test that v5.0 registry supports remaining broadcast PDUs
+        let v50_registry = PduRegistry::for_version(InterfaceVersion::SmppV50);
+        assert!(v50_registry.is_registered(CommandId::QueryBroadcastSm));
+        assert!(v50_registry.is_registered(CommandId::QueryBroadcastSmResp));
+        assert!(v50_registry.is_registered(CommandId::CancelBroadcastSm));
+        assert!(v50_registry.is_registered(CommandId::CancelBroadcastSmResp));
+
+        // Test that v3.4 registry does not support remaining broadcast PDUs
+        let v34_registry = PduRegistry::for_version(InterfaceVersion::SmppV34);
+        assert!(!v34_registry.is_registered(CommandId::QueryBroadcastSm));
+        assert!(!v34_registry.is_registered(CommandId::QueryBroadcastSmResp));
+        assert!(!v34_registry.is_registered(CommandId::CancelBroadcastSm));
+        assert!(!v34_registry.is_registered(CommandId::CancelBroadcastSmResp));
+    }
+
+    #[test]
+    fn test_broadcast_pdu_validation() {
+        use crate::datatypes::{QueryBroadcastSm, CancelBroadcastSm, ServiceType, TypeOfNumber, NumericPlanIndicator};
+
+        // Test query_broadcast_sm validation - empty message_id should be invalid
+        let result = QueryBroadcastSm::builder()
+            .sequence_number(1)
+            .message_id("")  // Empty - should be invalid
+            .source_addr("1234567890", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .build();
+        assert!(result.is_err());
+
+        // Test cancel_broadcast_sm validation - empty message_id should be invalid  
+        let result = CancelBroadcastSm::builder()
+            .sequence_number(1)
+            .service_type(ServiceType::default())
+            .message_id("")  // Empty - should be invalid
+            .source_addr("1234567890", TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .build();
+        assert!(result.is_err());
+    }
 }

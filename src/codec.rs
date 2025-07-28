@@ -351,6 +351,10 @@ pub enum Frame {
     // SMPP v5.0 Broadcast PDUs
     BroadcastSm(Box<crate::datatypes::BroadcastSm>),
     BroadcastSmResp(crate::datatypes::BroadcastSmResponse),
+    QueryBroadcastSm(crate::datatypes::QueryBroadcastSm),
+    QueryBroadcastSmResp(crate::datatypes::QueryBroadcastSmResponse),
+    CancelBroadcastSm(crate::datatypes::CancelBroadcastSm),
+    CancelBroadcastSmResp(crate::datatypes::CancelBroadcastSmResponse),
 
     // Special PDUs
     GenericNack(crate::datatypes::GenericNack),
@@ -485,6 +489,10 @@ impl PduRegistry {
                 Frame::BroadcastSm(Box::new(pdu))
             });
             self.register_pdu::<crate::datatypes::BroadcastSmResponse, _>(Frame::BroadcastSmResp);
+            self.register_pdu::<crate::datatypes::QueryBroadcastSm, _>(Frame::QueryBroadcastSm);
+            self.register_pdu::<crate::datatypes::QueryBroadcastSmResponse, _>(Frame::QueryBroadcastSmResp);
+            self.register_pdu::<crate::datatypes::CancelBroadcastSm, _>(Frame::CancelBroadcastSm);
+            self.register_pdu::<crate::datatypes::CancelBroadcastSmResponse, _>(Frame::CancelBroadcastSmResp);
         }
     }
 
@@ -699,6 +707,10 @@ impl Frame {
             Frame::AlertNotification(_) => CommandId::AlertNotification,
             Frame::BroadcastSm(_) => CommandId::BroadcastSm,
             Frame::BroadcastSmResp(_) => CommandId::BroadcastSmResp,
+            Frame::QueryBroadcastSm(_) => CommandId::QueryBroadcastSm,
+            Frame::QueryBroadcastSmResp(_) => CommandId::QueryBroadcastSmResp,
+            Frame::CancelBroadcastSm(_) => CommandId::CancelBroadcastSm,
+            Frame::CancelBroadcastSmResp(_) => CommandId::CancelBroadcastSmResp,
             Frame::GenericNack(_) => CommandId::GenericNack,
             Frame::Outbind(_) => CommandId::Outbind,
             Frame::Unknown { header, .. } => header.command_id,
@@ -728,6 +740,10 @@ impl Frame {
             Frame::AlertNotification(pdu) => pdu.sequence_number,
             Frame::BroadcastSm(pdu) => pdu.sequence_number,
             Frame::BroadcastSmResp(pdu) => pdu.sequence_number,
+            Frame::QueryBroadcastSm(pdu) => pdu.sequence_number,
+            Frame::QueryBroadcastSmResp(pdu) => pdu.sequence_number,
+            Frame::CancelBroadcastSm(pdu) => pdu.sequence_number,
+            Frame::CancelBroadcastSmResp(pdu) => pdu.sequence_number,
             Frame::GenericNack(pdu) => pdu.sequence_number,
             Frame::Outbind(pdu) => pdu.sequence_number,
             Frame::Unknown { header, .. } => header.sequence_number,
