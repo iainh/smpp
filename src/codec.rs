@@ -199,16 +199,82 @@ impl CodecError {
         match self {
             CodecError::InvalidPduLength { .. } => CommandStatus::InvalidCommandLength,
             CodecError::InvalidCommandId(_) => CommandStatus::InvalidCommandId,
-            CodecError::FieldValidation { field, .. } => {
-                // Map specific field errors to appropriate status codes
+            CodecError::InvalidCommandStatus(_) => CommandStatus::SystemError,
+            CodecError::InvalidRequestStatus { .. } => CommandStatus::SystemError,
+            CodecError::ReservedSequenceNumber(_) => CommandStatus::SystemError,
+            CodecError::UnexpectedCommandId { .. } => CommandStatus::InvalidCommandId,
+            CodecError::FieldValidation { field, reason } => {
+                // Enhanced field-specific error mapping based on SMPP v3.4 specification
                 match *field {
-                    "source_addr" | "destination_addr" => CommandStatus::InvalidSourceAddress,
+                    // Address-related fields
+                    "source_addr" => CommandStatus::InvalidSourceAddress,
+                    "destination_addr" => CommandStatus::InvalidDestinationAddress,
+                    "esme_addr" => CommandStatus::InvalidSourceAddress,
+                    
+                    // TON/NPI validation errors
+                    "source_addr_ton" | "addr_ton" => CommandStatus::InvalidSourceAddressTon,
+                    "source_addr_npi" | "addr_npi" => CommandStatus::InvalidSourceAddressNpi,
+                    "dest_addr_ton" => CommandStatus::InvalidDestinationAddressTon,
+                    "dest_addr_npi" => CommandStatus::InvalidDestinationAddressNpi,
+                    
+                    // Message content fields
                     "short_message" => CommandStatus::InvalidMsgLength,
+                    "message_payload" => CommandStatus::InvalidMsgLength,
+                    "sm_length" => CommandStatus::InvalidMsgLength,
+                    
+                    // Authentication and identification fields
+                    "system_id" => CommandStatus::InvalidSystemId,
+                    "password" => CommandStatus::InvalidPassword,
+                    "service_type" => CommandStatus::InvalidServiceType,
+                    
+                    // Message identification
+                    "message_id" => CommandStatus::InvalidMessageId,
+                    
+                    // Message parameters
+                    "priority_flag" => CommandStatus::InvalidPriorityFlag,
+                    "registered_delivery" => CommandStatus::InvalidRegisteredDeliveryFlag,
+                    "esm_class" => CommandStatus::InvalidEsmClassFieldData,
+                    
+                    // Multi-destination fields
+                    "dest_flag" => CommandStatus::InvalidDestinationFlag,
+                    "dl_name" => CommandStatus::InvalidDistributionListName,
+                    
+                    // Check for range/length validation errors in reason
+                    _ => {
+                        if reason.contains("too long") || reason.contains("exceeds maximum") {
+                            match *field {
+                                f if f.contains("addr") => CommandStatus::InvalidDestinationAddress,
+                                "system_id" => CommandStatus::InvalidSystemId,
+                                _ => CommandStatus::InvalidMsgLength,
+                            }
+                        } else if reason.contains("invalid format") || reason.contains("invalid value") {
+                            CommandStatus::SystemError
+                        } else {
+                            CommandStatus::SystemError
+                        }
+                    }
+                }
+            }
+            CodecError::TlvError(msg) => {
+                // Distinguish between different TLV error types
+                if msg.contains("unsupported") || msg.contains("unknown") {
+                    CommandStatus::SystemError // Could be extended with specific TLV error codes
+                } else if msg.contains("length") || msg.contains("size") {
+                    CommandStatus::InvalidMsgLength
+                } else {
+                    CommandStatus::SystemError
+                }
+            }
+            CodecError::Utf8Error { field, .. } => {
+                // Text encoding errors typically indicate message content issues
+                match *field {
+                    "short_message" | "message_payload" => CommandStatus::InvalidMsgLength,
+                    "system_id" => CommandStatus::InvalidSystemId,
                     _ => CommandStatus::SystemError,
                 }
             }
-            CodecError::TlvError(_) => CommandStatus::SystemError, // Could add specific TLV error code
-            _ => CommandStatus::SystemError,
+            CodecError::Incomplete => CommandStatus::SystemError,
+            CodecError::Io(_) => CommandStatus::SystemError,
         }
     }
 }
@@ -900,12 +966,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Fix unknown PDU handling - need to update CommandId enum
     fn registry_decode_unknown_pdu() {
         let registry = PduRegistry::new();
 
-        // Use an actually reserved command_id (0x0000000A is reserved per spec)
-        let unknown_command_id = 0x0000000Au32;
+        // Use BindReceiver command_id - exists in CommandId enum but not registered in registry
+        let unknown_command_id = 0x0000_0001u32; // CommandId::BindReceiver
 
         // Create a complete PDU with unknown command_id
         let mut pdu_data = Vec::new();
@@ -1064,6 +1129,90 @@ mod tests {
         let header = PduHeader::decode(&mut cursor).unwrap();
         let frame = registry.decode_pdu(header, &mut cursor).unwrap();
         assert!(matches!(frame, Frame::Outbind(_)));
+    }
+
+    #[test]
+    fn codec_error_to_command_status_mapping() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test field-specific error mapping
+        let source_addr_error = CodecError::FieldValidation {
+            field: "source_addr",
+            reason: "Invalid format".to_string(),
+        };
+        assert_eq!(source_addr_error.to_command_status(), CommandStatus::InvalidSourceAddress);
+        
+        let destination_addr_error = CodecError::FieldValidation {
+            field: "destination_addr", 
+            reason: "Invalid format".to_string(),
+        };
+        assert_eq!(destination_addr_error.to_command_status(), CommandStatus::InvalidDestinationAddress);
+        
+        let system_id_error = CodecError::FieldValidation {
+            field: "system_id",
+            reason: "Too long".to_string(),
+        };
+        assert_eq!(system_id_error.to_command_status(), CommandStatus::InvalidSystemId);
+        
+        let password_error = CodecError::FieldValidation {
+            field: "password",
+            reason: "Invalid".to_string(),
+        };
+        assert_eq!(password_error.to_command_status(), CommandStatus::InvalidPassword);
+        
+        let short_message_error = CodecError::FieldValidation {
+            field: "short_message",
+            reason: "Too long".to_string(),
+        };
+        assert_eq!(short_message_error.to_command_status(), CommandStatus::InvalidMsgLength);
+        
+        let esm_class_error = CodecError::FieldValidation {
+            field: "esm_class",
+            reason: "Invalid bits".to_string(),
+        };
+        assert_eq!(esm_class_error.to_command_status(), CommandStatus::InvalidEsmClassFieldData);
+        
+        // Test TON/NPI specific errors
+        let source_ton_error = CodecError::FieldValidation {
+            field: "source_addr_ton",
+            reason: "Invalid value".to_string(),
+        };
+        assert_eq!(source_ton_error.to_command_status(), CommandStatus::InvalidSourceAddressTon);
+        
+        let dest_npi_error = CodecError::FieldValidation {
+            field: "dest_addr_npi",
+            reason: "Invalid value".to_string(),
+        };
+        assert_eq!(dest_npi_error.to_command_status(), CommandStatus::InvalidDestinationAddressNpi);
+        
+        // Test TLV error mapping
+        let tlv_length_error = CodecError::TlvError("Invalid length".to_string());
+        assert_eq!(tlv_length_error.to_command_status(), CommandStatus::InvalidMsgLength);
+        
+        let tlv_unknown_error = CodecError::TlvError("Unknown TLV tag".to_string());
+        assert_eq!(tlv_unknown_error.to_command_status(), CommandStatus::SystemError);
+        
+        // Test UTF-8 error mapping
+        let invalid_utf8_bytes = vec![0xFF, 0xFE];
+        let utf8_error = match String::from_utf8(invalid_utf8_bytes) {
+            Err(e) => CodecError::Utf8Error {
+                field: "short_message",
+                source: e,
+            },
+            Ok(_) => panic!("Expected UTF-8 error"),
+        };
+        assert_eq!(utf8_error.to_command_status(), CommandStatus::InvalidMsgLength);
+        
+        // Test command ID errors
+        let invalid_command_id = CodecError::InvalidCommandId(0x99999999);
+        assert_eq!(invalid_command_id.to_command_status(), CommandStatus::InvalidCommandId);
+        
+        let invalid_pdu_length = CodecError::InvalidPduLength {
+            length: 5,
+            min: 16,
+            max: 65536,
+        };
+        assert_eq!(invalid_pdu_length.to_command_status(), CommandStatus::InvalidCommandLength);
     }
 
     #[test]
