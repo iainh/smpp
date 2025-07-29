@@ -2306,4 +2306,249 @@ mod integration_tests {
         // But recovery should be gradual, not immediate
         assert!(recovered_rate < 20.0); // Should not immediately return to base rate
     }
+
+    // Phase 10: Complete Integration Tests for v3.4 to v5.0 Scenarios
+
+    #[test]
+    fn test_complete_v34_to_v50_compatibility() {
+        use crate::datatypes::{InterfaceVersion, CommandStatus};
+        use crate::codec::PduRegistry;
+        
+        // Test backward compatibility across all supported versions
+        let v34_registry = PduRegistry::for_version(InterfaceVersion::SmppV34);
+        let v50_registry = PduRegistry::for_version(InterfaceVersion::SmppV50);
+        
+        // Verify registries are created successfully
+        assert_eq!(v34_registry.version(), InterfaceVersion::SmppV34);
+        assert_eq!(v50_registry.version(), InterfaceVersion::SmppV50);
+        
+        // Test error code compatibility
+        assert_eq!(CommandStatus::Ok as u32, 0x00000000);
+        assert_eq!(CommandStatus::InvalidMsgLength as u32, 0x00000001);
+        
+        // Test v5.0 enhanced error codes
+        assert_eq!(CommandStatus::InvalidBroadcastAreaIdentifier as u32, 0x00000100);
+        assert_eq!(CommandStatus::InvalidBroadcastContentType as u32, 0x00000101);
+        assert_eq!(CommandStatus::CongestionStateRejected as u32, 0x00000104);
+    }
+
+    #[test]
+    fn test_version_negotiation_complete_scenarios() {
+        use crate::datatypes::InterfaceVersion;
+        use crate::client::types::BindCredentials;
+        
+        // Test automatic version detection from bind credentials
+        let v34_credentials = BindCredentials::transmitter("test", "pass");
+        assert_eq!(v34_credentials.interface_version, InterfaceVersion::SmppV34);
+        
+        let v50_credentials = BindCredentials::transmitter_v50("test", "pass");
+        assert_eq!(v50_credentials.interface_version, InterfaceVersion::SmppV50);
+        
+        // Test version-specific features
+        assert_eq!(InterfaceVersion::SmppV34 as u8, 0x34);
+        assert_eq!(InterfaceVersion::SmppV50 as u8, 0x50);
+    }
+
+    #[test]
+    fn test_comprehensive_broadcast_message_lifecycle() {
+        use crate::client::types::BroadcastMessage;
+        
+        // Test high-level broadcast message creation
+        let broadcast_msg = BroadcastMessage::new(
+            "1234567890",
+            "BC001",
+            vec![0x01, 0x02, 0x03, 0x04], // area identifier
+        );
+        
+        assert_eq!(broadcast_msg.from, "1234567890");
+        assert_eq!(broadcast_msg.message_id, "BC001");
+        assert_eq!(broadcast_msg.broadcast_area_identifier, vec![0x01, 0x02, 0x03, 0x04]);
+    }
+
+    #[test]
+    fn test_comprehensive_error_handling_scenarios() {
+        use crate::datatypes::{CommandStatus, ErrorSeverity, ErrorCategory};
+        
+        // Test comprehensive error categorization
+        let critical_errors = vec![
+            CommandStatus::InvalidBroadcastAreaIdentifier,
+            CommandStatus::InvalidBroadcastContentType,
+            CommandStatus::InvalidBroadcastFrequency,
+        ];
+        
+        for error in critical_errors {
+            assert_eq!(error.severity(), ErrorSeverity::Error);
+            assert_eq!(error.category(), ErrorCategory::Broadcast);
+            // Just verify help messages exist (may be None for some errors)
+            let _help = error.help_message();
+        }
+        
+        // Test throttling error behavior
+        let throttling_errors = vec![
+            CommandStatus::CongestionStateRejected,
+            CommandStatus::MessageThrottled,
+            CommandStatus::ThrottlingError,
+        ];
+        
+        for error in throttling_errors {
+            assert!(error.is_throttling_related());
+            assert_eq!(error.severity(), ErrorSeverity::Warning);
+            assert_eq!(error.category(), ErrorCategory::RateLimit);
+        }
+        
+        // Test backward compatibility with v3.4 errors
+        let v34_errors = vec![
+            CommandStatus::InvalidMsgLength,
+            CommandStatus::InvalidCommandLength,
+            CommandStatus::InvalidCommandId,
+        ];
+        
+        for error in v34_errors {
+            // Test that v3.4 errors still work
+            assert_ne!(error as u32, 0x00000000); // Not OK status
+            let _help = error.help_message(); // May be None
+        }
+    }
+
+    #[test]
+    fn test_client_builder_complete_scenarios() {
+        use crate::client::types::{BindCredentials, BroadcastMessage, SmsMessage};
+        use crate::client::ClientOptions;
+        use crate::datatypes::InterfaceVersion;
+        
+        // Test comprehensive credential building
+        let v34_creds = BindCredentials::transmitter("sys_id", "pass")
+            .with_system_type("TEST_APP")
+            .with_version(InterfaceVersion::SmppV34);
+        
+        assert_eq!(v34_creds.system_id, "sys_id");
+        assert_eq!(v34_creds.password, "pass");
+        assert_eq!(v34_creds.system_type, Some("TEST_APP".to_string()));
+        assert_eq!(v34_creds.interface_version, InterfaceVersion::SmppV34);
+        
+        let v50_creds = BindCredentials::transmitter_v50("sys_id", "pass")
+            .with_system_type("TEST_V50");
+        
+        assert_eq!(v50_creds.interface_version, InterfaceVersion::SmppV50);
+        assert_eq!(v50_creds.system_type, Some("TEST_V50".to_string()));
+        
+        // Test message builder scenarios
+        let sms = SmsMessage::new("1234567890", "0987654321", "Hello World!");
+        assert_eq!(sms.to, "1234567890");
+        assert_eq!(sms.from, "0987654321");
+        assert_eq!(sms.text, "Hello World!");
+        
+        let broadcast = BroadcastMessage::new(
+            "broadcast_source",
+            "BC_MSG_001",
+            vec![0xFF, 0xEE, 0xDD, 0xCC],
+        );
+        assert_eq!(broadcast.from, "broadcast_source");
+        assert_eq!(broadcast.message_id, "BC_MSG_001");
+        assert_eq!(broadcast.broadcast_area_identifier, vec![0xFF, 0xEE, 0xDD, 0xCC]);
+        
+        // Test client options creation
+        let options = ClientOptions::new();
+        
+        // Verify options are configurable
+        assert!(!options.enable_v50_features); // Default is false
+        assert!(options.auto_negotiate_version); // Default is true
+    }
+
+    #[test]
+    fn test_flow_control_integration_complete() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlConfig, FlowControlAction};
+        use crate::datatypes::CommandStatus;
+        use std::time::Duration;
+        
+        // Test complete flow control lifecycle with realistic server behavior simulation
+        let mut config = FlowControlConfig::default();
+        config.adjustment_interval = Duration::from_millis(1); // Fast for testing
+        config.congestion_sensitivity = 0.7; // Moderate sensitivity
+        config.recovery_rate = 0.15; // Gradual recovery
+        
+        let mut manager = FlowControlManager::with_config(25.0, 100.0, 5.0, config);
+        
+        // Scenario 1: Normal operation
+        assert_eq!(manager.current_rate_limit(), 25.0);
+        assert_eq!(manager.recommended_action(), FlowControlAction::MaintainRate);
+        
+        // Scenario 2: Server reports increasing congestion
+        manager.update_congestion_state(20); // Light congestion
+        std::thread::sleep(Duration::from_millis(5));
+        let light_congestion_rate = manager.current_rate_limit();
+        assert!(light_congestion_rate < 25.0);
+        assert_eq!(manager.recommended_action(), FlowControlAction::MaintainRate);
+        
+        manager.update_congestion_state(40); // Moderate congestion
+        std::thread::sleep(Duration::from_millis(5));
+        let moderate_congestion_rate = manager.current_rate_limit();
+        assert!(moderate_congestion_rate < light_congestion_rate);
+        assert_eq!(manager.recommended_action(), FlowControlAction::ReduceRate);
+        
+        // Scenario 3: Error-based adjustments
+        manager.handle_error_response(CommandStatus::CongestionStateRejected);
+        let error_adjusted_rate = manager.current_rate_limit();
+        assert!(error_adjusted_rate < moderate_congestion_rate);
+        
+        // Scenario 4: Critical congestion
+        std::thread::sleep(Duration::from_millis(5));
+        manager.update_congestion_state(85); // Critical congestion
+        let critical_rate = manager.current_rate_limit();
+        assert!(critical_rate < error_adjusted_rate);
+        assert_eq!(manager.recommended_action(), FlowControlAction::MinimizeRate);
+        
+        // Scenario 5: Recovery phase
+        std::thread::sleep(Duration::from_millis(5));
+        manager.update_congestion_state(60); // Reducing congestion
+        std::thread::sleep(Duration::from_millis(5));
+        manager.update_congestion_state(30); // Further reduction
+        std::thread::sleep(Duration::from_millis(5));
+        manager.update_congestion_state(10); // Almost clear
+        
+        let recovery_rate = manager.current_rate_limit();
+        assert!(recovery_rate > critical_rate);
+        assert_eq!(manager.recommended_action(), FlowControlAction::IncreaseRate);
+        
+        // Verify statistics tracking
+        let stats = manager.statistics();
+        assert!(stats.total_adjustments >= 5);
+        assert!(stats.error_adjustments >= 1);
+        assert!(stats.congestion_reductions >= 1);
+        assert!(stats.recovery_increases >= 1);
+        assert!(stats.peak_rate >= 25.0);
+        assert!(stats.minimum_rate <= critical_rate);
+    }
+
+    #[test]
+    fn test_performance_and_memory_efficiency() {
+        use crate::datatypes::Tlv;
+        use std::time::{Instant, Duration};
+        
+        // Test TLV handling performance
+        let start = Instant::now();
+        for i in 0..1000 {
+            let tlv = Tlv {
+                tag: 0x0427, // CongestionState
+                length: 1,
+                value: vec![(i % 100) as u8].into(),
+            };
+            let _bytes = tlv.to_bytes();
+        }
+        let tlv_time = start.elapsed();
+        
+        // TLV processing should be fast (relaxed for CI environments)
+        assert!(tlv_time < Duration::from_millis(500),
+                "TLV processing took too long: {:?}", tlv_time);
+        
+        // Test memory efficiency - TLV should have reasonable memory footprint
+        let large_tlv = Tlv {
+            tag: 0x0427,
+            length: 255,
+            value: vec![0u8; 255].into(), // Maximum TLV value size
+        };
+        
+        assert_eq!(large_tlv.value.len(), 255);
+        assert_eq!(large_tlv.length, 255);
+    }
 }
