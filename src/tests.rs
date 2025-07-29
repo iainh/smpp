@@ -2033,4 +2033,277 @@ mod integration_tests {
             }
         }
     }
+
+    #[test]
+    fn test_flow_control_congestion_response() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlConfig};
+        use std::time::Duration;
+        
+        // Use faster adjustment interval for testing
+        let mut config = FlowControlConfig::default();
+        config.adjustment_interval = Duration::from_millis(1);
+        
+        let mut manager = FlowControlManager::with_config(10.0, 50.0, 1.0, config);
+        let initial_rate = manager.current_rate_limit();
+        
+        // Test low congestion - rate should stay relatively high
+        manager.update_congestion_state(10);
+        assert!(manager.current_rate_limit() >= initial_rate * 0.7);
+        assert!(!manager.is_congested());
+        
+        // Test high congestion - rate should reduce
+        std::thread::sleep(Duration::from_millis(5)); // Ensure time passes
+        manager.update_congestion_state(80);
+        assert!(manager.current_rate_limit() < initial_rate);
+        assert!(manager.is_congested());
+        
+        // Test recovery - rate should increase
+        std::thread::sleep(Duration::from_millis(5));
+        manager.update_congestion_state(20);
+        let recovery_rate = manager.current_rate_limit();
+        std::thread::sleep(Duration::from_millis(5));
+        manager.update_congestion_state(0);
+        // Rate should move toward recovery, even if slowly
+        assert!(manager.current_rate_limit() >= recovery_rate * 0.95);
+    }
+
+    #[test]
+    fn test_flow_control_error_adaptation() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlConfig};
+        use crate::datatypes::CommandStatus;
+        use std::time::Duration;
+        
+        let mut config = FlowControlConfig::default();
+        config.adjustment_interval = Duration::from_millis(1);
+        
+        let mut manager = FlowControlManager::with_config(10.0, 50.0, 1.0, config);
+        let initial_rate = manager.current_rate_limit();
+        
+        // Test congestion error response
+        manager.handle_error_response(CommandStatus::CongestionStateRejected);
+        assert!(manager.current_rate_limit() < initial_rate);
+        assert_eq!(manager.statistics().error_adjustments, 1);
+        
+        // Test throttling error response
+        let rate_after_congestion = manager.current_rate_limit();
+        std::thread::sleep(Duration::from_millis(10));
+        manager.handle_error_response(CommandStatus::MessageThrottled);
+        assert!(manager.current_rate_limit() < rate_after_congestion);
+        assert_eq!(manager.statistics().error_adjustments, 2);
+        
+        // Test non-throttling error (should not affect rate)
+        let rate_before_non_throttling = manager.current_rate_limit();
+        manager.handle_error_response(CommandStatus::InvalidMessageId);
+        assert_eq!(manager.current_rate_limit(), rate_before_non_throttling);
+        assert_eq!(manager.statistics().error_adjustments, 2); // No change
+    }
+
+    #[test]
+    fn test_flow_control_rate_limits() {
+        use crate::client::flow_control::FlowControlManager;
+        
+        let mut manager = FlowControlManager::new(10.0, 20.0, 2.0);
+        
+        // Test minimum rate limit enforcement
+        manager.update_congestion_state(100); // Maximum congestion
+        assert!(manager.current_rate_limit() >= 2.0);
+        
+        // Reset and test maximum rate limit enforcement
+        let mut high_performance_manager = FlowControlManager::new(10.0, 15.0, 1.0);
+        high_performance_manager.update_congestion_state(0); // No congestion
+        
+        // Force multiple rapid adjustments to test max limit
+        for _ in 0..5 {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            high_performance_manager.update_congestion_state(0);
+        }
+        assert!(high_performance_manager.current_rate_limit() <= 15.0);
+    }
+
+    #[test]
+    fn test_flow_control_message_delay_calculation() {
+        use crate::client::flow_control::FlowControlManager;
+        use std::time::Duration;
+        
+        let manager = FlowControlManager::new(10.0, 50.0, 1.0);
+        
+        // At 10 messages per second, delay should be 100ms
+        let delay = manager.message_delay();
+        assert_eq!(delay, Duration::from_millis(100));
+        
+        // Test with different rate
+        let fast_manager = FlowControlManager::new(100.0, 200.0, 10.0);
+        let fast_delay = fast_manager.message_delay();
+        assert_eq!(fast_delay, Duration::from_millis(10)); // 1/100 second = 10ms
+    }
+
+    #[test]
+    fn test_flow_control_recommended_actions() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlAction};
+        
+        let mut manager = FlowControlManager::new(10.0, 50.0, 1.0);
+        
+        // Test different congestion levels and their recommended actions
+        manager.update_congestion_state(5);
+        assert_eq!(manager.recommended_action(), FlowControlAction::IncreaseRate);
+        
+        manager.update_congestion_state(25);
+        assert_eq!(manager.recommended_action(), FlowControlAction::MaintainRate);
+        
+        manager.update_congestion_state(45);
+        assert_eq!(manager.recommended_action(), FlowControlAction::ReduceRate);
+        
+        manager.update_congestion_state(70);
+        assert_eq!(manager.recommended_action(), FlowControlAction::ReduceRateSignificantly);
+        
+        manager.update_congestion_state(95);
+        assert_eq!(manager.recommended_action(), FlowControlAction::MinimizeRate);
+    }
+
+    #[test]
+    fn test_flow_control_statistics_tracking() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlConfig};
+        use crate::datatypes::CommandStatus;
+        use std::time::Duration;
+        
+        let mut config = FlowControlConfig::default();
+        config.adjustment_interval = Duration::from_millis(1);
+        
+        let mut manager = FlowControlManager::with_config(10.0, 50.0, 1.0, config);
+        let initial_stats = manager.statistics().clone();
+        
+        // Generate some activity
+        manager.update_congestion_state(50);
+        std::thread::sleep(Duration::from_millis(10));
+        manager.update_congestion_state(20);
+        std::thread::sleep(Duration::from_millis(5));
+        manager.handle_error_response(CommandStatus::MessageThrottled);
+        
+        let final_stats = manager.statistics();
+        
+        // Verify statistics were updated
+        assert!(final_stats.total_adjustments > initial_stats.total_adjustments);
+        assert!(final_stats.error_adjustments > initial_stats.error_adjustments);
+        assert!(final_stats.last_adjustment.is_some());
+        assert!(final_stats.effective_rate != initial_stats.effective_rate);
+        
+        // Test peak and minimum tracking
+        assert!(final_stats.peak_rate >= initial_stats.peak_rate);
+        assert!(final_stats.minimum_rate <= initial_stats.minimum_rate);
+    }
+
+    #[test]
+    fn test_flow_control_configuration() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlConfig};
+        use std::time::Duration;
+        
+        let mut config = FlowControlConfig::default();
+        config.congestion_sensitivity = 0.5; // Less aggressive
+        config.recovery_rate = 0.2; // Faster recovery
+        config.adjustment_interval = Duration::from_millis(1); // Faster adjustments
+        
+        let mut manager = FlowControlManager::with_config(10.0, 50.0, 1.0, config);
+        
+        // Test that configuration affects behavior
+        manager.update_congestion_state(50);
+        let rate_with_low_sensitivity = manager.current_rate_limit();
+        
+        // Compare with default config
+        let mut default_manager = FlowControlManager::new(10.0, 50.0, 1.0);
+        default_manager.update_congestion_state(50);
+        let rate_with_high_sensitivity = default_manager.current_rate_limit();
+        
+        // Lower sensitivity should result in less aggressive rate reduction
+        assert!(rate_with_low_sensitivity >= rate_with_high_sensitivity);
+    }
+
+    #[test]
+    fn test_flow_control_congestion_timeout() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlConfig};
+        use std::time::Duration;
+        
+        let mut config = FlowControlConfig::default();
+        config.congestion_timeout = Duration::from_millis(5); // Very short timeout
+        
+        let mut manager = FlowControlManager::with_config(10.0, 50.0, 1.0, config);
+        
+        // Set congestion state
+        manager.update_congestion_state(80);
+        assert_eq!(manager.congestion_state(), Some(80));
+        assert!(manager.is_congested());
+        
+        // Wait for timeout
+        std::thread::sleep(Duration::from_millis(10));
+        
+        // Congestion state should be None after timeout
+        assert_eq!(manager.congestion_state(), None);
+        assert!(!manager.is_congested());
+    }
+
+    #[test]
+    fn test_flow_control_action_descriptions() {
+        use crate::client::flow_control::FlowControlAction;
+        
+        // Test that all actions have meaningful descriptions
+        let actions = vec![
+            FlowControlAction::IncreaseRate,
+            FlowControlAction::MaintainRate,
+            FlowControlAction::ReduceRate,
+            FlowControlAction::ReduceRateSignificantly,
+            FlowControlAction::MinimizeRate,
+        ];
+        
+        for action in actions {
+            let description = action.description();
+            assert!(!description.is_empty());
+            assert!(description.len() > 10); // Should be descriptive
+        }
+    }
+
+    #[test]
+    fn test_flow_control_adaptive_behavior() {
+        use crate::client::flow_control::{FlowControlManager, FlowControlConfig};
+        use crate::datatypes::CommandStatus;
+        use std::time::Duration;
+        
+        // Use faster adjustment for testing
+        let mut config = FlowControlConfig::default();
+        config.adjustment_interval = Duration::from_millis(1);
+        
+        let mut manager = FlowControlManager::with_config(20.0, 100.0, 5.0, config);
+        
+        // Simulate a realistic scenario: start normal, hit congestion, recover
+        
+        // 1. Normal operation
+        assert_eq!(manager.current_rate_limit(), 20.0);
+        
+        // 2. Server reports moderate congestion
+        manager.update_congestion_state(30);
+        let moderate_congestion_rate = manager.current_rate_limit();
+        assert!(moderate_congestion_rate < 20.0);
+        assert!(moderate_congestion_rate > 10.0); // Should not be too aggressive
+        
+        // 3. Error responses indicate more serious congestion
+        std::thread::sleep(Duration::from_millis(10));
+        manager.handle_error_response(CommandStatus::CongestionStateRejected);
+        let after_error_rate = manager.current_rate_limit();
+        assert!(after_error_rate < moderate_congestion_rate);
+        
+        // 4. Congestion starts to clear
+        std::thread::sleep(Duration::from_millis(10));
+        manager.update_congestion_state(10);
+        let recovery_start_rate = manager.current_rate_limit();
+        
+        // 5. Full recovery
+        std::thread::sleep(Duration::from_millis(10));
+        manager.update_congestion_state(0);
+        let recovered_rate = manager.current_rate_limit();
+        
+        // Rate should gradually increase during recovery
+        assert!(recovered_rate > recovery_start_rate);
+        assert!(recovered_rate > after_error_rate);
+        
+        // But recovery should be gradual, not immediate
+        assert!(recovered_rate < 20.0); // Should not immediately return to base rate
+    }
 }

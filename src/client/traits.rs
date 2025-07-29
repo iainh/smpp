@@ -2,6 +2,7 @@
 // ABOUTME: Defines extensible interfaces for different SMPP client types and connection management
 
 use crate::client::error::SmppResult;
+use crate::client::flow_control::{FlowControlConfig, FlowControlAction, FlowControlStatistics};
 use crate::client::keepalive::{KeepAliveConfig, KeepAliveStatus};
 use crate::client::types::{BindCredentials, SmsMessage, BroadcastMessage};
 use crate::datatypes::{SubmitSm, BroadcastSm, QueryBroadcastSm, CancelBroadcastSm, MessageState};
@@ -286,4 +287,28 @@ pub trait SmppV50Client: SmppClient + SmppV50Broadcaster {
     /// Returns the last known congestion state (0-100) reported by the server.
     /// This can be used for adaptive rate limiting. Only available in v5.0.
     fn congestion_state(&self) -> Option<u8>;
+
+    /// Start flow control with specified configuration
+    ///
+    /// Initializes adaptive rate limiting based on server congestion states and error responses.
+    /// The client will automatically adjust message sending rates to optimize throughput.
+    fn start_flow_control(
+        &mut self,
+        config: FlowControlConfig,
+    ) -> impl Future<Output = SmppResult<()>> + Send;
+
+    /// Stop flow control
+    ///
+    /// Disables adaptive rate limiting and returns to manual rate control.
+    fn stop_flow_control(&mut self) -> impl Future<Output = SmppResult<()>> + Send;
+
+    /// Get current flow control status
+    ///
+    /// Returns flow control statistics and current recommended action.
+    fn flow_control_status(&self) -> Option<(FlowControlStatistics, FlowControlAction)>;
+
+    /// Check if flow control is enabled
+    ///
+    /// Returns true if adaptive rate limiting is currently active.
+    fn is_flow_control_enabled(&self) -> bool;
 }

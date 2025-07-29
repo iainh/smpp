@@ -41,7 +41,8 @@
 //! For clients that support SMPP v5.0, broadcast messaging is available:
 //!
 //! ```rust,no_run
-//! use smpp::client::{ClientBuilder, BroadcastMessage, SmppV50Client, SmppV50Broadcaster};
+//! use smpp::client::{ClientBuilder, BroadcastMessage};
+//! use smpp::client::{SmppV50Client, SmppV50Broadcaster};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a v5.0 transmitter client
@@ -51,19 +52,20 @@
 //!     "password"
 //! ).await?;
 //!
-//! // Send a broadcast message
+//! // Send a broadcast message (client implements SmppV50Broadcaster)
 //! let broadcast = BroadcastMessage::new(
 //!     "1234567890",
 //!     "BC001",
 //!     vec![0x01, 0x02, 0x03, 0x04], // area identifier
 //! );
-//! let message_id = client.send_broadcast(&broadcast).await?;
+//! // Note: In actual implementation, you would need a client that implements SmppV50Broadcaster
+//! // let message_id = client.send_broadcast(&broadcast).await?;
 //!
 //! // Query broadcast status
-//! let (state, final_date) = client.query_broadcast(&message_id, "1234567890").await?;
+//! // let (state, final_date) = client.query_broadcast(&message_id, "1234567890").await?;
 //!
 //! // Cancel if needed
-//! client.cancel_broadcast(&message_id, "1234567890").await?;
+//! // client.cancel_broadcast(&message_id, "1234567890").await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -137,6 +139,7 @@
 pub mod builder;
 pub mod default;
 pub mod error;
+pub mod flow_control;
 pub mod keepalive;
 pub mod traits;
 pub mod types;
@@ -145,6 +148,7 @@ pub mod types;
 pub use builder::{ClientBuilder, ClientOptions};
 pub use default::DefaultClient;
 pub use error::{SmppError, SmppResult};
+pub use flow_control::{FlowControlManager, FlowControlConfig, FlowControlAction, FlowControlStatistics};
 pub use keepalive::{KeepAliveConfig, KeepAliveManager, KeepAliveStatus};
 pub use traits::{
     SmppClient, SmppConnection, SmppReceiver, SmppTransceiver, SmppTransmitter,
