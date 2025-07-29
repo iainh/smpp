@@ -1,6 +1,6 @@
 [package]
 name = "smpp"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Iain H"]
 edition = "2024"
 

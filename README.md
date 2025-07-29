@@ -25,16 +25,16 @@ This library supports both SMPP v3.4 and v5.0 protocols:
 
 The client API automatically detects and negotiates the appropriate protocol version based on the server capabilities.
 
-## What's New in Version 0.3.0
+## What's New in Version 0.4.0
 
-This release achieves **100% SMPP v3.4 specification compliance** with significant improvements:
+This release adds **complete SMPP v5.0 support** alongside the existing v3.4 implementation:
 
-- **Complete PDU Coverage**: All 26 PDU types now implemented including `submit_multi`, `data_sm`, `query_sm`, `cancel_sm`, `replace_sm`, and `alert_notification`
-- **Enhanced TLV Support**: Comprehensive support for optional TLV parameters across all PDUs
-- **API Consistency**: Removed `get_` prefixes from accessor methods for cleaner, more idiomatic Rust code
-- **Improved Documentation**: Fixed macro documentation and enhanced code examples
-- **Robust Validation**: Enhanced field validation and error handling throughout the protocol stack
-- **Performance Optimizations**: Continued sub-microsecond parsing performance with expanded PDU support
+- **Dual Version Support**: Complete SMPP v3.4 and v5.0 implementations with automatic version negotiation
+- **SMPP v5.0 Features**: Broadcast messaging, enhanced flow control, and improved error handling
+- **Broadcast PDUs**: Full support for `broadcast_sm`, `cancel_broadcast_sm`, and `query_broadcast_sm`
+- **Flow Control**: Adaptive rate limiting and congestion management for high-throughput scenarios
+- **Enhanced Client API**: Unified client interface supporting both protocol versions seamlessly
+- **Extended Testing**: 300+ test cases covering both v3.4 and v5.0 protocol features
 
 ## SMPP v3.4 Specification Compliance
 
@@ -92,7 +92,7 @@ All fields validated according to SMPP v3.4 specification:
 
 ```toml
 [dependencies]
-smpp = "0.3.0"
+smpp = "0.4.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
