@@ -1,20 +1,29 @@
-# SMPP v3.4 Protocol Implementation
+# SMPP Protocol Implementation
 
-A high-performance, type-safe Rust implementation of the Short Message Peer-to-Peer (SMPP) protocol version 3.4, as defined in the [SMPP v3.4 Specification](https://smpp.org/SMPP_v3_4_Issue1_2.pdf).
+A high-performance, type-safe Rust implementation of the Short Message Peer-to-Peer (SMPP) protocol supporting both versions 3.4 and 5.0.
 
 ## Overview
 
-This library provides a complete implementation of SMPP v3.4 for building SMS applications, SMS gateways, and mobile network infrastructure. It features zero-allocation parsing, strongly-typed protocol fields, and comprehensive validation according to the SMPP specification.
+This library provides complete implementations of SMPP v3.4 and v5.0 for building SMS applications, SMS gateways, and mobile network infrastructure. It features zero-allocation parsing, strongly-typed protocol fields, and comprehensive validation according to both SMPP specifications.
 
 ### Key Features
 
-- **Complete SMPP v3.4 Compliance**: All 26 PDU types implemented per specification sections 4.1-4.12
+- **Dual Version Support**: Complete SMPP v3.4 and v5.0 implementations
 - **Type Safety**: Strongly-typed fields with compile-time validation
 - **High Performance**: Zero-allocation parsing with <200ns PDU processing
 - **Async/Await Support**: Built on Tokio for modern Rust async ecosystem
-- **Comprehensive Validation**: Protocol-level validation per SMPP specification
+- **Comprehensive Validation**: Protocol-level validation per SMPP specifications
 - **Consistent API**: Clean, intuitive method naming without unnecessary prefixes
-- **Production Ready**: Extensive testing and benchmarking with 210+ test cases
+- **Production Ready**: Extensive testing and benchmarking with 300+ test cases
+
+## SMPP Version Support
+
+This library supports both SMPP v3.4 and v5.0 protocols:
+
+- **SMPP v3.4**: Complete implementation with all 26 PDU types
+- **SMPP v5.0**: Enhanced implementation with broadcast messaging, flow control, and improved error handling
+
+The client API automatically detects and negotiates the appropriate protocol version based on the server capabilities.
 
 ## What's New in Version 0.3.0
 
@@ -87,14 +96,14 @@ smpp = "0.3.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
-### Basic SMS Sending Example
+### Basic SMS Sending (SMPP v3.4)
 
 ```rust
 use smpp::client::{ClientBuilder, SmppClient, SmppTransmitter, SmsMessage};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect and bind as transmitter (Section 4.1 - Bind Operations)
+    // Connect and bind as transmitter
     let mut client = ClientBuilder::quick_transmitter(
         "localhost:2775",
         "system_id",
@@ -104,12 +113,76 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create SMS message
     let sms = SmsMessage::new("1234567890", "0987654321", "Hello, World!");
 
-    // Send SMS message (Section 4.4.1 - submit_sm)
+    // Send SMS message
     let message_id = client.send_sms(&sms).await?;
-
     println!("Message sent with ID: {}", message_id);
 
-    // Clean disconnect (Section 4.2.1 - unbind)
+    // Clean disconnect
+    client.unbind().await?;
+    client.disconnect().await?;
+
+    Ok(())
+}
+```
+
+### SMPP v5.0 with Flow Control
+
+```rust
+use smpp::client::{ClientBuilder, SmppClient, SmppTransmitter, SmsMessage};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect with SMPP v5.0 flow control enabled
+    let mut client = ClientBuilder::new()
+        .address("localhost:2775")
+        .credentials("system_id", "password")
+        .enable_flow_control(true)
+        .max_rate_per_second(100)  // Rate limiting
+        .build_transmitter()
+        .await?;
+
+    // Send message with automatic flow control
+    let sms = SmsMessage::new("1234567890", "0987654321", "Hello from SMPP v5.0!");
+    let message_id = client.send_sms(&sms).await?;
+    println!("Message sent with ID: {}", message_id);
+
+    client.unbind().await?;
+    client.disconnect().await?;
+
+    Ok(())
+}
+```
+
+### Broadcast Messaging (SMPP v5.0)
+
+```rust
+use smpp::client::{ClientBuilder, SmppClient, SmppTransceiver};
+use smpp::datatypes::{BroadcastSm, BroadcastAreaIdentifier};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect as transceiver for broadcast operations
+    let mut client = ClientBuilder::quick_transceiver(
+        "localhost:2775",
+        "system_id",
+        "password"
+    ).await?;
+
+    // Create broadcast message
+    let broadcast = BroadcastSm::builder()
+        .service_type("BCAST")
+        .source_address("12345")
+        .message_text("Emergency Alert: Severe weather warning in your area")
+        .broadcast_areas(vec![
+            BroadcastAreaIdentifier::cell_id(12345),
+            BroadcastAreaIdentifier::location_area(67890),
+        ])
+        .build()?;
+
+    // Send broadcast message
+    let message_id = client.send_broadcast(&broadcast).await?;
+    println!("Broadcast sent with ID: {}", message_id);
+
     client.unbind().await?;
     client.disconnect().await?;
 
@@ -160,24 +233,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Core Components
 
-The library follows the SMPP v3.4 layered architecture:
+The library follows the SMPP layered architecture for both v3.4 and v5.0:
 
 ```
 Application Layer           Your SMS Application
     │
-Frame Layer                 smpp::Frame (Section 2.2 - PDU Format)
+Client Layer                smpp::client (Version negotiation & flow control)
     │
-Connection Layer            smpp::Connection (Section 2.1 - Session Layer)
+Frame Layer                 smpp::Frame (PDU format for both versions)
+    │
+Connection Layer            smpp::Connection (Session management)
     │
 Transport Layer             TCP/IP (tokio::net::TcpStream)
 ```
 
 ### Key Types
 
-- **`Frame`**: Represents complete SMPP PDUs per Section 2.2
+- **`Frame`**: Represents complete SMPP PDUs for both v3.4 and v5.0
 - **`Connection`**: Manages TCP connection with frame buffering
-- **Data Types**: Strongly-typed fields matching specification exactly
+- **`SmppClient`**: High-level client API with version negotiation
+- **Data Types**: Strongly-typed fields matching both specifications
 - **`ToBytes`**: Zero-allocation serialization trait
+
+### Version-Specific Features
+
+**SMPP v3.4:**
+- 26 standard PDU types
+- Basic message submission and delivery
+- Standard error handling and validation
+
+**SMPP v5.0:**
+- All v3.4 features plus:
+- Broadcast messaging (broadcast_sm, cancel_broadcast_sm, query_broadcast_sm)
+- Enhanced flow control with rate limiting
+- Improved error handling and diagnostics
+- Extended TLV parameter support
 
 ### Field Types and Specification Mapping
 
@@ -298,10 +388,14 @@ src/
 
 ## Specification References
 
-This implementation follows the [SMPP v3.4 Specification](https://smpp.org/SMPP_v3_4_Issue1_2.pdf) published by the SMS Forum. Key sections referenced:
+This implementation follows both SMPP specifications published by the SMS Forum:
 
+- **[SMPP v3.4 Specification](https://smpp.org/SMPP_v3_4_Issue1_2.pdf)**: Complete implementation with all required PDUs
+- **[SMPP v5.0 Specification](https://smpp.org/SMPP_v5_0.pdf)**: Enhanced features including broadcast messaging and flow control
+
+Key sections referenced:
 - **Section 2**: Protocol Overview and Architecture
-- **Section 3**: Data Types and Encoding Rules
+- **Section 3**: Data Types and Encoding Rules  
 - **Section 4**: PDU Definitions and Message Formats
 - **Section 5**: Protocol Features and Optional Parameters
 
@@ -311,7 +405,7 @@ For detailed compliance information, see [COMPLIANCE.md](COMPLIANCE.md).
 
 Contributions welcome! Please ensure:
 
-1. **Specification Compliance**: All changes must conform to SMPP v3.4
+1. **Specification Compliance**: All changes must conform to SMPP v3.4 and/or v5.0 specifications
 2. **Performance**: Maintain sub-microsecond parsing performance
 3. **Type Safety**: Use strongly-typed fields where possible
 4. **Documentation**: Include specification section references
