@@ -33,7 +33,7 @@ mod unbind;
 pub use address::{AddressError, AlphanumericAddress, DestinationAddr, PhoneNumber, SourceAddr};
 pub use alert_notification::{AlertNotification, AlertNotificationValidationError};
 pub(crate) use command_id::CommandId;
-pub use command_status::CommandStatus;
+pub use command_status::{CommandStatus, ErrorSeverity, ErrorCategory};
 pub use data_coding::{DataCoding, DataCodingError, MessageClass};
 pub use datetime::{DateTimeError, ScheduleDeliveryTime, SmppDateTime, ValidityPeriod};
 pub use esm_class::{

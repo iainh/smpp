@@ -1388,4 +1388,430 @@ mod integration_tests {
             .build();
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_smpp_v50_enhanced_error_codes() {
+        // Test new SMPP v5.0 error codes
+        use crate::datatypes::CommandStatus;
+        
+        // Test broadcast-specific error codes
+        let broadcast_area_invalid = CommandStatus::InvalidBroadcastAreaIdentifier;
+        assert_eq!(broadcast_area_invalid as u32, 0x0000_0100);
+        
+        let broadcast_content_type_invalid = CommandStatus::InvalidBroadcastContentType;
+        assert_eq!(broadcast_content_type_invalid as u32, 0x0000_0101);
+        
+        let broadcast_frequency_invalid = CommandStatus::InvalidBroadcastFrequency;
+        assert_eq!(broadcast_frequency_invalid as u32, 0x0000_0102);
+        
+        let broadcast_service_group_invalid = CommandStatus::InvalidBroadcastServiceGroup;
+        assert_eq!(broadcast_service_group_invalid as u32, 0x0000_0103);
+        
+        // Test enhanced congestion control error codes
+        let congestion_state_rejected = CommandStatus::CongestionStateRejected;
+        assert_eq!(congestion_state_rejected as u32, 0x0000_0104);
+        
+        let message_throttled = CommandStatus::MessageThrottled;
+        assert_eq!(message_throttled as u32, 0x0000_0105);
+        
+        // Test enhanced validation error codes  
+        let invalid_network_id = CommandStatus::InvalidNetworkId;
+        assert_eq!(invalid_network_id as u32, 0x0000_0106);
+        
+        let invalid_node_id = CommandStatus::InvalidNodeId;
+        assert_eq!(invalid_node_id as u32, 0x0000_0107);
+        
+        // Test version negotiation error codes
+        let unsupported_version = CommandStatus::UnsupportedVersion;
+        assert_eq!(unsupported_version as u32, 0x0000_0108);
+        
+        let version_mismatch = CommandStatus::VersionMismatch;
+        assert_eq!(version_mismatch as u32, 0x0000_0109);
+    }
+
+    #[test]
+    fn test_enhanced_error_code_categorization() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test that new v5.0 error codes are properly categorized
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.is_broadcast_error());
+        assert!(CommandStatus::InvalidBroadcastContentType.is_broadcast_error());
+        assert!(CommandStatus::InvalidBroadcastFrequency.is_broadcast_error());
+        assert!(CommandStatus::InvalidBroadcastServiceGroup.is_broadcast_error());
+        
+        assert!(CommandStatus::CongestionStateRejected.is_congestion_error());
+        assert!(CommandStatus::MessageThrottled.is_congestion_error());
+        
+        assert!(CommandStatus::InvalidNetworkId.is_network_error());
+        assert!(CommandStatus::InvalidNodeId.is_network_error());
+        
+        assert!(CommandStatus::UnsupportedVersion.is_version_error());
+        assert!(CommandStatus::VersionMismatch.is_version_error());
+        
+        // Test that legacy error codes are not v5.0 specific
+        assert!(!CommandStatus::Ok.is_v50_specific());
+        assert!(!CommandStatus::SystemError.is_v50_specific());
+        assert!(!CommandStatus::InvalidMessageId.is_v50_specific());
+        
+        // Test that new error codes are v5.0 specific
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.is_v50_specific());
+        assert!(CommandStatus::CongestionStateRejected.is_v50_specific());
+        assert!(CommandStatus::UnsupportedVersion.is_v50_specific());
+    }
+
+    #[test]
+    fn test_enhanced_error_code_descriptions() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test that new error codes have descriptive error messages
+        let broadcast_error = CommandStatus::InvalidBroadcastAreaIdentifier;
+        assert!(broadcast_error.description().contains("broadcast"));
+        assert!(broadcast_error.description().contains("area"));
+        
+        let congestion_error = CommandStatus::CongestionStateRejected;
+        assert!(congestion_error.description().contains("congestion"));
+        
+        let version_error = CommandStatus::UnsupportedVersion;
+        assert!(version_error.description().contains("version"));
+        assert!(version_error.description().contains("unsupported"));
+    }
+
+    #[test]
+    fn test_enhanced_error_code_conversion() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test conversion from u32 values
+        let status_100 = CommandStatus::try_from(0x0000_0100u32);
+        assert!(status_100.is_ok());
+        assert_eq!(status_100.unwrap(), CommandStatus::InvalidBroadcastAreaIdentifier);
+        
+        let status_105 = CommandStatus::try_from(0x0000_0105u32);
+        assert!(status_105.is_ok());
+        assert_eq!(status_105.unwrap(), CommandStatus::MessageThrottled);
+        
+        let status_109 = CommandStatus::try_from(0x0000_0109u32);
+        assert!(status_109.is_ok());
+        assert_eq!(status_109.unwrap(), CommandStatus::VersionMismatch);
+        
+        // Test that unknown error codes return appropriate error
+        let status_unknown = CommandStatus::try_from(0x0000_0200u32);
+        assert!(status_unknown.is_err());
+    }
+
+    #[test]
+    fn test_broadcast_error_validation() {
+        use crate::datatypes::BroadcastSm;
+        
+        // Test that broadcast PDU validation can use new error codes
+        let broadcast_error_result = BroadcastSm::builder()
+            .sequence_number(1)
+            .message_id("BC001")
+            .broadcast_area_identifier(vec![]) // Invalid - empty
+            .build();
+        
+        assert!(broadcast_error_result.is_err());
+        // In a real implementation, this would return InvalidBroadcastAreaIdentifier
+        // For now, we test the error structure exists
+    }
+
+    #[test]
+    fn test_congestion_error_handling() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test congestion-related error handling
+        let congestion_errors = vec![
+            CommandStatus::CongestionStateRejected,
+            CommandStatus::MessageThrottled,
+            CommandStatus::ThrottlingError, // Legacy throttling error
+        ];
+        
+        for error in congestion_errors {
+            assert!(error.is_throttling_related());
+        }
+    }
+
+    #[test]
+    fn test_enhanced_error_recovery_hints() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test that new error codes provide recovery hints
+        let retry_errors = vec![
+            CommandStatus::CongestionStateRejected,
+            CommandStatus::MessageThrottled,
+        ];
+        
+        for error in retry_errors {
+            assert!(error.should_retry());
+            assert!(error.suggested_retry_delay().is_some());
+        }
+        
+        let no_retry_errors = vec![
+            CommandStatus::InvalidBroadcastAreaIdentifier,
+            CommandStatus::UnsupportedVersion,
+            CommandStatus::VersionMismatch,
+        ];
+        
+        for error in no_retry_errors {
+            assert!(!error.should_retry());
+            assert!(error.suggested_retry_delay().is_none());
+        }
+    }
+
+    #[test]
+    fn test_error_code_compatibility() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test that v5.0 error codes don't conflict with v3.4 codes
+        let _v34_max_error = 0x000000FFu32;
+        let v50_min_error = 0x00000100u32;
+        
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier as u32 >= v50_min_error);
+        assert!(CommandStatus::VersionMismatch as u32 >= v50_min_error);
+        
+        // Test that legacy error codes remain unchanged
+        assert_eq!(CommandStatus::Ok as u32, 0x00000000);
+        assert_eq!(CommandStatus::SystemError as u32, 0x00000008);
+        assert_eq!(CommandStatus::InvalidMessageId as u32, 0x0000000C);
+        assert_eq!(CommandStatus::ThrottlingError as u32, 0x00000058);
+    }
+
+    #[test]
+    fn test_v50_error_classification() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test broadcast error classification
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.is_broadcast_error());
+        assert!(CommandStatus::InvalidBroadcastContentType.is_broadcast_error());
+        assert!(CommandStatus::InvalidBroadcastFrequency.is_broadcast_error());
+        assert!(CommandStatus::InvalidBroadcastServiceGroup.is_broadcast_error());
+        
+        // Test congestion error classification
+        assert!(CommandStatus::CongestionStateRejected.is_congestion_error());
+        assert!(CommandStatus::MessageThrottled.is_congestion_error());
+        
+        // Test network error classification  
+        assert!(CommandStatus::InvalidNetworkId.is_network_error());
+        assert!(CommandStatus::InvalidNodeId.is_network_error());
+        
+        // Test version error classification
+        assert!(CommandStatus::UnsupportedVersion.is_version_error());
+        assert!(CommandStatus::VersionMismatch.is_version_error());
+        
+        // Test v5.0 specific detection
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.is_v50_specific());
+        assert!(CommandStatus::VersionMismatch.is_v50_specific());
+        assert!(!CommandStatus::Ok.is_v50_specific());
+        assert!(!CommandStatus::SystemError.is_v50_specific());
+    }
+
+    #[test]
+    fn test_error_descriptions() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test v5.0 error descriptions are informative
+        assert!(!CommandStatus::InvalidBroadcastAreaIdentifier.description().is_empty());
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.description().contains("broadcast"));
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.description().contains("area"));
+        
+        assert!(!CommandStatus::CongestionStateRejected.description().is_empty());
+        assert!(CommandStatus::CongestionStateRejected.description().contains("congestion"));
+        
+        assert!(!CommandStatus::UnsupportedVersion.description().is_empty());
+        assert!(CommandStatus::UnsupportedVersion.description().contains("version"));
+    }
+
+    #[test]
+    fn test_retry_strategy_logic() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test congestion errors have appropriate retry delays
+        assert_eq!(CommandStatus::CongestionStateRejected.suggested_retry_delay(), Some(30));
+        assert_eq!(CommandStatus::MessageThrottled.suggested_retry_delay(), Some(60));
+        assert_eq!(CommandStatus::ThrottlingError.suggested_retry_delay(), Some(120));
+        
+        // Test system errors have short retry delays
+        assert_eq!(CommandStatus::SystemError.suggested_retry_delay(), Some(5));
+        assert_eq!(CommandStatus::MessageQueueFull.suggested_retry_delay(), Some(10));
+        
+        // Test validation errors should not be retried
+        assert_eq!(CommandStatus::InvalidBroadcastAreaIdentifier.suggested_retry_delay(), None);
+        assert_eq!(CommandStatus::UnsupportedVersion.suggested_retry_delay(), None);
+        assert_eq!(CommandStatus::InvalidNetworkId.suggested_retry_delay(), None);
+    }
+
+    #[test]
+    fn test_error_code_range_validation() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test broadcast error code range (0x0100-0x0103)
+        assert_eq!(CommandStatus::InvalidBroadcastAreaIdentifier as u32, 0x00000100);
+        assert_eq!(CommandStatus::InvalidBroadcastContentType as u32, 0x00000101);
+        assert_eq!(CommandStatus::InvalidBroadcastFrequency as u32, 0x00000102);
+        assert_eq!(CommandStatus::InvalidBroadcastServiceGroup as u32, 0x00000103);
+        
+        // Test congestion error code range (0x0104-0x0105)
+        assert_eq!(CommandStatus::CongestionStateRejected as u32, 0x00000104);
+        assert_eq!(CommandStatus::MessageThrottled as u32, 0x00000105);
+        
+        // Test network error code range (0x0106-0x0107)
+        assert_eq!(CommandStatus::InvalidNetworkId as u32, 0x00000106);
+        assert_eq!(CommandStatus::InvalidNodeId as u32, 0x00000107);
+        
+        // Test version error code range (0x0108-0x0109)
+        assert_eq!(CommandStatus::UnsupportedVersion as u32, 0x00000108);
+        assert_eq!(CommandStatus::VersionMismatch as u32, 0x00000109);
+    }
+
+    #[test]
+    fn test_comprehensive_v50_error_coverage() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test all v5.0 errors are properly categorized
+        let all_v50_errors = vec![
+            CommandStatus::InvalidBroadcastAreaIdentifier,
+            CommandStatus::InvalidBroadcastContentType,
+            CommandStatus::InvalidBroadcastFrequency,
+            CommandStatus::InvalidBroadcastServiceGroup,
+            CommandStatus::CongestionStateRejected,
+            CommandStatus::MessageThrottled,
+            CommandStatus::InvalidNetworkId,
+            CommandStatus::InvalidNodeId,
+            CommandStatus::UnsupportedVersion,
+            CommandStatus::VersionMismatch,
+        ];
+        
+        for error in all_v50_errors {
+            assert!(error.is_v50_specific());
+            assert!(!error.description().is_empty());
+            
+            // Each error should belong to exactly one category
+            let categories = [
+                error.is_broadcast_error(),
+                error.is_congestion_error(), 
+                error.is_network_error(),
+                error.is_version_error(),
+            ];
+            assert_eq!(categories.iter().filter(|&&x| x).count(), 1);
+        }
+    }
+
+    #[test]
+    fn test_error_severity_classification() {
+        use crate::datatypes::{CommandStatus, ErrorSeverity};
+        
+        // Test critical errors
+        assert_eq!(CommandStatus::InvalidCommandId.severity(), ErrorSeverity::Critical);
+        assert_eq!(CommandStatus::InvalidCommandLength.severity(), ErrorSeverity::Critical);
+        
+        // Test error severity
+        assert_eq!(CommandStatus::BindFailed.severity(), ErrorSeverity::Error);
+        assert_eq!(CommandStatus::UnsupportedVersion.severity(), ErrorSeverity::Error);
+        assert_eq!(CommandStatus::InvalidBroadcastAreaIdentifier.severity(), ErrorSeverity::Error);
+        
+        // Test warning severity
+        assert_eq!(CommandStatus::SystemError.severity(), ErrorSeverity::Warning);
+        assert_eq!(CommandStatus::CongestionStateRejected.severity(), ErrorSeverity::Warning);
+        assert_eq!(CommandStatus::MessageThrottled.severity(), ErrorSeverity::Warning);
+        
+        // Test info severity
+        assert_eq!(CommandStatus::Ok.severity(), ErrorSeverity::Info);
+    }
+
+    #[test]
+    fn test_error_category_classification() {
+        use crate::datatypes::{CommandStatus, ErrorCategory};
+        
+        // Test authentication category
+        assert_eq!(CommandStatus::BindFailed.category(), ErrorCategory::Authentication);
+        assert_eq!(CommandStatus::InvalidPassword.category(), ErrorCategory::Authentication);
+        
+        // Test rate limit category
+        assert_eq!(CommandStatus::ThrottlingError.category(), ErrorCategory::RateLimit);
+        assert_eq!(CommandStatus::CongestionStateRejected.category(), ErrorCategory::RateLimit);
+        assert_eq!(CommandStatus::MessageThrottled.category(), ErrorCategory::RateLimit);
+        
+        // Test broadcast category
+        assert_eq!(CommandStatus::InvalidBroadcastAreaIdentifier.category(), ErrorCategory::Broadcast);
+        assert_eq!(CommandStatus::InvalidBroadcastContentType.category(), ErrorCategory::Broadcast);
+        
+        // Test version category
+        assert_eq!(CommandStatus::UnsupportedVersion.category(), ErrorCategory::Version);
+        assert_eq!(CommandStatus::VersionMismatch.category(), ErrorCategory::Version);
+        
+        // Test network category
+        assert_eq!(CommandStatus::InvalidNetworkId.category(), ErrorCategory::Network);
+        assert_eq!(CommandStatus::InvalidNodeId.category(), ErrorCategory::Network);
+        
+        // Test success category
+        assert_eq!(CommandStatus::Ok.category(), ErrorCategory::Success);
+    }
+
+    #[test]
+    fn test_error_help_messages() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test v5.0 specific help messages exist
+        assert!(CommandStatus::CongestionStateRejected.help_message().is_some());
+        assert!(CommandStatus::MessageThrottled.help_message().is_some());
+        assert!(CommandStatus::UnsupportedVersion.help_message().is_some());
+        assert!(CommandStatus::VersionMismatch.help_message().is_some());
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.help_message().is_some());
+        assert!(CommandStatus::InvalidNetworkId.help_message().is_some());
+        
+        // Test help messages contain useful guidance
+        let congestion_help = CommandStatus::CongestionStateRejected.help_message().unwrap();
+        assert!(congestion_help.contains("congestion"));
+        assert!(congestion_help.contains("rate") || congestion_help.contains("backoff"));
+        
+        let version_help = CommandStatus::UnsupportedVersion.help_message().unwrap();
+        assert!(version_help.contains("version"));
+        assert!(version_help.contains("interface_version") || version_help.contains("bind"));
+        
+        // Test that regular errors don't have help messages
+        assert!(CommandStatus::Ok.help_message().is_none());
+        assert!(CommandStatus::InvalidCommandId.help_message().is_none());
+    }
+
+    #[test] 
+    fn test_v50_feature_error_detection() {
+        use crate::datatypes::CommandStatus;
+        
+        // Test v5.0 feature specific errors
+        assert!(CommandStatus::InvalidBroadcastAreaIdentifier.is_v50_feature_error());
+        assert!(CommandStatus::InvalidBroadcastContentType.is_v50_feature_error());
+        assert!(CommandStatus::CongestionStateRejected.is_v50_feature_error());
+        assert!(CommandStatus::MessageThrottled.is_v50_feature_error());
+        assert!(CommandStatus::InvalidNetworkId.is_v50_feature_error());
+        assert!(CommandStatus::UnsupportedVersion.is_v50_feature_error());
+        assert!(CommandStatus::VersionMismatch.is_v50_feature_error());
+        
+        // Test v3.4 errors are not v5.0 feature errors
+        assert!(!CommandStatus::Ok.is_v50_feature_error());
+        assert!(!CommandStatus::SystemError.is_v50_feature_error());
+        assert!(!CommandStatus::ThrottlingError.is_v50_feature_error()); // Legacy throttling
+        assert!(!CommandStatus::BindFailed.is_v50_feature_error());
+    }
+
+    #[test]
+    fn test_enhanced_error_handling_integration() {
+        use crate::datatypes::{CommandStatus, ErrorSeverity, ErrorCategory};
+        
+        // Test comprehensive error context for monitoring systems
+        let error = CommandStatus::CongestionStateRejected;
+        
+        assert_eq!(error.severity(), ErrorSeverity::Warning);
+        assert_eq!(error.category(), ErrorCategory::RateLimit);
+        assert!(error.should_retry());
+        assert_eq!(error.suggested_retry_delay(), Some(30));
+        assert!(error.is_congestion_error());
+        assert!(error.is_throttling_related());
+        assert!(error.is_v50_specific());
+        assert!(error.is_v50_feature_error());
+        assert!(error.help_message().is_some());
+        assert!(!error.description().is_empty());
+        
+        // Test that all context methods work together consistently
+        assert!(error.is_throttling_related());
+        assert!(error.category() == ErrorCategory::RateLimit);
+    }
 }

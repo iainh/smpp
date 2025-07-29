@@ -185,11 +185,368 @@ pub enum CommandStatus {
 
     // Unknown Error
     UnknownError = 0x000000FF,
+    
+    // SMPP v5.0 Extension Error Codes (0x00000100-0x000003FF)
+    
+    // Broadcast Error Codes (0x0100-0x0103)
+    /// Invalid Broadcast Area Identifier - broadcast area format invalid or not supported
+    InvalidBroadcastAreaIdentifier = 0x00000100,
+    /// Invalid Broadcast Content Type - content type not supported or invalid format
+    InvalidBroadcastContentType = 0x00000101,
+    /// Invalid Broadcast Frequency - broadcast frequency outside supported range
+    InvalidBroadcastFrequency = 0x00000102,
+    /// Invalid Broadcast Service Group - service group identifier not recognized
+    InvalidBroadcastServiceGroup = 0x00000103,
+    
+    // Congestion Control Error Codes (0x0104-0x0105)
+    /// Congestion State Rejected - message rejected due to congestion state
+    CongestionStateRejected = 0x00000104,
+    /// Message Throttled - message throttled due to congestion control
+    MessageThrottled = 0x00000105,
+    
+    // Network Validation Error Codes (0x0106-0x0107)
+    /// Invalid Network ID - network identifier not recognized or invalid
+    InvalidNetworkId = 0x00000106,
+    /// Invalid Node ID - node identifier not recognized or invalid
+    InvalidNodeId = 0x00000107,
+    
+    // Version Negotiation Error Codes (0x0108-0x0109)
+    /// Unsupported Version - SMPP version not supported by receiver
+    UnsupportedVersion = 0x00000108,
+    /// Version Mismatch - version mismatch detected during negotiation
+    VersionMismatch = 0x00000109,
+    
     // Reserved for SMPP extension
-    // 0x00000100- 0x000003FF
+    // 0x0000010A - 0x000003FF
     //Reserved for SMPP extension
     //Reserved for SMSC vendor specific errors
     // 0x00000400- 0x000004FF
     //Reserved for SMSC vendor specific errors
     // Reserved 0x00000500- 0xFFFFFFFF
+}
+
+impl CommandStatus {
+    /// Check if this error code is related to broadcast operations (SMPP v5.0)
+    pub fn is_broadcast_error(&self) -> bool {
+        matches!(self, 
+            CommandStatus::InvalidBroadcastAreaIdentifier |
+            CommandStatus::InvalidBroadcastContentType |
+            CommandStatus::InvalidBroadcastFrequency |
+            CommandStatus::InvalidBroadcastServiceGroup
+        )
+    }
+    
+    /// Check if this error code is related to congestion control (SMPP v5.0)
+    pub fn is_congestion_error(&self) -> bool {
+        matches!(self, 
+            CommandStatus::CongestionStateRejected |
+            CommandStatus::MessageThrottled
+        )
+    }
+    
+    /// Check if this error code is related to network validation (SMPP v5.0)
+    pub fn is_network_error(&self) -> bool {
+        matches!(self, 
+            CommandStatus::InvalidNetworkId |
+            CommandStatus::InvalidNodeId
+        )
+    }
+    
+    /// Check if this error code is related to version negotiation (SMPP v5.0)
+    pub fn is_version_error(&self) -> bool {
+        matches!(self, 
+            CommandStatus::UnsupportedVersion |
+            CommandStatus::VersionMismatch
+        )
+    }
+    
+    /// Check if this error code is specific to SMPP v5.0
+    pub fn is_v50_specific(&self) -> bool {
+        (*self as u32) >= 0x00000100
+    }
+    
+    /// Check if this error code is related to throttling/congestion
+    pub fn is_throttling_related(&self) -> bool {
+        matches!(self, 
+            CommandStatus::ThrottlingError |
+            CommandStatus::CongestionStateRejected |
+            CommandStatus::MessageThrottled
+        )
+    }
+    
+    /// Get a human-readable description of the error code
+    pub fn description(&self) -> &'static str {
+        match self {
+            CommandStatus::Ok => "No Error - Operation completed successfully",
+            CommandStatus::InvalidMsgLength => "Message Length is invalid",
+            CommandStatus::InvalidCommandLength => "Command Length is invalid", 
+            CommandStatus::InvalidCommandId => "Invalid Command ID",
+            CommandStatus::IncorrectBindStatus => "Incorrect BIND Status for given command",
+            CommandStatus::AlreadyBoundState => "ESME Already in Bound State",
+            CommandStatus::InvalidPriorityFlag => "Invalid Priority Flag",
+            CommandStatus::InvalidRegisteredDeliveryFlag => "Invalid Registered Delivery Flag",
+            CommandStatus::SystemError => "System Error",
+            CommandStatus::InvalidSourceAddress => "Invalid Source Address",
+            CommandStatus::InvalidDestinationAddress => "Invalid Destination Address",
+            CommandStatus::InvalidMessageId => "Message ID is invalid",
+            CommandStatus::BindFailed => "Bind Failed",
+            CommandStatus::InvalidPassword => "Invalid Password",
+            CommandStatus::InvalidSystemId => "Invalid System ID",
+            CommandStatus::CancelSmFailed => "Cancel SM Failed",
+            CommandStatus::ReplacedSmFailed => "Replace SM Failed",
+            CommandStatus::MessageQueueFull => "Message Queue Full",
+            CommandStatus::InvalidServiceType => "Invalid Service Type",
+            CommandStatus::InvalidNumberOfDestinations => "Invalid number of destinations",
+            CommandStatus::InvalidDistributionListName => "Invalid Distribution List name",
+            CommandStatus::InvalidDestinationFlag => "Destination flag is invalid",
+            CommandStatus::InvalidSubmitWithReplaceRequest => "Invalid 'submit with replace' request",
+            CommandStatus::InvalidEsmClassFieldData => "Invalid esm_class field data",
+            CommandStatus::CannotSubmitToDistributionList => "Cannot Submit to Distribution List",
+            CommandStatus::SubmitFailed => "submit_sm or submit_multi failed",
+            CommandStatus::InvalidSourceAddressTon => "Invalid Source address TON",
+            CommandStatus::InvalidSourceAddressNpi => "Invalid Source address NPI",
+            CommandStatus::InvalidDestinationAddressTon => "Invalid Destination address TON",
+            CommandStatus::InvalidDestinationAddressNpi => "Invalid Destination address NPI",
+            CommandStatus::InvalidSystemTypeField => "Invalid system_type field",
+            CommandStatus::InvalidReplaceIfPresentFlag => "Invalid replace_if_present flag",
+            CommandStatus::InvalidNumberOfMessages => "Invalid number of messages",
+            CommandStatus::ThrottlingError => "Throttling error (ESME has exceeded allowed message limits)",
+            CommandStatus::InvalidScheduledDeliveryTime => "Invalid Scheduled Delivery Time",
+            CommandStatus::InvalidExpiryTime => "Invalid message validity period (Expiry time)",
+            CommandStatus::InvalidPredefinedMessageId => "Predefined Message Invalid or Not Found",
+            CommandStatus::ReceiverTemporaryAppError => "ESME Receiver Temporary App Error Code",
+            CommandStatus::ReceiverPermanentAppError => "ESME Receiver Permanent App Error Code",
+            CommandStatus::ReceiverRejectMessageError => "ESME Receiver Reject Message Error Code",
+            CommandStatus::QuerySmRequestFailed => "query_sm request failed",
+            CommandStatus::ErrorInOptionalPartofPduBody => "Error in the optional part of the PDU Body",
+            CommandStatus::OptionalParameterNotAllowed => "Optional Parameter not allowed",
+            CommandStatus::InvalidParameterLength => "Invalid Parameter Length",
+            CommandStatus::ExpectedOptionalParameterMissing => "Expected Optional Parameter missing",
+            CommandStatus::InvalidOptionalParameterValue => "Invalid Optional Parameter Value",
+            CommandStatus::DeliveryFailed => "Delivery Failure",
+            CommandStatus::UnknownError => "Unknown Error",
+            
+            // SMPP v5.0 Error Descriptions
+            CommandStatus::InvalidBroadcastAreaIdentifier => "Invalid broadcast area identifier - format invalid or not supported",
+            CommandStatus::InvalidBroadcastContentType => "Invalid broadcast content type - not supported or invalid format",
+            CommandStatus::InvalidBroadcastFrequency => "Invalid broadcast frequency - outside supported range", 
+            CommandStatus::InvalidBroadcastServiceGroup => "Invalid broadcast service group - identifier not recognized",
+            CommandStatus::CongestionStateRejected => "Message rejected due to congestion state",
+            CommandStatus::MessageThrottled => "Message throttled due to congestion control",
+            CommandStatus::InvalidNetworkId => "Invalid network identifier - not recognized or invalid",
+            CommandStatus::InvalidNodeId => "Invalid node identifier - not recognized or invalid",
+            CommandStatus::UnsupportedVersion => "unsupported SMPP version - version not supported by receiver",
+            CommandStatus::VersionMismatch => "Version mismatch detected during negotiation",
+        }
+    }
+    
+    /// Check if the operation should be retried for this error code
+    pub fn should_retry(&self) -> bool {
+        matches!(self,
+            CommandStatus::CongestionStateRejected |
+            CommandStatus::MessageThrottled |
+            CommandStatus::ThrottlingError |
+            CommandStatus::MessageQueueFull |
+            CommandStatus::SystemError
+        )
+    }
+    
+    /// Get suggested retry delay in seconds for retryable errors
+    pub fn suggested_retry_delay(&self) -> Option<u32> {
+        match self {
+            CommandStatus::CongestionStateRejected => Some(30), // 30 seconds for congestion
+            CommandStatus::MessageThrottled => Some(60), // 1 minute for throttling
+            CommandStatus::ThrottlingError => Some(120), // 2 minutes for legacy throttling
+            CommandStatus::MessageQueueFull => Some(10), // 10 seconds for queue full
+            CommandStatus::SystemError => Some(5), // 5 seconds for system errors
+            _ => None,
+        }
+    }
+    
+    /// Get error severity level for logging and monitoring
+    pub fn severity(&self) -> ErrorSeverity {
+        match self {
+            CommandStatus::Ok => ErrorSeverity::Info,
+            
+            // Critical errors that indicate implementation bugs
+            CommandStatus::InvalidCommandId |
+            CommandStatus::InvalidCommandLength |
+            CommandStatus::InvalidMsgLength => ErrorSeverity::Critical,
+            
+            // Authentication and authorization errors
+            CommandStatus::BindFailed |
+            CommandStatus::InvalidPassword |
+            CommandStatus::InvalidSystemId |
+            CommandStatus::IncorrectBindStatus |
+            CommandStatus::AlreadyBoundState => ErrorSeverity::Error,
+            
+            // Validation errors that indicate client bugs
+            CommandStatus::InvalidPriorityFlag |
+            CommandStatus::InvalidRegisteredDeliveryFlag |
+            CommandStatus::InvalidSourceAddress |
+            CommandStatus::InvalidDestinationAddress |
+            CommandStatus::InvalidMessageId |
+            CommandStatus::InvalidServiceType |
+            CommandStatus::InvalidBroadcastAreaIdentifier |
+            CommandStatus::InvalidBroadcastContentType |
+            CommandStatus::InvalidBroadcastFrequency |
+            CommandStatus::InvalidBroadcastServiceGroup |
+            CommandStatus::InvalidNetworkId |
+            CommandStatus::InvalidNodeId |
+            CommandStatus::UnsupportedVersion |
+            CommandStatus::VersionMismatch => ErrorSeverity::Error,
+            
+            // Temporary errors that can be retried
+            CommandStatus::SystemError |
+            CommandStatus::MessageQueueFull |
+            CommandStatus::ThrottlingError |
+            CommandStatus::CongestionStateRejected |
+            CommandStatus::MessageThrottled => ErrorSeverity::Warning,
+            
+            // Business logic errors
+            CommandStatus::CancelSmFailed |
+            CommandStatus::ReplacedSmFailed |
+            CommandStatus::SubmitFailed |
+            CommandStatus::DeliveryFailed |
+            CommandStatus::QuerySmRequestFailed => ErrorSeverity::Warning,
+            
+            // All other errors default to Error severity
+            _ => ErrorSeverity::Error,
+        }
+    }
+    
+    /// Get error category for monitoring and alerting
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            CommandStatus::Ok => ErrorCategory::Success,
+            
+            CommandStatus::BindFailed |
+            CommandStatus::InvalidPassword |
+            CommandStatus::InvalidSystemId => ErrorCategory::Authentication,
+            
+            CommandStatus::IncorrectBindStatus |
+            CommandStatus::AlreadyBoundState => ErrorCategory::SessionState,
+            
+            CommandStatus::ThrottlingError |
+            CommandStatus::CongestionStateRejected |
+            CommandStatus::MessageThrottled => ErrorCategory::RateLimit,
+            
+            CommandStatus::InvalidBroadcastAreaIdentifier |
+            CommandStatus::InvalidBroadcastContentType |
+            CommandStatus::InvalidBroadcastFrequency |
+            CommandStatus::InvalidBroadcastServiceGroup => ErrorCategory::Broadcast,
+            
+            CommandStatus::UnsupportedVersion |
+            CommandStatus::VersionMismatch => ErrorCategory::Version,
+            
+            CommandStatus::InvalidNetworkId |
+            CommandStatus::InvalidNodeId => ErrorCategory::Network,
+            
+            CommandStatus::SystemError |
+            CommandStatus::MessageQueueFull => ErrorCategory::System,
+            
+            CommandStatus::InvalidSourceAddress |
+            CommandStatus::InvalidDestinationAddress |
+            CommandStatus::InvalidMessageId |
+            CommandStatus::InvalidPriorityFlag |
+            CommandStatus::InvalidRegisteredDeliveryFlag |
+            CommandStatus::InvalidServiceType => ErrorCategory::Validation,
+            
+            CommandStatus::InvalidCommandId |
+            CommandStatus::InvalidCommandLength |
+            CommandStatus::InvalidMsgLength => ErrorCategory::Protocol,
+            
+            _ => ErrorCategory::Business,
+        }
+    }
+    
+    /// Get contextual help message for error resolution
+    pub fn help_message(&self) -> Option<&'static str> {
+        match self {
+            CommandStatus::CongestionStateRejected => Some(
+                "Network congestion detected. Reduce message rate or implement exponential backoff."
+            ),
+            CommandStatus::MessageThrottled => Some(
+                "Message rate exceeded. Check rate limits and implement proper throttling."
+            ),
+            CommandStatus::UnsupportedVersion => Some(
+                "SMPP version not supported. Check bind PDU interface_version parameter."
+            ),
+            CommandStatus::VersionMismatch => Some(
+                "Version mismatch detected. Ensure client and server use compatible SMPP versions."
+            ),
+            CommandStatus::InvalidBroadcastAreaIdentifier => Some(
+                "Broadcast area identifier format invalid. Check area format specification."
+            ),
+            CommandStatus::InvalidNetworkId => Some(
+                "Network ID not recognized. Verify network identifier configuration."
+            ),
+            CommandStatus::ThrottlingError => Some(
+                "Rate limit exceeded. Implement message throttling or request rate increase."
+            ),
+            CommandStatus::SystemError => Some(
+                "Internal system error. Check server logs and retry after delay."
+            ),
+            CommandStatus::BindFailed => Some(
+                "Authentication failed. Verify system_id, password, and bind parameters."
+            ),
+            _ => None,
+        }
+    }
+    
+    /// Check if error is related to SMPP v5.0 features specifically
+    pub fn is_v50_feature_error(&self) -> bool {
+        matches!(self,
+            CommandStatus::InvalidBroadcastAreaIdentifier |
+            CommandStatus::InvalidBroadcastContentType |
+            CommandStatus::InvalidBroadcastFrequency |
+            CommandStatus::InvalidBroadcastServiceGroup |
+            CommandStatus::CongestionStateRejected |
+            CommandStatus::MessageThrottled |
+            CommandStatus::InvalidNetworkId |
+            CommandStatus::InvalidNodeId |
+            CommandStatus::UnsupportedVersion |
+            CommandStatus::VersionMismatch
+        )
+    }
+}
+
+/// Error severity levels for logging and monitoring
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorSeverity {
+    /// Informational - successful operations
+    Info,
+    /// Warning - temporary errors that may be retried
+    Warning,
+    /// Error - permanent errors requiring intervention
+    Error,
+    /// Critical - severe errors indicating implementation bugs
+    Critical,
+}
+
+/// Error categories for monitoring and alerting
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorCategory {
+    /// Successful operation
+    Success,
+    /// Authentication and authorization errors
+    Authentication,
+    /// Session state management errors
+    SessionState,
+    /// Rate limiting and throttling errors
+    RateLimit,
+    /// Broadcast messaging specific errors
+    Broadcast,
+    /// Version negotiation errors
+    Version,
+    /// Network configuration errors
+    Network,
+    /// System and infrastructure errors
+    System,
+    /// Input validation errors
+    Validation,
+    /// Protocol format errors
+    Protocol,
+    /// Business logic errors
+    Business,
 }
