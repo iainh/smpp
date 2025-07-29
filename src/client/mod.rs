@@ -36,6 +36,38 @@
 //! # }
 //! ```
 //!
+//! ## SMPP v5.0 Broadcast Messaging
+//!
+//! For clients that support SMPP v5.0, broadcast messaging is available:
+//!
+//! ```rust,no_run
+//! use smpp::client::{ClientBuilder, BroadcastMessage, SmppV50Client, SmppV50Broadcaster};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a v5.0 transmitter client
+//! let mut client = ClientBuilder::quick_transmitter_v50(
+//!     "localhost:2775",
+//!     "system_id",
+//!     "password"
+//! ).await?;
+//!
+//! // Send a broadcast message
+//! let broadcast = BroadcastMessage::new(
+//!     "1234567890",
+//!     "BC001",
+//!     vec![0x01, 0x02, 0x03, 0x04], // area identifier
+//! );
+//! let message_id = client.send_broadcast(&broadcast).await?;
+//!
+//! // Query broadcast status
+//! let (state, final_date) = client.query_broadcast(&message_id, "1234567890").await?;
+//!
+//! // Cancel if needed
+//! client.cancel_broadcast(&message_id, "1234567890").await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! ## Keep-Alive for Long-Running Applications
 //!
 //! For applications that maintain SMPP connections for extended periods,
@@ -81,6 +113,8 @@
 //! * `SmppTransmitter` - SMS sending operations (extends SmppClient)
 //! * `SmppReceiver` - SMS receiving operations (extends SmppClient)  
 //! * `SmppTransceiver` - Combined TX/RX operations (extends both)
+//! * `SmppV50Broadcaster` - SMPP v5.0 broadcast operations (extends SmppTransmitter)
+//! * `SmppV50Client` - SMPP v5.0 enhanced client (extends SmppClient + SmppV50Broadcaster)
 //!
 //! ## Builder Patterns
 //!
@@ -112,8 +146,14 @@ pub use builder::{ClientBuilder, ClientOptions};
 pub use default::DefaultClient;
 pub use error::{SmppError, SmppResult};
 pub use keepalive::{KeepAliveConfig, KeepAliveManager, KeepAliveStatus};
-pub use traits::{SmppClient, SmppConnection, SmppReceiver, SmppTransceiver, SmppTransmitter};
-pub use types::{BindCredentials, BindType, SmsMessage, SmsMessageBuilder, SmsOptions};
+pub use traits::{
+    SmppClient, SmppConnection, SmppReceiver, SmppTransceiver, SmppTransmitter,
+    SmppV50Broadcaster, SmppV50Client,
+};
+pub use types::{
+    BindCredentials, BindType, SmsMessage, SmsMessageBuilder, SmsOptions,
+    BroadcastMessage, BroadcastMessageBuilder, BroadcastOptions,
+};
 
 // For backwards compatibility, also export a simple connect function
 pub use builder::ClientBuilder as Client;

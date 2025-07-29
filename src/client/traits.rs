@@ -3,8 +3,8 @@
 
 use crate::client::error::SmppResult;
 use crate::client::keepalive::{KeepAliveConfig, KeepAliveStatus};
-use crate::client::types::{BindCredentials, SmsMessage};
-use crate::datatypes::SubmitSm;
+use crate::client::types::{BindCredentials, SmsMessage, BroadcastMessage};
+use crate::datatypes::{SubmitSm, BroadcastSm, QueryBroadcastSm, CancelBroadcastSm, MessageState};
 use std::future::Future;
 use tokio::net::ToSocketAddrs;
 
@@ -200,3 +200,90 @@ pub trait SmppTransceiver: SmppTransmitter + SmppReceiver {}
 
 // Blanket implementation for any type that implements both transmitter and receiver
 impl<T> SmppTransceiver for T where T: SmppTransmitter + SmppReceiver {}
+
+/// SMPP v5.0 broadcast operations
+///
+/// Provides operations for clients that support SMPP v5.0 broadcast messaging.
+/// Available when connected with interface_version set to SmppV50.
+pub trait SmppV50Broadcaster: SmppTransmitter {
+    /// Send broadcast message using simplified interface
+    ///
+    /// Sends a broadcast message using the high-level BroadcastMessage type which
+    /// provides sensible defaults for most PDU fields. Returns the message ID
+    /// assigned by the SMSC for tracking purposes.
+    fn send_broadcast(
+        &mut self,
+        message: &BroadcastMessage,
+    ) -> impl Future<Output = SmppResult<String>> + Send;
+
+    /// Send broadcast using full BroadcastSm PDU control
+    ///
+    /// Sends a broadcast using a fully constructed BroadcastSm PDU, giving complete
+    /// control over all fields including broadcast area identifiers and timing.
+    fn broadcast_sm(
+        &mut self,
+        broadcast: &BroadcastSm,
+    ) -> impl Future<Output = SmppResult<String>> + Send;
+
+    /// Query status of a broadcast message
+    ///
+    /// Queries the current status of a previously submitted broadcast message.
+    /// Returns the message state and optional completion time.
+    fn query_broadcast(
+        &mut self,
+        message_id: &str,
+        source_addr: &str,
+    ) -> impl Future<Output = SmppResult<(MessageState, Option<crate::datatypes::SmppDateTime>)>> + Send;
+
+    /// Query broadcast using full QueryBroadcastSm PDU control
+    ///
+    /// Queries broadcast status using a fully constructed QueryBroadcastSm PDU,
+    /// giving complete control over addressing and search parameters.
+    fn query_broadcast_sm(
+        &mut self,
+        query: &QueryBroadcastSm,
+    ) -> impl Future<Output = SmppResult<(MessageState, Option<crate::datatypes::SmppDateTime>)>> + Send;
+
+    /// Cancel a pending broadcast message
+    ///
+    /// Attempts to cancel a previously submitted broadcast message that is still
+    /// pending delivery. Returns success if the message was successfully cancelled.
+    fn cancel_broadcast(
+        &mut self,
+        message_id: &str,
+        source_addr: &str,
+    ) -> impl Future<Output = SmppResult<()>> + Send;
+
+    /// Cancel broadcast using full CancelBroadcastSm PDU control
+    ///
+    /// Cancels broadcast using a fully constructed CancelBroadcastSm PDU,
+    /// giving complete control over addressing and service type matching.
+    fn cancel_broadcast_sm(
+        &mut self,
+        cancel: &CancelBroadcastSm,
+    ) -> impl Future<Output = SmppResult<()>> + Send;
+}
+
+/// SMPP v5.0 enhanced client operations
+///
+/// Provides access to SMPP v5.0 specific features including broadcast messaging,
+/// enhanced error handling, and congestion control.
+pub trait SmppV50Client: SmppClient + SmppV50Broadcaster {
+    /// Check if client is connected with SMPP v5.0
+    ///
+    /// Returns true if the client bound successfully using InterfaceVersion::SmppV50.
+    /// v5.0 features are only available when this returns true.
+    fn is_v50_enabled(&self) -> bool;
+
+    /// Get supported SMPP version for this connection
+    ///
+    /// Returns the interface version that was negotiated during bind.
+    /// Use this to determine which features are available.
+    fn interface_version(&self) -> crate::datatypes::InterfaceVersion;
+
+    /// Check server congestion state (v5.0 feature)
+    ///
+    /// Returns the last known congestion state (0-100) reported by the server.
+    /// This can be used for adaptive rate limiting. Only available in v5.0.
+    fn congestion_state(&self) -> Option<u8>;
+}

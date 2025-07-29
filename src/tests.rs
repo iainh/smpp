@@ -1814,4 +1814,223 @@ mod integration_tests {
         assert!(error.is_throttling_related());
         assert!(error.category() == ErrorCategory::RateLimit);
     }
+
+    #[test]
+    fn test_bind_credentials_version_selection() {
+        use crate::datatypes::InterfaceVersion;
+        use crate::client::types::BindCredentials;
+        
+        // Test default v3.4 behavior
+        let v34_creds = BindCredentials::transmitter("test", "pass");
+        assert_eq!(v34_creds.interface_version, InterfaceVersion::SmppV34);
+        assert!(!v34_creds.is_v50());
+        
+        // Test explicit v5.0 constructors
+        let v50_creds = BindCredentials::transmitter_v50("test", "pass");
+        assert_eq!(v50_creds.interface_version, InterfaceVersion::SmppV50);
+        assert!(v50_creds.is_v50());
+        
+        // Test version override
+        let upgraded_creds = v34_creds.with_version(InterfaceVersion::SmppV50);
+        assert_eq!(upgraded_creds.interface_version, InterfaceVersion::SmppV50);
+        assert!(upgraded_creds.is_v50());
+    }
+
+    #[test]
+    fn test_bind_credentials_all_types() {
+        use crate::datatypes::InterfaceVersion;
+        use crate::client::types::{BindCredentials, BindType};
+        
+        // Test v3.4 constructors
+        let tx_v34 = BindCredentials::transmitter("test", "pass");
+        assert_eq!(tx_v34.bind_type, BindType::Transmitter);
+        assert_eq!(tx_v34.interface_version, InterfaceVersion::SmppV34);
+        
+        let rx_v34 = BindCredentials::receiver("test", "pass");
+        assert_eq!(rx_v34.bind_type, BindType::Receiver);
+        assert_eq!(rx_v34.interface_version, InterfaceVersion::SmppV34);
+        
+        let trx_v34 = BindCredentials::transceiver("test", "pass");
+        assert_eq!(trx_v34.bind_type, BindType::Transceiver);
+        assert_eq!(trx_v34.interface_version, InterfaceVersion::SmppV34);
+        
+        // Test v5.0 constructors
+        let tx_v50 = BindCredentials::transmitter_v50("test", "pass");
+        assert_eq!(tx_v50.bind_type, BindType::Transmitter);
+        assert_eq!(tx_v50.interface_version, InterfaceVersion::SmppV50);
+        
+        let rx_v50 = BindCredentials::receiver_v50("test", "pass");
+        assert_eq!(rx_v50.bind_type, BindType::Receiver);
+        assert_eq!(rx_v50.interface_version, InterfaceVersion::SmppV50);
+        
+        let trx_v50 = BindCredentials::transceiver_v50("test", "pass");
+        assert_eq!(trx_v50.bind_type, BindType::Transceiver);
+        assert_eq!(trx_v50.interface_version, InterfaceVersion::SmppV50);
+    }
+
+    #[test]
+    fn test_client_options_v50_features() {
+        use crate::client::builder::ClientOptions;
+        
+        // Test default options
+        let default_opts = ClientOptions::new();
+        assert!(!default_opts.enable_v50_features);
+        assert!(default_opts.auto_negotiate_version);
+        
+        // Test v5.0 feature enablement
+        let v50_opts = ClientOptions::new().with_v50_features();
+        assert!(v50_opts.enable_v50_features);
+        assert!(v50_opts.auto_negotiate_version);
+        
+        // Test auto-negotiation disable
+        let manual_opts = ClientOptions::new().without_auto_negotiate();
+        assert!(!manual_opts.enable_v50_features);
+        assert!(!manual_opts.auto_negotiate_version);
+        
+        // Test combination
+        let combined_opts = ClientOptions::new()
+            .with_v50_features()
+            .without_auto_negotiate();
+        assert!(combined_opts.enable_v50_features);
+        assert!(!combined_opts.auto_negotiate_version);
+    }
+
+    #[test]
+    fn test_broadcast_message_builder() {
+        use crate::client::types::BroadcastMessage;
+        use crate::datatypes::{PriorityFlag, DataCoding, TypeOfNumber, NumericPlanIndicator};
+        
+        // Test basic broadcast message creation
+        let basic_msg = BroadcastMessage::new(
+            "1234567890",
+            "BC001",
+            vec![0x01, 0x02, 0x03, 0x04],
+        );
+        assert_eq!(basic_msg.from, "1234567890");
+        assert_eq!(basic_msg.message_id, "BC001");
+        assert_eq!(basic_msg.broadcast_area_identifier, vec![0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(basic_msg.broadcast_rep_num, 1);
+        assert_eq!(basic_msg.broadcast_frequency_interval, 3600);
+        
+        // Test builder pattern
+        let builder_result = BroadcastMessage::builder()
+            .from("9876543210")
+            .message_id("BC002")
+            .area_identifier(vec![0x05, 0x06])
+            .content_type(1)
+            .repetitions(3)
+            .frequency_interval(1800)
+            .priority(PriorityFlag::Level1)
+            .data_coding(DataCoding::Ascii)
+            .source_numbering(TypeOfNumber::International, NumericPlanIndicator::Isdn)
+            .build();
+        
+        assert!(builder_result.is_ok());
+        let built_msg = builder_result.unwrap();
+        assert_eq!(built_msg.from, "9876543210");
+        assert_eq!(built_msg.message_id, "BC002");
+        assert_eq!(built_msg.broadcast_area_identifier, vec![0x05, 0x06]);
+        assert_eq!(built_msg.broadcast_content_type, 1);
+        assert_eq!(built_msg.broadcast_rep_num, 3);
+        assert_eq!(built_msg.broadcast_frequency_interval, 1800);
+        assert_eq!(built_msg.options.priority, PriorityFlag::Level1);
+        assert_eq!(built_msg.options.data_coding, DataCoding::Ascii);
+        assert_eq!(built_msg.options.source_ton, TypeOfNumber::International);
+        assert_eq!(built_msg.options.source_npi, NumericPlanIndicator::Isdn);
+    }
+
+    #[test]
+    fn test_broadcast_message_validation() {
+        use crate::client::types::BroadcastMessage;
+        
+        // Test missing required fields
+        let no_from_result = BroadcastMessage::builder()
+            .message_id("BC001")
+            .area_identifier(vec![0x01])
+            .build();
+        assert!(no_from_result.is_err());
+        assert!(no_from_result.unwrap_err().contains("Source phone number is required"));
+        
+        let no_message_id_result = BroadcastMessage::builder()
+            .from("1234567890")
+            .area_identifier(vec![0x01])
+            .build();
+        assert!(no_message_id_result.is_err());
+        assert!(no_message_id_result.unwrap_err().contains("Message ID is required"));
+        
+        let no_area_result = BroadcastMessage::builder()
+            .from("1234567890")
+            .message_id("BC001")
+            .build();
+        assert!(no_area_result.is_err());
+        assert!(no_area_result.unwrap_err().contains("Broadcast area identifier is required"));
+        
+        // Test empty area identifier
+        let empty_area_result = BroadcastMessage::builder()
+            .from("1234567890")
+            .message_id("BC001")
+            .area_identifier(vec![])
+            .build();
+        assert!(empty_area_result.is_err());
+        assert!(empty_area_result.unwrap_err().contains("Broadcast area identifier cannot be empty"));
+        
+        // Test zero repetitions
+        let zero_reps_result = BroadcastMessage::builder()
+            .from("1234567890")
+            .message_id("BC001")
+            .area_identifier(vec![0x01])
+            .repetitions(0)
+            .build();
+        assert!(zero_reps_result.is_err());
+        assert!(zero_reps_result.unwrap_err().contains("Broadcast repetition number must be greater than 0"));
+    }
+
+    #[test]
+    fn test_version_negotiation_scenarios() {
+        use crate::datatypes::InterfaceVersion;
+        use crate::client::types::BindCredentials;
+        
+        // Test backward compatibility scenario
+        let v34_client_creds = BindCredentials::transmitter("legacy_client", "pass");
+        assert_eq!(v34_client_creds.interface_version, InterfaceVersion::SmppV34);
+        assert!(!v34_client_creds.is_v50());
+        
+        // Test v5.0 client scenario
+        let v50_client_creds = BindCredentials::transmitter_v50("modern_client", "pass");
+        assert_eq!(v50_client_creds.interface_version, InterfaceVersion::SmppV50);
+        assert!(v50_client_creds.is_v50());
+        
+        // Test upgrade scenario
+        let upgraded_creds = v34_client_creds
+            .with_system_type("SMS")
+            .with_version(InterfaceVersion::SmppV50);
+        assert_eq!(upgraded_creds.interface_version, InterfaceVersion::SmppV50);
+        assert!(upgraded_creds.is_v50());
+        assert_eq!(upgraded_creds.system_type, Some("SMS".to_string()));
+    }
+
+    #[test]
+    fn test_dual_version_client_support() {
+        use crate::datatypes::InterfaceVersion;
+        use crate::client::types::BindCredentials;
+        
+        // Test that the same client code can work with both versions
+        let versions = vec![
+            InterfaceVersion::SmppV34,
+            InterfaceVersion::SmppV50,
+        ];
+        
+        for version in versions {
+            let creds = BindCredentials::transmitter("test", "pass")
+                .with_version(version);
+            
+            assert_eq!(creds.interface_version, version);
+            
+            match version {
+                InterfaceVersion::SmppV34 => assert!(!creds.is_v50()),
+                InterfaceVersion::SmppV50 => assert!(creds.is_v50()),
+                _ => panic!("Unexpected version"),
+            }
+        }
+    }
 }

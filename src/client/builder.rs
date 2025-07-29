@@ -76,16 +76,54 @@ impl ClientBuilder {
         let credentials = BindCredentials::transmitter(system_id, password);
         Self::client(addr, credentials).await
     }
+
+    /// Quick v5.0 transmitter creation with minimal parameters
+    ///
+    /// Creates a transmitter client with SMPP v5.0 support.
+    /// Use this for v5.0 features like broadcast messaging.
+    pub async fn quick_transmitter_v50<T: ToSocketAddrs + Send>(
+        addr: T,
+        system_id: impl Into<String>,
+        password: impl Into<String>,
+    ) -> SmppResult<impl SmppTransmitter> {
+        let credentials = BindCredentials::transmitter_v50(system_id, password);
+        Self::transmitter(addr, credentials).await
+    }
+
+    /// Quick v5.0 client creation with minimal parameters
+    ///
+    /// Creates a client bound as transmitter with SMPP v5.0 support.
+    /// Use this for v5.0 features like broadcast messaging and enhanced error handling.
+    pub async fn quick_client_v50<T: ToSocketAddrs + Send>(
+        addr: T,
+        system_id: impl Into<String>,
+        password: impl Into<String>,
+    ) -> SmppResult<impl SmppClient> {
+        let credentials = BindCredentials::transmitter_v50(system_id, password);
+        Self::client(addr, credentials).await
+    }
 }
 
 /// Builder pattern for more complex client configuration
 ///
 /// Use this when you need to configure connection options, timeouts,
-/// or other advanced settings before creating the client.
-#[derive(Debug, Default)]
+/// version selection, or other advanced settings before creating the client.
+#[derive(Debug)]
 pub struct ClientOptions {
+    /// Whether to enable v5.0 features
+    pub enable_v50_features: bool,
+    /// Whether to auto-negotiate version
+    pub auto_negotiate_version: bool,
     // Future: connection timeout, retry settings, etc.
-    _placeholder: (),
+}
+
+impl Default for ClientOptions {
+    fn default() -> Self {
+        Self {
+            enable_v50_features: false,
+            auto_negotiate_version: true,
+        }
+    }
 }
 
 impl ClientOptions {
@@ -94,16 +132,31 @@ impl ClientOptions {
         Self::default()
     }
 
+    /// Enable SMPP v5.0 features
+    pub fn with_v50_features(mut self) -> Self {
+        self.enable_v50_features = true;
+        self
+    }
+
+    /// Disable automatic version negotiation
+    pub fn without_auto_negotiate(mut self) -> Self {
+        self.auto_negotiate_version = false;
+        self
+    }
+
     /// Build a transmitter client with these options
     ///
-    /// Future extension point for advanced connection configuration.
+    /// Applies version selection and other advanced configuration.
     pub async fn build_transmitter<T: ToSocketAddrs + Send>(
         self,
         addr: T,
-        credentials: BindCredentials,
+        mut credentials: BindCredentials,
     ) -> SmppResult<impl SmppTransmitter> {
-        // For now, just delegate to ClientBuilder
-        // Future: apply connection options here
+        // Apply version selection based on options
+        if self.enable_v50_features && !credentials.is_v50() {
+            credentials = credentials.with_version(crate::datatypes::InterfaceVersion::SmppV50);
+        }
+        
         ClientBuilder::transmitter(addr, credentials).await
     }
 
@@ -111,10 +164,13 @@ impl ClientOptions {
     pub async fn build_client<T: ToSocketAddrs + Send>(
         self,
         addr: T,
-        credentials: BindCredentials,
+        mut credentials: BindCredentials,
     ) -> SmppResult<impl SmppClient> {
-        // For now, just delegate to ClientBuilder
-        // Future: apply connection options here
+        // Apply version selection based on options
+        if self.enable_v50_features && !credentials.is_v50() {
+            credentials = credentials.with_version(crate::datatypes::InterfaceVersion::SmppV50);
+        }
+        
         ClientBuilder::client(addr, credentials).await
     }
 }
